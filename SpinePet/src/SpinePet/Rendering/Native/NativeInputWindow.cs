@@ -17,10 +17,9 @@ internal sealed class NativeInputWindow : IDisposable
     private const uint WmLeftButtonDown = 0x0201;
     private const uint WmLeftButtonUp = 0x0202;
     private const uint WmCaptureChanged = 0x0215;
-    private const int HitTransparent = -1;
     private const int HitClient = 1;
     private const int RegionOr = 2;
-    private const int RegionDiff = 4;
+    private const int IdcHand = 32649;
     private const int SwShowNoActivate = 4;
     private const int SwHide = 0;
 
@@ -36,8 +35,8 @@ internal sealed class NativeInputWindow : IDisposable
 
     private readonly List<Rectangle> _regions = [];
     private readonly List<Rectangle> _normalizedRegionBuffer = [];
-    private Rectangle? _passThroughHole;
     private bool _hasRegion;
+    private bool _visible = true;
 
     public NativeInputWindow(
         int left,
@@ -81,12 +80,11 @@ internal sealed class NativeInputWindow : IDisposable
     public int Top { get; }
     public int Width { get; }
     public int Height { get; }
-    public Func<int, int, bool>? HitTestScreenPoint { get; set; }
     public Action<uint, int, int>? MouseInput { get; set; }
+    internal int RegionApplyCount { get; private set; }
 
     public void SetInteractiveRegions(
-        IReadOnlyCollection<Rectangle> regions,
-        Rectangle? passThroughHole = null)
+        IReadOnlyCollection<Rectangle> regions)
     {
         if (Handle == IntPtr.Zero)
             return;
@@ -116,17 +114,8 @@ internal sealed class NativeInputWindow : IDisposable
                 : left.Height.CompareTo(right.Height);
         });
 
-        Rectangle? normalizedHole = passThroughHole is { } hole
-            ? Rectangle.Intersect(windowBounds, hole)
-            : null;
-        if (normalizedHole is { Width: <= 0 } or { Height: <= 0 })
-            normalizedHole = null;
-        if (_hasRegion &&
-            RegionsEqual(_regions, _normalizedRegionBuffer) &&
-            _passThroughHole == normalizedHole)
-        {
+        if (_hasRegion && RegionsEqual(_regions, _normalizedRegionBuffer))
             return;
-        }
 
         IntPtr combinedRegion = CreateRectRgn(0, 0, 0, 0);
         if (combinedRegion == IntPtr.Zero)
@@ -165,36 +154,6 @@ internal sealed class NativeInputWindow : IDisposable
                 }
             }
 
-            if (normalizedHole is { } excluded)
-            {
-                IntPtr holeRegion = CreateRectRgn(
-                    excluded.Left,
-                    excluded.Top,
-                    excluded.Right,
-                    excluded.Bottom);
-                if (holeRegion != IntPtr.Zero)
-                {
-                    try
-                    {
-                        if (CombineRgn(
-                                combinedRegion,
-                                combinedRegion,
-                                holeRegion,
-                                RegionDiff) == 0)
-                        {
-                            AppLogger.Write(
-                                nameof(NativeInputWindow),
-                                $"subtract-region-failed error={Marshal.GetLastWin32Error()}");
-                            return;
-                        }
-                    }
-                    finally
-                    {
-                        DeleteObject(holeRegion);
-                    }
-                }
-            }
-
             transferred = SetWindowRgn(
                 Handle,
                 combinedRegion,
@@ -203,8 +162,8 @@ internal sealed class NativeInputWindow : IDisposable
             {
                 _regions.Clear();
                 _regions.AddRange(_normalizedRegionBuffer);
-                _passThroughHole = normalizedHole;
                 _hasRegion = true;
+                RegionApplyCount++;
             }
         }
         finally
@@ -217,14 +176,20 @@ internal sealed class NativeInputWindow : IDisposable
     public void ClearAndHide()
     {
         SetInteractiveRegions([]);
-        if (Handle != IntPtr.Zero)
+        if (_visible && Handle != IntPtr.Zero)
+        {
+            _visible = false;
             ShowWindow(Handle, SwHide);
+        }
     }
 
     public void Show()
     {
-        if (Handle != IntPtr.Zero)
+        if (!_visible && Handle != IntPtr.Zero)
+        {
+            _visible = true;
             ShowWindow(Handle, SwShowNoActivate);
+        }
     }
 
     private static bool RegionsEqual(
@@ -260,6 +225,7 @@ internal sealed class NativeInputWindow : IDisposable
                 WindowProcedure = Marshal.GetFunctionPointerForDelegate(
                     WindowProcedureCallback),
                 Instance = GetModuleHandle(null),
+                Cursor = LoadCursor(IntPtr.Zero, new IntPtr(IdcHand)),
                 ClassName = WindowClassName
             };
             _windowClass = RegisterClassEx(ref registration);
@@ -283,17 +249,10 @@ internal sealed class NativeInputWindow : IDisposable
         {
             try
             {
+                // 区域是唯一命中门槛：系统只会把落在窗口区域内的点发过来，
+                // 因此恒返 HTCLIENT，命中测试无任何副作用。
                 if (message == WmNcHitTest)
-                {
-                    GetSignedPoint(lParam, out int x, out int y);
-                    bool hit =
-                        instance.HitTestScreenPoint?.Invoke(x, y) == true;
-                    if (hit)
-                        return new IntPtr(HitClient);
-
-                    instance.OpenPassThroughHole(x, y);
-                    return new IntPtr(HitTransparent);
-                }
+                    return new IntPtr(HitClient);
 
                 if (message == WmLeftButtonDown ||
                     message == WmMouseMove ||
@@ -327,48 +286,16 @@ internal sealed class NativeInputWindow : IDisposable
                 AppLogger.Write(
                     nameof(NativeInputWindow),
                     $"input-failed message={exception.Message}");
-                if (message == WmNcHitTest)
-                    return new IntPtr(HitTransparent);
             }
         }
 
         return DefWindowProc(window, message, wParam, lParam);
     }
 
-    private void OpenPassThroughHole(
-        int screenX,
-        int screenY)
-    {
-        int clientX = screenX - Left;
-        int clientY = screenY - Top;
-        if (clientX < 0 ||
-            clientY < 0 ||
-            clientX >= Width ||
-            clientY >= Height)
-        {
-            return;
-        }
-
-        SetInteractiveRegions(
-            _regions,
-            new Rectangle(clientX, clientY, 1, 1));
-    }
-
-    private static void GetSignedPoint(
-        IntPtr packedPoint,
-        out int x,
-        out int y)
-    {
-        long value = packedPoint.ToInt64();
-        x = (short)(value & 0xffff);
-        y = (short)((value >> 16) & 0xffff);
-    }
-
     public void Dispose()
     {
         IntPtr handle = Handle;
         Handle = IntPtr.Zero;
-        HitTestScreenPoint = null;
         MouseInput = null;
         if (handle != IntPtr.Zero)
         {
@@ -437,6 +364,14 @@ internal sealed class NativeInputWindow : IDisposable
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DestroyWindow(IntPtr window);
+
+    [DllImport(
+        "user32.dll",
+        EntryPoint = "LoadCursorW",
+        SetLastError = true)]
+    private static extern IntPtr LoadCursor(
+        IntPtr instance,
+        IntPtr resourceName);
 
     [DllImport("user32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]

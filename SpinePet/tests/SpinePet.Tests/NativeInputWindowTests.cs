@@ -7,7 +7,6 @@ namespace SpinePet.Tests;
 public sealed class NativeInputWindowTests
 {
     private const uint WmNcHitTest = 0x0084;
-    private static readonly IntPtr HitTransparent = new(-1);
     private static readonly IntPtr HitClient = new(1);
 
     [Fact]
@@ -36,29 +35,7 @@ public sealed class NativeInputWindowTests
     }
 
     [Fact]
-    public void PassThroughHoleLeavesAdjacentInputPixelsIntact()
-    {
-        using NativeInputWindow window = new(0, 0, 1000, 800);
-        window.SetInteractiveRegions(
-            [new Rectangle(100, 120, 240, 360)],
-            new Rectangle(150, 200, 1, 1));
-
-        IntPtr region = CreateRectRgn(0, 0, 0, 0);
-        Assert.NotEqual(IntPtr.Zero, region);
-        try
-        {
-            Assert.True(GetWindowRgn(window.Handle, region) > 0);
-            Assert.False(PtInRegion(region, 150, 200));
-            Assert.True(PtInRegion(region, 151, 200));
-        }
-        finally
-        {
-            DeleteObject(region);
-        }
-    }
-
-    [Fact]
-    public void CharacterHitAndOverflowPassThroughAreSeparated()
+    public void CharacterRegionWinsHitTestWhileOverflowStaysReachable()
     {
         using NativeCompositionWindow renderWindow = new();
         using NativeInputWindow inputWindow = new(
@@ -66,13 +43,9 @@ public sealed class NativeInputWindowTests
             renderWindow.Top,
             renderWindow.Width,
             renderWindow.Height);
-        Rectangle inputRegion = new(300, 150, 600, 300);
+        // 核心区=角色轮廓；轮廓之外的溢出区不进入区域，交由系统直接穿透。
         Rectangle characterRegion = new(500, 200, 100, 100);
-        inputWindow.SetInteractiveRegions([inputRegion]);
-        inputWindow.HitTestScreenPoint = (x, y) =>
-            characterRegion.Contains(
-                x - inputWindow.Left,
-                y - inputWindow.Top);
+        inputWindow.SetInteractiveRegions([characterRegion]);
 
         NativePoint characterPoint = new()
         {
@@ -81,8 +54,8 @@ public sealed class NativeInputWindowTests
         };
         NativePoint overflowPoint = new()
         {
-            X = inputWindow.Left + inputRegion.Left + 20,
-            Y = inputWindow.Top + inputRegion.Top + 20
+            X = inputWindow.Left + 320,
+            Y = inputWindow.Top + 170
         };
 
         Assert.Equal(
@@ -96,19 +69,60 @@ public sealed class NativeInputWindowTests
             inputWindow.Handle,
             WindowFromPoint(characterPoint));
 
-        Assert.Equal(
-            HitTransparent,
-            SendMessage(
-                inputWindow.Handle,
-                WmNcHitTest,
-                IntPtr.Zero,
-                PackScreenPoint(overflowPoint.X, overflowPoint.Y)));
         Assert.NotEqual(
             inputWindow.Handle,
             WindowFromPoint(overflowPoint));
         Assert.NotEqual(
             renderWindow.Handle,
             WindowFromPoint(overflowPoint));
+    }
+
+    [Fact]
+    public void RegionApplicationIsStableAcrossRepeatedHitTests()
+    {
+        using NativeInputWindow window = new(0, 0, 1000, 800);
+        Rectangle region = new(100, 120, 240, 360);
+        window.SetInteractiveRegions([region]);
+        int applied = window.RegionApplyCount;
+        Assert.True(applied >= 1);
+
+        for (int attempt = 0; attempt < 50; attempt++)
+        {
+            window.SetInteractiveRegions([region]);
+            SendMessage(
+                window.Handle,
+                WmNcHitTest,
+                IntPtr.Zero,
+                PackScreenPoint(200, 300));
+            SendMessage(
+                window.Handle,
+                WmNcHitTest,
+                IntPtr.Zero,
+                PackScreenPoint(900, 700));
+        }
+
+        Assert.Equal(applied, window.RegionApplyCount);
+    }
+
+    [Fact]
+    public void EmptyRegionsLeaveDesktopReachable()
+    {
+        using NativeCompositionWindow renderWindow = new();
+        using NativeInputWindow inputWindow = new(
+            renderWindow.Left,
+            renderWindow.Top,
+            renderWindow.Width,
+            renderWindow.Height);
+        inputWindow.SetInteractiveRegions([]);
+
+        NativePoint center = new()
+        {
+            X = inputWindow.Left + inputWindow.Width / 2,
+            Y = inputWindow.Top + inputWindow.Height / 2
+        };
+
+        Assert.NotEqual(inputWindow.Handle, WindowFromPoint(center));
+        Assert.NotEqual(renderWindow.Handle, WindowFromPoint(center));
     }
 
     [DllImport("gdi32.dll")]
@@ -122,13 +136,6 @@ public sealed class NativeInputWindowTests
     private static extern int GetWindowRgn(
         IntPtr window,
         IntPtr region);
-
-    [DllImport("gdi32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool PtInRegion(
-        IntPtr region,
-        int x,
-        int y);
 
     [DllImport("gdi32.dll")]
     private static extern int GetRgnBox(
