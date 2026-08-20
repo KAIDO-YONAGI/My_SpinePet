@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <RootNamespace>SpinePet</RootNamespace>
+    <AssemblyName>SpinePet</AssemblyName>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationIcon>Assets\Brand\SpinePet.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageReference Include="Vortice.DirectComposition" Version="3.8.3" />
+    <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SpineRuntime41\SpineRuntime41.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Infrastructure\Import\Tools\**\*"
+             CopyToOutputDirectory="PreserveNewest"
+             Link="Tools\%(RecursiveDir)%(Filename)%(Extension)" />
+    <Content Include="..\..\tools\icons-downloader\Update-CharacterIcons.ps1"
+             CopyToOutputDirectory="PreserveNewest"
+             Link="Tools\icons-downloader\Update-CharacterIcons.ps1" />
+    <Content Include="..\..\tools\icons-downloader\extract_icon.py"
+             CopyToOutputDirectory="PreserveNewest"
+             Link="Tools\icons-downloader\extract_icon.py" />
+    <Content Include="..\..\tools\requirements.txt"
+             CopyToOutputDirectory="PreserveNewest"
+             Link="Tools\requirements.txt" />
+    <Content Include="..\..\tools\icons-downloader\internal_ids.json"
+             Condition="Exists('..\..\tools\icons-downloader\internal_ids.json')"
+             CopyToOutputDirectory="PreserveNewest"
+             Link="Tools\icons-downloader\internal_ids.json" />
+    <Content Include="..\..\tools\NikkeAssetUnpacker\NikkeAssetUnpacker.exe"
+             Condition="Exists('..\..\tools\NikkeAssetUnpacker\NikkeAssetUnpacker.exe')"
+             CopyToOutputDirectory="PreserveNewest"
+             Link="Tools\NikkeAssetUnpacker\NikkeAssetUnpacker.exe" />
+    <Content Include="..\..\tools\NikkeAssetUnpacker\Keys\**\*"
+             Condition="Exists('..\..\tools\NikkeAssetUnpacker\Keys')"
+             CopyToOutputDirectory="PreserveNewest"
+             Link="Tools\NikkeAssetUnpacker\Keys\%(RecursiveDir)%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Data\CharacterNames.json"
+                      LogicalName="SpinePet.Data.CharacterNames.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Resource Include="Assets\Brand\spinepet-avatar.png" />
+    <Resource Include="Assets\Brand\SpinePet.ico" />
+  </ItemGroup>
+
+</Project>

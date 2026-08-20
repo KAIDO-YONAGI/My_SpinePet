@@ -1,0 +1,50 @@
+{
+  "source": "exec-04e09b50-4050-4ae9-823a-0a08dc5cecc8.png",
+  "sourceSha256": "26000b7f63a686f5e1fa2125c320e4163ef2e7f2e07d17efcbdb1e7f1d75f442",
+  "generator": "tools/brand-assets/generate_brand_assets.py",
+  "master": {
+    "file": "spinepet-avatar.png",
+    "size": [
+      1024,
+      1024
+    ]
+  },
+  "pngExports": [
+    {
+      "file": "spinepet-avatar-512.png",
+      "size": [
+        512,
+        512
+      ]
+    },
+    {
+      "file": "spinepet-avatar-256.png",
+      "size": [
+        256,
+        256
+      ]
+    }
+  ],
+  "ico": {
+    "file": "SpinePet.ico",
+    "sizes": [
+      16,
+      20,
+      24,
+      32,
+      40,
+      48,
+      64,
+      128,
+      256
+    ]
+  },
+  "safeAreaPixels": 40,
+  "palette": {
+    "midnightNavy": "#121826",
+    "lavender": "#8B7CF6",
+    "indigo": "#7468E8",
+    "cyan": "#63D8FF",
+    "pearlWhite": "#F2F5FC"
+  }
+}
