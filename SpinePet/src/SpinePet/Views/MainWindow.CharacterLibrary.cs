@@ -601,7 +601,99 @@ public partial class MainWindow
                 SelectedCharacter?.Id;
         }
 
+        // 面板打开时，选中角色后滚动左侧列表让其可见（详情时定位预览条目）。
+        if (_isConfigMode && SelectedCharacter != null)
+        {
+            CharacterViewModel scrolled = SelectedCharacter;
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (IsDisposed ||
+                    !ReferenceEquals(SelectedCharacter, scrolled))
+                {
+                    return;
+                }
+
+                // 程序性滚动期间屏蔽滚动跟随，避免选中被抢走。
+                _suppressScrollFollow = true;
+                CharacterCards.ScrollIntoView(scrolled);
+                Dispatcher.BeginInvoke(() =>
+                    _suppressScrollFollow = false);
+            });
+        }
+
         SyncSelectedCharacterSettings();
+    }
+
+    private void OnCharacterCardsScrollChanged(
+        object sender,
+        ScrollChangedEventArgs e)
+    {
+        // 详情跟随仅在面板打开时响应。
+        if (!_isConfigMode ||
+            _isUpdatingCharacterSelection ||
+            !CharacterCards.HasItems)
+        {
+            return;
+        }
+
+        // 程序性滚动（ScrollIntoView 定位）期间不跟随。
+        if (_suppressScrollFollow)
+        {
+            return;
+        }
+
+        if (e.VerticalChange == 0 && e.ExtentHeightChange == 0)
+        {
+            return;
+        }
+
+        ScrollViewer? scrollViewer =
+            FindVisualChildren<ScrollViewer>(CharacterCards).FirstOrDefault();
+        if (scrollViewer == null)
+        {
+            return;
+        }
+
+        try
+        {
+            // 用滚动偏移直接算顶部行（2 列网格，从左到右、从上到下）：
+            // 顶部行取该行左侧条目。
+            double rowPitch = GetRowPitch(scrollViewer);
+            if (rowPitch <= 0)
+            {
+                return;
+            }
+
+            int row = (int)Math.Floor(
+                scrollViewer.VerticalOffset / rowPitch);
+            int targetIndex = Math.Clamp(
+                row * 2,
+                0,
+                CharacterCards.Items.Count - 1);
+            if (CharacterCards.Items[targetIndex] is CharacterViewModel target &&
+                !ReferenceEquals(target, CharacterCards.SelectedItem))
+            {
+                CharacterCards.SelectedItem = target;
+            }
+        }
+        catch (Exception exception)
+        {
+            Infrastructure.AppLogger.Write(
+                nameof(MainWindow),
+                $"scroll-follow-failed message={exception.Message}");
+        }
+    }
+
+    // UniformGrid(2) 每行行高 = 条目高 + 底边距。
+    private double GetRowPitch(ScrollViewer scrollViewer)
+    {
+        if (CharacterCards.ItemContainerGenerator.ContainerFromIndex(0)
+            is not ListBoxItem first)
+        {
+            return 0;
+        }
+
+        return first.ActualHeight + first.Margin.Bottom;
     }
 
     private async void OnCharacterCardsPreviewKeyDown(

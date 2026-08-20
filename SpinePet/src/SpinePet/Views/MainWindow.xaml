@@ -331,6 +331,7 @@
                                          ItemsSource="{Binding CharacterView}"
                                          SelectedItem="{Binding SelectedCharacter, Mode=TwoWay}"
                                          SelectionChanged="OnCharacterSelectionChanged"
+                                         ScrollViewer.ScrollChanged="OnCharacterCardsScrollChanged"
                                          PreviewKeyDown="OnCharacterCardsPreviewKeyDown"
                                          Background="Transparent"
                                          BorderThickness="0"
@@ -586,10 +587,6 @@
                                 Style="{StaticResource SectionBorderStyle}"
                                 Margin="0,0,0,0"
                                 Padding="12">
-                        <Viewbox Stretch="Uniform"
-                                 StretchDirection="DownOnly"
-                                 HorizontalAlignment="Stretch"
-                                 VerticalAlignment="Top">
                         <StackPanel>
                                 <Grid Margin="0,0,0,6">
                                     <Grid.ColumnDefinitions>
@@ -616,13 +613,21 @@
                                                 VerticalAlignment="Center">
                                         <TextBlock Text="SELECTED CHARACTER"
                                                    Style="{StaticResource EyebrowTextStyle}" />
-                                        <TextBlock Text="{Binding SelectedCharacter.Name, TargetNullValue='No character selected'}"
-                                                   Margin="0,2,10,0"
-                                                   FontSize="14"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{StaticResource InfoBrush}"
-                                                   TextWrapping="Wrap"
-                                                   TextTrimming="None" />
+                                        <Viewbox Height="36"
+                                                 Stretch="Uniform"
+                                                 StretchDirection="DownOnly"
+                                                 HorizontalAlignment="Stretch"
+                                                 VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding SelectedCharacter.Name, TargetNullValue='No character selected'}"
+                                                       FontSize="14"
+                                                       FontWeight="SemiBold"
+                                                       Foreground="{StaticResource InfoBrush}"
+                                                       TextWrapping="Wrap"
+                                                       TextAlignment="Center"
+                                                       MaxWidth="140"
+                                                       TextTrimming="None"
+                                                       ToolTip="{Binding SelectedCharacter.Name}" />
+                                        </Viewbox>
                                         <WrapPanel Margin="0,3,10,0">
                                             <TextBlock Text="{Binding SelectedCharacter.SkinLabel}"
                                                        FontSize="11"
@@ -902,7 +907,6 @@
                                     </StackPanel>
                                 </Button>
                             </StackPanel>
-                        </Viewbox>
                         </Border>
 
                         <Button Grid.Row="1"
