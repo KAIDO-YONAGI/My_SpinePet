@@ -29,7 +29,7 @@ public sealed class NativeCharacterRenderHost :
     private readonly Dictionary<string, NativeCharacterState> _states =
         new(StringComparer.Ordinal);
     private readonly List<PendingFrame> _pendingFrames = [];
-    private readonly List<Rectangle> _renderingRegions = [];
+    private readonly List<Rectangle> _inputRegions = [];
     private readonly List<Rectangle> _workingAreas = [];
     private readonly NativeCharacterZOrder _zOrder = new();
     private readonly Dispatcher _dispatcher;
@@ -44,6 +44,7 @@ public sealed class NativeCharacterRenderHost :
     private readonly HashSet<string> _scaleShrinkPending =
         new(StringComparer.Ordinal);
     private NativeCompositionWindow? _window;
+    private NativeInputWindow? _inputWindow;
     private NativeGraphicsDevice? _graphics;
     private Task? _initializationTask;
     private bool _configMode;
@@ -369,7 +370,10 @@ public sealed class NativeCharacterRenderHost :
     {
         _configMode = configMode;
         CancelPointerInteraction(commitPosition: false);
-        UpdateWindowInputState();
+        if (_configMode)
+            _inputWindow?.ClearAndHide();
+        else
+            UpdateWindowRegions();
         foreach (NativeCharacterState state in _states.Values)
             SelectModeAnimation(state);
     }
@@ -508,6 +512,8 @@ public sealed class NativeCharacterRenderHost :
         _zOrder.Clear();
         _graphics?.Dispose();
         _graphics = null;
+        _inputWindow?.Dispose();
+        _inputWindow = null;
         _window?.Dispose();
         _window = null;
         _lifetimeCancellation.Dispose();
@@ -525,12 +531,21 @@ public sealed class NativeCharacterRenderHost :
             return Task.CompletedTask;
 
         _window = new NativeCompositionWindow();
-        _window.HitTestScreenPoint = HitTestScreenPoint;
-        _window.MouseInput = OnNativeMouseInput;
         _graphics = new NativeGraphicsDevice(_window.Handle);
+        _inputWindow = new NativeInputWindow(
+            _window.Left,
+            _window.Top,
+            _window.Width,
+            _window.Height);
+        _inputWindow.HitTestScreenPoint = HitTestScreenPoint;
+        _inputWindow.MouseInput = OnNativeMouseInput;
+        _inputWindow.ClearAndHide();
         AppLogger.Write(
             nameof(NativeCharacterRenderHost),
-            $"initialized window={_window.Handle} size={_window.Width}x{_window.Height} dpi={_window.DpiScale:F2}");
+            $"initialized render-window={_window.Handle} " +
+            $"input-window={_inputWindow.Handle} " +
+            $"size={_window.Width}x{_window.Height} " +
+            $"dpi={_window.DpiScale:F2}");
         return Task.CompletedTask;
     }
 
@@ -686,7 +701,6 @@ public sealed class NativeCharacterRenderHost :
         }
         finally
         {
-            UpdateWindowInputState();
             if (_performanceTelemetryEnabled)
             {
                 RecordPerformanceFrame(
@@ -942,86 +956,47 @@ public sealed class NativeCharacterRenderHost :
             return false;
 
         NativePoint point = new() { X = x, Y = y };
-        bool hit = TryHitCharacter(point, out _);
-        if (!hit && _pointerCharacterId == null)
-            UpdateWindowRegions(point);
-        return hit;
+        return TryHitCharacter(point, out _);
     }
 
-    private void UpdateWindowRegions(
-        NativePoint? knownTransparentPoint = null)
+    private void UpdateWindowRegions()
     {
-        if (_window == null)
+        if (_window == null || _inputWindow == null)
             return;
 
-        _renderingRegions.Clear();
+        _inputRegions.Clear();
         RefreshWorkingAreas();
         foreach (NativeCharacterState state in _states.Values)
         {
             if (!state.IsVisible)
                 continue;
 
-            AddRenderingWindowRegion(state.PreviousRenderRegionBounds);
+            AddInputWindowRegion(state.PreviousRenderRegionBounds);
             if (state.RenderRegionBounds !=
                 state.PreviousRenderRegionBounds)
             {
-                AddRenderingWindowRegion(state.RenderRegionBounds);
+                AddInputWindowRegion(state.RenderRegionBounds);
             }
         }
 
-        NativePoint? passThroughPoint = knownTransparentPoint;
-        if (passThroughPoint == null &&
-            !_configMode &&
-            _pointerCharacterId == null &&
-            NativeCompositionWindow.TryGetCursorPosition(
-                out int cursorX,
-                out int cursorY))
-        {
-            NativePoint cursor = new() { X = cursorX, Y = cursorY };
-            if (!TryHitCharacter(cursor, out _))
-                passThroughPoint = cursor;
-        }
-
-        Rectangle? passThroughHole = null;
-        if (passThroughPoint is { } screenPoint)
-        {
-            int clientX = screenPoint.X - _window.Left;
-            int clientY = screenPoint.Y - _window.Top;
-            bool pointInsideRegion = false;
-            foreach (Rectangle region in _renderingRegions)
-            {
-                if (!region.Contains(clientX, clientY))
-                {
-                    continue;
-                }
-
-                pointInsideRegion = true;
-                break;
-            }
-
-            if (pointInsideRegion)
-            {
-                passThroughHole =
-                    new Rectangle(clientX, clientY, 1, 1);
-            }
-        }
-
-        _window.SetRenderingRegions(
-            _renderingRegions,
-            passThroughHole);
+        _inputWindow.SetInteractiveRegions(_inputRegions);
+        if (_configMode)
+            _inputWindow.ClearAndHide();
+        else
+            _inputWindow.Show();
     }
 
-    private void AddRenderingWindowRegion(RectangleF screenBounds)
+    private void AddInputWindowRegion(RectangleF screenBounds)
     {
-        if (_window == null)
+        if (_inputWindow == null)
         {
             return;
         }
 
         Rectangle visibleBounds = GetWindowRegionBounds(
             screenBounds,
-            _window.Left,
-            _window.Top);
+            _inputWindow.Left,
+            _inputWindow.Top);
         foreach (Rectangle workingArea in _workingAreas)
         {
             Rectangle visibleRegion = Rectangle.Intersect(
@@ -1029,14 +1004,14 @@ public sealed class NativeCharacterRenderHost :
                 workingArea);
             if (visibleRegion.Width > 0 && visibleRegion.Height > 0)
             {
-                _renderingRegions.Add(visibleRegion);
+                _inputRegions.Add(visibleRegion);
             }
         }
     }
 
     private void RefreshWorkingAreas()
     {
-        if (_window == null)
+        if (_inputWindow == null)
         {
             return;
         }
@@ -1056,9 +1031,8 @@ public sealed class NativeCharacterRenderHost :
         {
             _workingAreas.Add(ToClientPixelRectangle(
                 screen.WorkingArea,
-                _window.DpiScale,
-                _window.Left,
-                _window.Top));
+                _inputWindow.Left,
+                _inputWindow.Top));
         }
 
         _workingAreasRefreshTimestamp = now;
@@ -1113,41 +1087,15 @@ public sealed class NativeCharacterRenderHost :
     }
 
     internal static Rectangle ToClientPixelRectangle(
-        Rectangle logicalScreenRectangle,
-        float dpiScale,
+        Rectangle physicalScreenRectangle,
         int windowLeft,
         int windowTop)
     {
         return Rectangle.FromLTRB(
-            (int)Math.Floor(
-                logicalScreenRectangle.Left * dpiScale -
-                windowLeft),
-            (int)Math.Floor(
-                logicalScreenRectangle.Top * dpiScale -
-                windowTop),
-            (int)Math.Ceiling(
-                logicalScreenRectangle.Right * dpiScale -
-                windowLeft),
-            (int)Math.Ceiling(
-                logicalScreenRectangle.Bottom * dpiScale -
-                windowTop));
-    }
-
-    private void UpdateWindowInputState()
-    {
-        if (_window == null)
-            return;
-
-        bool shouldEnable =
-            !_configMode &&
-            (_pointerCharacterId != null ||
-             (NativeCompositionWindow.TryGetCursorPosition(
-                  out int x,
-                  out int y) &&
-              TryHitCharacter(
-                  new NativePoint { X = x, Y = y },
-                  out _)));
-        _window.SetInputEnabled(shouldEnable);
+            physicalScreenRectangle.Left - windowLeft,
+            physicalScreenRectangle.Top - windowTop,
+            physicalScreenRectangle.Right - windowLeft,
+            physicalScreenRectangle.Bottom - windowTop);
     }
 
     private void OnNativeMouseInput(
