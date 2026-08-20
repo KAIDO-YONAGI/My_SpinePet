@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Microsoft.Win32;
 using SpinePet.Infrastructure;
 using SpinePet.Models;
@@ -182,7 +183,9 @@ public partial class MainWindow
     private void RefreshCharacterFilter(
         CharacterViewModel? preferredSelection)
     {
+        _previewNavigation.ClearReveal();
         bool wasUpdatingSelection = _isUpdatingCharacterSelection;
+        CharacterViewModel? nextSelection;
         _isUpdatingCharacterSelection = true;
         try
         {
@@ -190,7 +193,7 @@ public partial class MainWindow
             _matchingCharacterCount =
                 CharacterView.Cast<object>().Count();
 
-            CharacterViewModel? nextSelection =
+            nextSelection =
                 preferredSelection != null &&
                 CharacterView.Contains(preferredSelection)
                     ? preferredSelection
@@ -211,6 +214,11 @@ public partial class MainWindow
         OnPropertyChanged(nameof(CharacterSearchStatus));
         CommandManager.InvalidateRequerySuggested();
         SyncSelectedCharacterSettings();
+        if (_isConfigMode && nextSelection != null)
+        {
+            RevealPreviewItem(nextSelection);
+        }
+
         AnnounceCharacterSearchStatus();
     }
 
@@ -257,9 +265,7 @@ public partial class MainWindow
             return;
         }
 
-        CharacterCards.SelectedItem = result;
-        CharacterCards.ScrollIntoView(result);
-        CharacterCards.UpdateLayout();
+        SelectCharacterAndReveal(result);
         if (CharacterCards.ItemContainerGenerator.ContainerFromItem(result)
             is ListBoxItem item)
         {
@@ -601,27 +607,13 @@ public partial class MainWindow
                 SelectedCharacter?.Id;
         }
 
-        // 面板打开时，选中角色后滚动左侧列表让其可见（详情时定位预览条目）。
-        if (_isConfigMode && SelectedCharacter != null)
-        {
-            CharacterViewModel scrolled = SelectedCharacter;
-            Dispatcher.BeginInvoke(() =>
-            {
-                if (IsDisposed ||
-                    !ReferenceEquals(SelectedCharacter, scrolled))
-                {
-                    return;
-                }
-
-                // 程序性滚动期间屏蔽滚动跟随，避免选中被抢走。
-                _suppressScrollFollow = true;
-                CharacterCards.ScrollIntoView(scrolled);
-                Dispatcher.BeginInvoke(() =>
-                    _suppressScrollFollow = false);
-            });
-        }
-
         SyncSelectedCharacterSettings();
+        if (_isConfigMode &&
+            SelectedCharacter != null &&
+            !_previewNavigation.IsApplyingScrollSelection)
+        {
+            RevealPreviewItem(SelectedCharacter);
+        }
     }
 
     private void OnCharacterCardsScrollChanged(
@@ -636,13 +628,7 @@ public partial class MainWindow
             return;
         }
 
-        // 程序性滚动（ScrollIntoView 定位）期间不跟随。
-        if (_suppressScrollFollow)
-        {
-            return;
-        }
-
-        if (e.VerticalChange == 0 && e.ExtentHeightChange == 0)
+        if (e.VerticalChange == 0 && e.HorizontalChange == 0)
         {
             return;
         }
@@ -654,26 +640,26 @@ public partial class MainWindow
             return;
         }
 
+        if (_previewNavigation.IsRevealing)
+        {
+            return;
+        }
+
         try
         {
-            // 用滚动偏移直接算顶部行（2 列网格，从左到右、从上到下）：
-            // 顶部行取该行左侧条目。
-            double rowPitch = GetRowPitch(scrollViewer);
-            if (rowPitch <= 0)
-            {
-                return;
-            }
-
-            int row = (int)Math.Floor(
-                scrollViewer.VerticalOffset / rowPitch);
-            int targetIndex = Math.Clamp(
-                row * 2,
-                0,
-                CharacterCards.Items.Count - 1);
-            if (CharacterCards.Items[targetIndex] is CharacterViewModel target &&
+            int? targetIndex = PreviewNavigationRules.FindCenterItemIndex(
+                GetPreviewItemGeometries(scrollViewer),
+                scrollViewer.ViewportHeight,
+                CharacterCards.SelectedIndex >= 0
+                    ? CharacterCards.SelectedIndex
+                    : null,
+                columnCount: 2);
+            if (targetIndex is int index &&
+                CharacterCards.Items[index] is CharacterViewModel target &&
                 !ReferenceEquals(target, CharacterCards.SelectedItem))
             {
-                CharacterCards.SelectedItem = target;
+                _previewNavigation.ApplyScrollSelection(
+                    () => CharacterCards.SelectedItem = target);
             }
         }
         catch (Exception exception)
@@ -684,16 +670,158 @@ public partial class MainWindow
         }
     }
 
-    // UniformGrid(2) 每行行高 = 条目高 + 底边距。
-    private double GetRowPitch(ScrollViewer scrollViewer)
+    private void SelectCharacterAndReveal(CharacterViewModel character)
     {
-        if (CharacterCards.ItemContainerGenerator.ContainerFromIndex(0)
-            is not ListBoxItem first)
+        bool selectionChanged =
+            !ReferenceEquals(CharacterCards.SelectedItem, character);
+        if (selectionChanged)
         {
-            return 0;
+            CharacterCards.SelectedItem = character;
         }
 
-        return first.ActualHeight + first.Margin.Bottom;
+        if (!ReferenceEquals(SelectedCharacter, character))
+        {
+            SelectedCharacter = character;
+        }
+
+        if (!selectionChanged)
+        {
+            RevealPreviewItem(character);
+        }
+    }
+
+    private void RevealPreviewItem(CharacterViewModel character)
+    {
+        if (IsDisposed ||
+            !IsLoaded ||
+            !CharacterView.Contains(character))
+        {
+            return;
+        }
+
+        CharacterCards.UpdateLayout();
+        ScrollViewer? scrollViewer =
+            FindVisualChildren<ScrollViewer>(CharacterCards).FirstOrDefault();
+        if (scrollViewer != null &&
+            IsPreviewItemVisible(character, scrollViewer))
+        {
+            _previewNavigation.HandleRevealState(character.Id, true);
+            return;
+        }
+
+        if (string.Equals(
+                _previewNavigation.RevealTargetId,
+                character.Id,
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _previewNavigation.BeginReveal(character.Id);
+        CharacterCards.ScrollIntoView(character);
+        SchedulePreviewRevealCompletion(character);
+    }
+
+    private void SchedulePreviewRevealCompletion(
+        CharacterViewModel character)
+    {
+        Dispatcher.BeginInvoke(
+            DispatcherPriority.Loaded,
+            new Action(() => CompletePreviewReveal(character)));
+    }
+
+    private void CompletePreviewReveal(CharacterViewModel character)
+    {
+        if (!string.Equals(
+                _previewNavigation.RevealTargetId,
+                character.Id,
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        if (IsDisposed ||
+            !ReferenceEquals(SelectedCharacter, character))
+        {
+            _previewNavigation.ClearReveal();
+            return;
+        }
+
+        CharacterCards.UpdateLayout();
+        ScrollViewer? scrollViewer =
+            FindVisualChildren<ScrollViewer>(CharacterCards).FirstOrDefault();
+        if (scrollViewer == null ||
+            CharacterCards.ItemContainerGenerator.ContainerFromItem(character)
+                is not ListBoxItem item)
+        {
+            _previewNavigation.ClearReveal();
+            return;
+        }
+
+        System.Windows.Point location = item.TranslatePoint(
+            new System.Windows.Point(0, 0),
+            scrollViewer);
+        double centeredOffset =
+            PreviewNavigationRules.GetCenteredVerticalOffset(
+                scrollViewer.VerticalOffset,
+                location.Y,
+                item.ActualHeight,
+                scrollViewer.ViewportHeight,
+                scrollViewer.ExtentHeight);
+        if (Math.Abs(centeredOffset - scrollViewer.VerticalOffset) > 0.001)
+        {
+            scrollViewer.ScrollToVerticalOffset(centeredOffset);
+            SchedulePreviewRevealCompletion(character);
+            return;
+        }
+
+        _previewNavigation.HandleRevealState(
+            character.Id,
+            IsPreviewItemVisible(character, scrollViewer));
+    }
+
+    private bool IsPreviewItemVisible(
+        CharacterViewModel character,
+        ScrollViewer scrollViewer)
+    {
+        if (CharacterCards.ItemContainerGenerator.ContainerFromItem(character)
+            is not ListBoxItem item ||
+            item.ActualHeight <= 0 ||
+            scrollViewer.ViewportHeight <= 0)
+        {
+            return false;
+        }
+
+        System.Windows.Point location = item.TranslatePoint(
+            new System.Windows.Point(0, 0),
+            scrollViewer);
+        return location.Y < scrollViewer.ViewportHeight &&
+            location.Y + item.ActualHeight > 0;
+    }
+
+    private List<PreviewItemGeometry> GetPreviewItemGeometries(
+        ScrollViewer scrollViewer)
+    {
+        List<PreviewItemGeometry> geometries = new();
+        for (int index = 0; index < CharacterCards.Items.Count; index++)
+        {
+            if (CharacterCards.ItemContainerGenerator.ContainerFromIndex(index)
+                is not ListBoxItem item ||
+                item.ActualHeight <= 0)
+            {
+                continue;
+            }
+
+            System.Windows.Point location = item.TranslatePoint(
+                new System.Windows.Point(0, 0),
+                scrollViewer);
+            geometries.Add(new PreviewItemGeometry(
+                index,
+                location.Y,
+                location.Y + item.ActualHeight));
+        }
+
+        return geometries;
     }
 
     private async void OnCharacterCardsPreviewKeyDown(

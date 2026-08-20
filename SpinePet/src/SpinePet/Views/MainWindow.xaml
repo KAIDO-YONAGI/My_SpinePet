@@ -443,36 +443,60 @@
                                                     </StackPanel>
                                                 </Grid>
 
-                                                <Button x:Name="VisibilityButton"
-                                                        Grid.Column="2"
-                                                        Style="{StaticResource BaseButtonStyle}"
-                                                        IsEnabled="{Binding CanToggleVisibility}"
-                                                        Width="78"
-                                                        Height="36"
-                                                        MinHeight="36"
-                                                        Padding="10,0"
-                                                        Background="#FF2A2A2A"
-                                                        BorderBrush="#FF5A5A5A"
-                                                        Foreground="#FFDCDCDC"
-                                                        Click="OnToggleCharacter"
-                                                        Tag="{Binding}"
-                                                        IsTabStop="False"
-                                                        VerticalAlignment="Center"
-                                                        AutomationProperties.Name="{Binding VisibilityActionAutomationLabel}">
-                                                    <StackPanel Orientation="Horizontal">
-                                                        <Path x:Name="VisibilityIcon"
-                                                              Width="13"
-                                                              Height="9"
-                                                              Margin="0,0,7,0"
-                                                              Stretch="Uniform"
-                                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                              StrokeThickness="1.6"
-                                                              StrokeStartLineCap="Round"
-                                                              StrokeEndLineCap="Round"
-                                                              Data="M1,5 C3.2,1.4 8.8,1.4 11,5 C8.8,8.6 3.2,8.6 1,5 Z M6,3.3 A1.7,1.7 0 1 1 5.99,3.3" />
-                                                        <TextBlock Text="{Binding VisibilityActionLabel}" />
-                                                    </StackPanel>
-                                                </Button>
+                                                <StackPanel Grid.Column="2"
+                                                            VerticalAlignment="Center">
+                                                    <Button x:Name="VisibilityButton"
+                                                            Style="{StaticResource BaseButtonStyle}"
+                                                            IsEnabled="{Binding CanToggleVisibility}"
+                                                            Width="78"
+                                                            Height="36"
+                                                            MinHeight="36"
+                                                            Padding="10,0"
+                                                            Background="#FF2A2A2A"
+                                                            BorderBrush="#FF5A5A5A"
+                                                            Foreground="#FFDCDCDC"
+                                                            Click="OnToggleCharacter"
+                                                            Tag="{Binding}"
+                                                            IsTabStop="False"
+                                                            AutomationProperties.Name="{Binding VisibilityActionAutomationLabel}">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Path x:Name="VisibilityIcon"
+                                                                  Width="13"
+                                                                  Height="9"
+                                                                  Margin="0,0,7,0"
+                                                                  Stretch="Uniform"
+                                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                  StrokeThickness="1.6"
+                                                                  StrokeStartLineCap="Round"
+                                                                  StrokeEndLineCap="Round"
+                                                                  Data="M1,5 C3.2,1.4 8.8,1.4 11,5 C8.8,8.6 3.2,8.6 1,5 Z M6,3.3 A1.7,1.7 0 1 1 5.99,3.3" />
+                                                            <TextBlock Text="{Binding VisibilityActionLabel}" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                    <Button Style="{StaticResource QuietButtonStyle}"
+                                                            Width="78"
+                                                            Height="28"
+                                                            MinHeight="28"
+                                                            Margin="0,5,0,0"
+                                                            Padding="6,0"
+                                                            Click="OnResetCharacterPosition"
+                                                            Tag="{Binding}"
+                                                            IsTabStop="False"
+                                                            ToolTip="Move this character back to its default position"
+                                                            AutomationProperties.Name="Reset character position">
+                                                        <StackPanel Orientation="Horizontal">
+                                                            <Path Width="11"
+                                                                  Height="11"
+                                                                  Margin="0,0,5,0"
+                                                                  Stretch="Uniform"
+                                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                                  StrokeThickness="1.7"
+                                                                  StrokeStartLineCap="Round"
+                                                                  Data="M11,5 A5,5 0 1 0 10,9 M11,5 L11,1 M11,5 L7,5" />
+                                                            <TextBlock Text="Position" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                </StackPanel>
                                             </Grid>
                                             <DataTemplate.Triggers>
                                                 <DataTrigger Binding="{Binding IsVisible}" Value="True">
@@ -592,7 +616,6 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
 
                                     <Border Grid.Column="0"
@@ -613,54 +636,25 @@
                                                 VerticalAlignment="Center">
                                         <TextBlock Text="SELECTED CHARACTER"
                                                    Style="{StaticResource EyebrowTextStyle}" />
-                                        <Viewbox Height="36"
-                                                 Stretch="Uniform"
-                                                 StretchDirection="DownOnly"
-                                                 HorizontalAlignment="Stretch"
-                                                 VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding SelectedCharacter.Name, TargetNullValue='No character selected'}"
-                                                       FontSize="14"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{StaticResource InfoBrush}"
-                                                       TextWrapping="Wrap"
-                                                       TextAlignment="Center"
-                                                       MaxWidth="140"
-                                                       TextTrimming="None"
-                                                       ToolTip="{Binding SelectedCharacter.Name}" />
-                                        </Viewbox>
+                                        <TextBlock Text="{Binding SelectedCharacter.Name, TargetNullValue='No character selected'}"
+                                                   FontSize="16"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{StaticResource InfoBrush}"
+                                                   TextWrapping="Wrap"
+                                                   TextAlignment="Left"
+                                                   MaxWidth="260"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   ToolTip="{Binding SelectedCharacter.Name}" />
                                         <WrapPanel Margin="0,3,10,0">
                                             <TextBlock Text="{Binding SelectedCharacter.SkinLabel}"
                                                        FontSize="11"
                                                        FontWeight="SemiBold"
                                                        Foreground="{StaticResource MutedBrush}"
-                                                       MaxWidth="140"
+                                                       MaxWidth="260"
                                                        TextTrimming="CharacterEllipsis"
                                                        ToolTip="{Binding SelectedCharacter.SkinLabel}" />
                                         </WrapPanel>
                                     </StackPanel>
-
-                                    <Button Grid.Column="2"
-                                            Style="{StaticResource QuietButtonStyle}"
-                                            Height="28"
-                                            MinHeight="28"
-                                            MinWidth="88"
-                                            Padding="8,0"
-                                            Click="OnResetSelectedPosition"
-                                            IsEnabled="{Binding HasSelectedCharacter}"
-                                            ToolTip="Move the selected character back to its default position"
-                                            AutomationProperties.Name="Reset selected character position">
-                                        <StackPanel Orientation="Horizontal">
-                                            <Path Width="11"
-                                                  Height="11"
-                                                  Margin="0,0,6,0"
-                                                  Stretch="Uniform"
-                                                  Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                                  StrokeThickness="1.7"
-                                                  StrokeStartLineCap="Round"
-                                                  Data="M11,5 A5,5 0 1 0 10,9 M11,5 L11,1 M11,5 L7,5" />
-                                            <TextBlock Text="Position" />
-                                        </StackPanel>
-                                    </Button>
                                 </Grid>
 
                                 <TextBlock Text="ANIMATION"

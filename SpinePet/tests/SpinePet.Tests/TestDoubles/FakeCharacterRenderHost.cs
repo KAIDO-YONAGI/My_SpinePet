@@ -19,6 +19,7 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
     public event Action<string>? CharacterLoadFailed;
     public event Action? CharactersStateChanged;
     public event Action<string, double, double>? CharacterPositionCommitted;
+    public event Action<string>? CharacterRightClicked;
 
     public bool IsCharacterLoading(string characterId) => false;
     public bool IsCharacterVisible(string characterId) => false;
@@ -85,4 +86,7 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
         double left,
         double top) =>
         CharacterPositionCommitted?.Invoke(characterId, left, top);
+
+    public void RaiseRightClicked(string characterId) =>
+        CharacterRightClicked?.Invoke(characterId);
 }

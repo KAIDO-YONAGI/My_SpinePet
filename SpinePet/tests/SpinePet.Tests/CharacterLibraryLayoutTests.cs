@@ -39,6 +39,42 @@ public sealed class CharacterLibraryLayoutTests
         XElement itemsPanel = Assert.Single(
             characterCards.Descendants(presentation + "UniformGrid"));
         Assert.Equal("2", (string?)itemsPanel.Attribute("Columns"));
+        Assert.Equal(
+            1,
+            characterCards.Attributes().Count(attribute =>
+                attribute.Name.LocalName == "ScrollViewer.ScrollChanged" &&
+                attribute.Value == "OnCharacterCardsScrollChanged"));
+    }
+
+    [Fact]
+    public void CharacterCardsOwnThePositionResetAction()
+    {
+        XDocument document = LoadMainWindowXaml();
+        XNamespace presentation =
+            "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+
+        Assert.Contains(
+            document.Descendants(presentation + "Button"),
+            element =>
+                (string?)element.Attribute("Click") ==
+                "OnResetCharacterPosition");
+        Assert.DoesNotContain(
+            document.Descendants(),
+            element => element.Attributes().Any(attribute =>
+                attribute.Value.Contains(
+                    "OnResetSelectedPosition",
+                    StringComparison.Ordinal)));
+
+        XElement visibilityButton = Assert.Single(
+            document.Descendants(presentation + "Button"),
+            element =>
+                (string?)element.Attribute("Click") == "OnToggleCharacter");
+        XElement resetButton = Assert.Single(
+            document.Descendants(presentation + "Button"),
+            element =>
+                (string?)element.Attribute("Click") ==
+                "OnResetCharacterPosition");
+        Assert.Same(visibilityButton.Parent, resetButton.Parent);
     }
 
     [Fact]

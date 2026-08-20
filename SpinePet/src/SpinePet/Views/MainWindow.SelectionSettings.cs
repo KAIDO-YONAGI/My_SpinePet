@@ -5,6 +5,7 @@ using System.Windows.Media;
 using SpinePet.Infrastructure;
 using SpinePet.Models;
 using SpinePet.Services;
+using SpinePet.ViewModels;
 using ComboBox = System.Windows.Controls.ComboBox;
 using MessageBox = System.Windows.MessageBox;
 
@@ -105,17 +106,26 @@ public partial class MainWindow
         }
     }
 
-    private void OnResetSelectedPosition(object sender, RoutedEventArgs e)
+    private void OnResetCharacterPosition(object sender, RoutedEventArgs e)
     {
-        CharacterConfig? character = FindSelectedCharacterConfig();
-        if (character == null || SelectedCharacter == null)
+        if (sender is not System.Windows.Controls.Button
+            {
+                Tag: CharacterViewModel characterViewModel
+            })
+        {
+            return;
+        }
+
+        CharacterConfig? character = _characterManager.Characters.FirstOrDefault(
+            item => item.Id == characterViewModel.Id);
+        if (character == null)
         {
             return;
         }
 
         _characterManager.RenderHost.ResetCharacterPosition(character.Id);
-        SelectedCharacter.PositionX = (int)character.PositionX;
-        SelectedCharacter.PositionY = (int)character.PositionY;
+        characterViewModel.PositionX = (int)character.PositionX;
+        characterViewModel.PositionY = (int)character.PositionY;
     }
 
     private void OnAnimationChanged(

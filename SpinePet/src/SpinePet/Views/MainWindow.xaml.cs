@@ -39,9 +39,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
     private readonly DispatcherTimer _searchAnnouncementTimer;
     private Dictionary<string, CharacterResourceFiles> _knownResources =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly PreviewNavigationCoordinator _previewNavigation = new();
     private bool _isRefreshingSelection;
     private bool _isUpdatingCharacterSelection;
-    private bool _suppressScrollFollow;
     private bool _isDeletingSkin;
     private bool _isConfigMode = true;
     private CharacterViewModel? _selectedCharacter;
@@ -556,18 +556,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         Top = workArea.Top;
         ApplyThumbnailScale();
         ApplyConfigMode();
-
-        // 直接订阅内部 ScrollViewer 的滚动事件，滚动跟随更可靠。
-        Dispatcher.BeginInvoke(() =>
-        {
-            ScrollViewer? scrollViewer =
-                FindVisualChildren<ScrollViewer>(CharacterCards).FirstOrDefault();
-            if (scrollViewer != null)
-            {
-                scrollViewer.ScrollChanged -= OnCharacterCardsScrollChanged;
-                scrollViewer.ScrollChanged += OnCharacterCardsScrollChanged;
-            }
-        });
     }
 
     // Win 风格无边框缩放：WM_NCHITTEST 把边缘/四角映射为系统

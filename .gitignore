@@ -5,6 +5,7 @@
 .zcode/
 .fetch-cache/
 .codegraph
+prompts.txt
 # 系统杂项
 Thumbs.db
 desktop.ini
