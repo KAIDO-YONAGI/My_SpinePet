@@ -586,6 +586,10 @@
                                 Style="{StaticResource SectionBorderStyle}"
                                 Margin="0,0,0,0"
                                 Padding="12">
+                        <Viewbox Stretch="Uniform"
+                                 StretchDirection="DownOnly"
+                                 HorizontalAlignment="Stretch"
+                                 VerticalAlignment="Top">
                         <StackPanel>
                                 <Grid Margin="0,0,0,6">
                                     <Grid.ColumnDefinitions>
@@ -898,6 +902,7 @@
                                     </StackPanel>
                                 </Button>
                             </StackPanel>
+                        </Viewbox>
                         </Border>
 
                         <Button Grid.Row="1"

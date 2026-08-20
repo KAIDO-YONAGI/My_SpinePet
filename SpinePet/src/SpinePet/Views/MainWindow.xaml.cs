@@ -475,6 +475,37 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         CharacterCards.LayoutTransform = scale == 1.0
             ? Transform.Identity
             : new ScaleTransform(scale, scale);
+
+        // 列表整体被 LayoutTransform 缩放，滚动条也被一起缩了；
+        // 反方向放大滚动条宽度，使视觉宽度恒定（约 10px）。
+        double scrollBarWidth = 10.0 / scale;
+        foreach (System.Windows.Controls.Primitives.ScrollBar scrollBar
+                 in FindVisualChildren<System.Windows.Controls.Primitives.ScrollBar>(
+                     CharacterCards))
+        {
+            scrollBar.Width = scrollBarWidth;
+            scrollBar.MinWidth = scrollBarWidth;
+        }
+    }
+
+    private static IEnumerable<T> FindVisualChildren<T>(
+        DependencyObject parent)
+        where T : DependencyObject
+    {
+        int count = VisualTreeHelper.GetChildrenCount(parent);
+        for (int index = 0; index < count; index++)
+        {
+            DependencyObject child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T typed)
+            {
+                yield return typed;
+            }
+
+            foreach (T descendant in FindVisualChildren<T>(child))
+            {
+                yield return descendant;
+            }
+        }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
