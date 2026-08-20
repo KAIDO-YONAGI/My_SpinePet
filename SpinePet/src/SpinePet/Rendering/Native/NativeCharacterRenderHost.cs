@@ -25,6 +25,7 @@ public sealed class NativeCharacterRenderHost :
     private const int WmMouseMove = 0x0200;
     private const int WmLeftButtonDown = 0x0201;
     private const int WmLeftButtonUp = 0x0202;
+    private const int WmRightButtonDown = 0x0204;
     private const int WmCaptureChanged = 0x0215;
     private const double PerformanceWindowSeconds = 2;
     private static readonly TimeSpan WorkingAreaRefreshInterval =
@@ -96,6 +97,7 @@ public sealed class NativeCharacterRenderHost :
     public event Action<string>? CharacterLoadFailed;
     public event Action? CharactersStateChanged;
     public event Action<string, double, double>? CharacterPositionCommitted;
+    public event Action<string>? CharacterRightClicked;
 
     public bool IsCharacterLoading(string characterId) =>
         _states.TryGetValue(characterId, out NativeCharacterState? state) &&
@@ -1441,6 +1443,7 @@ public sealed class NativeCharacterRenderHost :
 
         int message = checked((int)nativeMessage);
         if (message != WmLeftButtonDown &&
+            message != WmRightButtonDown &&
             message != WmMouseMove &&
             message != WmLeftButtonUp &&
             message != WmCaptureChanged)
@@ -1449,6 +1452,16 @@ public sealed class NativeCharacterRenderHost :
         }
 
         NativePoint point = new() { X = x, Y = y };
+        if (message == WmRightButtonDown)
+        {
+            ResetPointerState();
+            if (TryHitCharacter(point, out NativeCharacterState? rightClickedState))
+            {
+                CharacterRightClicked?.Invoke(rightClickedState.Config.Id);
+            }
+            return;
+        }
+
         if (message == WmLeftButtonDown &&
             TryHitCharacter(point, out NativeCharacterState? state))
         {

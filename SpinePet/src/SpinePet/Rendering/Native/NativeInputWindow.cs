@@ -16,6 +16,7 @@ internal sealed class NativeInputWindow : IDisposable
     private const uint WmMouseMove = 0x0200;
     private const uint WmLeftButtonDown = 0x0201;
     private const uint WmLeftButtonUp = 0x0202;
+    private const uint WmRightButtonDown = 0x0204;
     private const uint WmCaptureChanged = 0x0215;
     private const int HitClient = 1;
     private const int RegionOr = 2;
@@ -255,6 +256,7 @@ internal sealed class NativeInputWindow : IDisposable
                     return new IntPtr(HitClient);
 
                 if (message == WmLeftButtonDown ||
+                    message == WmRightButtonDown ||
                     message == WmMouseMove ||
                     message == WmLeftButtonUp)
                 {

@@ -38,7 +38,8 @@
             CornerRadius="8"
             BorderBrush="#FF303030"
             BorderThickness="1"
-            ClipToBounds="True">
+            ClipToBounds="True"
+            MouseLeftButtonDown="OnWindowChromeMouseLeftButtonDown">
         <Grid>
             <Border Height="3"
                     VerticalAlignment="Top"
@@ -46,89 +47,8 @@
                     Panel.ZIndex="4" />
 
             <Grid Margin="16">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <!-- Header / draggable chrome -->
-                <Border Grid.Row="0"
-                        Background="{StaticResource HeaderGradientBrush}"
-                        BorderBrush="#FF303030"
-                        BorderThickness="1"
-                        CornerRadius="8"
-                        Padding="14"
-                        Margin="0,2,0,12"
-                        MouseLeftButtonDown="OnWindowChromeMouseLeftButtonDown">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-
-                        <Border Grid.Column="0"
-                                Width="42"
-                                Height="42"
-                                Margin="0,0,12,0"
-                                CornerRadius="8"
-                                ClipToBounds="True">
-                            <Image Source="pack://application:,,,/Assets/Brand/spinepet-avatar.png"
-                                   Stretch="Uniform"
-                                   RenderOptions.BitmapScalingMode="HighQuality"
-                                   IsHitTestVisible="False"
-                                   AutomationProperties.Name="SpinePet white ghost avatar" />
-                        </Border>
-
-                        <StackPanel Grid.Column="1"
-                                    VerticalAlignment="Center">
-                            <TextBlock Text="SpinePet"
-                                       FontSize="21"
-                                       FontWeight="Bold"
-                                       Foreground="{StaticResource TextPrimaryBrush}" />
-                            <StackPanel Margin="0,3,0,0"
-                                        Orientation="Horizontal">
-                                <Border Width="8"
-                                        Height="4"
-                                        Margin="0,0,6,0"
-                                        VerticalAlignment="Center"
-                                        CornerRadius="8"
-                                        Background="{StaticResource SuccessBrush}" />
-                                <TextBlock x:Name="ModeLabel"
-                                           Text="Configuration Mode"
-                                           Style="{StaticResource EyebrowTextStyle}"
-                                           Foreground="{StaticResource MutedBrush}" />
-                            </StackPanel>
-                        </StackPanel>
-
-                        <Border Grid.Column="2"
-                                Background="{StaticResource InfoSoftBrush}"
-                                BorderBrush="#55DADADA"
-                                BorderThickness="1"
-                                CornerRadius="8"
-                                Padding="10,6"
-                                VerticalAlignment="Center">
-                            <StackPanel Orientation="Horizontal">
-                                <Border Width="8"
-                                        Height="4"
-                                        Margin="0,0,6,0"
-                                        VerticalAlignment="Center"
-                                        CornerRadius="8"
-                                        Background="{StaticResource InfoBrush}" />
-                                <TextBlock x:Name="CharacterCountText"
-                                           Text="{Binding CharacterCountDisplay}"
-                                           FontSize="11"
-                                           FontWeight="SemiBold"
-                                           Foreground="#FFD5D5D5"
-                                           AutomationProperties.Name="{Binding CharacterSearchStatus}"
-                                           AutomationProperties.LiveSetting="Polite" />
-                            </StackPanel>
-                        </Border>
-                    </Grid>
-                </Border>
-
                 <!-- Right side acts as one tall column (settings + finish); the library aligns with it. -->
-                <Grid Grid.Row="1">
+                <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="300" />
@@ -145,7 +65,7 @@
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
 
-                            <Grid Grid.Row="0" Margin="0,0,0,12">
+                            <Grid Grid.Row="0" Margin="0,0,0,10">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
@@ -155,13 +75,13 @@
                                 </Grid.ColumnDefinitions>
 
                                 <Border Grid.Column="0"
-                                        Width="32"
-                                        Height="32"
-                                        Margin="0,0,10,0"
-                                        CornerRadius="8"
+                                        Width="26"
+                                        Height="26"
+                                        Margin="0,0,8,0"
+                                        CornerRadius="7"
                                         Background="{StaticResource AccentSoftBrush}">
-                                    <Path Width="16"
-                                          Height="16"
+                                    <Path Width="13"
+                                          Height="13"
                                           Stretch="Uniform"
                                           Fill="#FFCFC8FF"
                                           Data="M3,2 L9,2 C10.1,2 11,2.9 11,4 L11,5 L13,5 C14.1,5 15,5.9 15,7 L15,14 C15,15.1 14.1,16 13,16 L3,16 C1.9,16 1,15.1 1,14 L1,4 C1,2.9 1.9,2 3,2 Z M3,4 L3,14 L13,14 L13,7 L9,7 L9,4 Z" />
@@ -170,26 +90,30 @@
                                 <StackPanel Grid.Column="1"
                                             VerticalAlignment="Center">
                                     <TextBlock Text="Characters"
+                                               FontSize="13"
                                                Style="{StaticResource SectionTitleStyle}" />
-                                    <TextBlock Text="Your character library"
-                                               Margin="0,2,0,0"
-                                               Style="{StaticResource EyebrowTextStyle}" />
+                                    <TextBlock x:Name="CharacterCountText"
+                                               Text="{Binding CharacterCountDisplay}"
+                                               Margin="0,1,0,0"
+                                               Style="{StaticResource EyebrowTextStyle}"
+                                               AutomationProperties.Name="{Binding CharacterSearchStatus}"
+                                               AutomationProperties.LiveSetting="Polite" />
                                 </StackPanel>
 
                                 <Button Grid.Column="2"
                                         Style="{StaticResource SoftAccentButtonStyle}"
-                                        MinWidth="66"
-                                        Height="34"
-                                        MinHeight="34"
-                                        Margin="0,0,8,0"
-                                        Padding="10,0"
+                                        MinWidth="58"
+                                        Height="28"
+                                        MinHeight="28"
+                                        Margin="0,0,6,0"
+                                        Padding="8,0"
                                         Click="OnAddCharacter"
                                         ToolTip="Import a Spine character"
                                         AutomationProperties.Name="Add character">
                                     <StackPanel Orientation="Horizontal">
-                                        <Path Width="11"
-                                              Height="11"
-                                              Margin="0,0,7,0"
+                                        <Path Width="10"
+                                              Height="10"
+                                              Margin="0,0,6,0"
                                               Stretch="Uniform"
                                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                               StrokeThickness="2"
@@ -201,17 +125,17 @@
 
                                 <Button Grid.Column="3"
                                         Style="{StaticResource QuietButtonStyle}"
-                                        MinWidth="66"
-                                        Height="34"
-                                        MinHeight="34"
-                                        Padding="10,0"
+                                        MinWidth="58"
+                                        Height="28"
+                                        MinHeight="28"
+                                        Padding="8,0"
                                         Click="OnScanResources"
                                         ToolTip="Scan the resource folder"
                                         AutomationProperties.Name="Scan resource folder">
                                     <StackPanel Orientation="Horizontal">
-                                        <Path Width="12"
-                                              Height="12"
-                                              Margin="0,0,7,0"
+                                        <Path Width="11"
+                                              Height="11"
+                                              Margin="0,0,6,0"
                                               Stretch="Uniform"
                                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                               StrokeThickness="1.7"
@@ -223,18 +147,18 @@
 
                                 <Button Grid.Column="4"
                                         Style="{StaticResource QuietButtonStyle}"
-                                        MinWidth="72"
-                                        Height="34"
-                                        MinHeight="34"
-                                        Margin="8,0,0,0"
-                                        Padding="10,0"
+                                        MinWidth="64"
+                                        Height="28"
+                                        MinHeight="28"
+                                        Margin="6,0,0,0"
+                                        Padding="8,0"
                                         Click="OnOpenResourceFolder"
                                         ToolTip="Open the resource folder"
                                         AutomationProperties.Name="Open resource folder">
                                     <StackPanel Orientation="Horizontal">
-                                        <Path Width="13"
-                                              Height="11"
-                                              Margin="0,0,7,0"
+                                        <Path Width="12"
+                                              Height="10"
+                                              Margin="0,0,6,0"
                                               Stretch="Uniform"
                                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                               StrokeThickness="1.6"
@@ -381,12 +305,16 @@
                                             VerticalAlignment="Center"
                                             AutomationProperties.Name="Library preview size percent" />
                                     <Border Padding="7,3"
+                                            MinWidth="50"
                                             Margin="7,0,0,0"
                                             CornerRadius="8"
                                             Background="{StaticResource AccentSoftBrush}">
                                         <TextBlock Text="{Binding ThumbnailScaleDisplay}"
                                                    Style="{StaticResource ValueTextStyle}"
-                                                   Foreground="#FFDCDCDC" />
+                                                   Foreground="#FFDCDCDC"
+                                                   TextAlignment="Center"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center" />
                                     </Border>
                                 </StackPanel>
                             </Grid>
@@ -424,7 +352,7 @@
                                     </ListBox.ItemsPanel>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
-                                            <Grid MinHeight="82"
+                                            <Grid MinHeight="70"
                                                   Tag="{Binding}">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="Auto" />
@@ -460,7 +388,7 @@
                                                 </Border>
 
                                                 <Grid Grid.Column="1"
-                                                      Margin="12,1,10,1"
+                                                      Margin="12,0,10,0"
                                                       VerticalAlignment="Center">
                                                     <Grid.RowDefinitions>
                                                         <RowDefinition Height="Auto" />
@@ -471,32 +399,24 @@
                                                     <TextBlock Text="{Binding Name}"
                                                                FontSize="15"
                                                                FontWeight="SemiBold"
-                                                               LineHeight="18"
+                                                               LineHeight="17"
                                                                Foreground="{StaticResource TextPrimaryBrush}"
                                                                TextWrapping="Wrap"
                                                                TextTrimming="None"
                                                                ToolTip="{Binding Name}" />
 
-                                                    <StackPanel Grid.Row="1"
-                                                                Margin="0,6,0,0"
-                                                                Orientation="Horizontal">
-                                                        <Border Padding="7,3"
-                                                                CornerRadius="8"
-                                                                Background="#B6222222"
-                                                                BorderBrush="#66F0F0F0"
-                                                                BorderThickness="1">
-                                                            <TextBlock Text="{Binding SkinLabel}"
-                                                                       FontSize="11"
-                                                                       FontWeight="SemiBold"
-                                                                       Foreground="#FFDCDCDC"
-                                                                       MaxWidth="120"
-                                                                       TextTrimming="CharacterEllipsis"
-                                                                       ToolTip="{Binding SkinLabel}" />
-                                                        </Border>
-                                                    </StackPanel>
+                                                    <TextBlock Grid.Row="1"
+                                                               Text="{Binding SkinLabel}"
+                                                               Margin="1,2,0,0"
+                                                               FontSize="11"
+                                                               FontWeight="SemiBold"
+                                                               Foreground="{StaticResource MutedBrush}"
+                                                               MaxWidth="120"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               ToolTip="{Binding SkinLabel}" />
 
                                                     <StackPanel Grid.Row="2"
-                                                                Margin="1,7,0,0"
+                                                                Margin="1,3,0,0"
                                                                 Orientation="Horizontal">
                                                         <Border x:Name="StateDot"
                                                                 Width="8"
@@ -521,6 +441,9 @@
                                                         Height="36"
                                                         MinHeight="36"
                                                         Padding="10,0"
+                                                        Background="#FF2A2A2A"
+                                                        BorderBrush="#FF5A5A5A"
+                                                        Foreground="#FFDCDCDC"
                                                         Click="OnToggleCharacter"
                                                         Tag="{Binding}"
                                                         IsTabStop="False"
@@ -546,9 +469,9 @@
                                                     <Setter TargetName="StateDot" Property="Background" Value="{StaticResource SuccessBrush}" />
                                                     <Setter TargetName="CardStateText" Property="Text" Value="Visible on desktop" />
                                                     <Setter TargetName="CardStateText" Property="Foreground" Value="#FFBDBDBD" />
-                                                    <Setter TargetName="VisibilityButton" Property="Background" Value="{StaticResource SuccessSoftBrush}" />
-                                                    <Setter TargetName="VisibilityButton" Property="BorderBrush" Value="#70E3E3E3" />
-                                                    <Setter TargetName="VisibilityButton" Property="Foreground" Value="#FFFFFFFF" />
+                                                    <Setter TargetName="VisibilityButton" Property="Background" Value="{StaticResource AccentBrush}" />
+                                                    <Setter TargetName="VisibilityButton" Property="BorderBrush" Value="#FFFFFFFF" />
+                                                    <Setter TargetName="VisibilityButton" Property="Foreground" Value="#FF161616" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding IsLoading}" Value="True">
                                                     <Setter TargetName="StateDot" Property="Background" Value="{StaticResource WarningBrush}" />
@@ -815,11 +738,15 @@
                                             </StackPanel>
                                             <Border Grid.Column="1"
                                                     Padding="8,3"
+                                                    MinWidth="52"
                                                     CornerRadius="8"
                                                     Background="{StaticResource AccentSoftBrush}">
                                                 <TextBlock Text="{Binding SelectedScaleDisplay}"
                                                            Style="{StaticResource ValueTextStyle}"
-                                                           Foreground="#FFDCDCDC" />
+                                                           Foreground="#FFDCDCDC"
+                                                           TextAlignment="Center"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center" />
                                             </Border>
                                         </Grid>
                                         <Grid>

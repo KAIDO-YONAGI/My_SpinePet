@@ -512,8 +512,8 @@
 
     <Style x:Key="SlimScrollBarStyle"
            TargetType="ScrollBar">
-        <Setter Property="Width" Value="8" />
-        <Setter Property="MinWidth" Value="8" />
+        <Setter Property="Width" Value="9.6" />
+        <Setter Property="MinWidth" Value="9.6" />
         <Setter Property="Background" Value="#32101010" />
         <Setter Property="Template">
             <Setter.Value>

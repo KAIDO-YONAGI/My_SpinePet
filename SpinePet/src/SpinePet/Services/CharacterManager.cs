@@ -38,6 +38,7 @@ public sealed class CharacterManager
         _renderHost.CharacterLoadFailed += OnCharacterLoadFailed;
         _renderHost.CharactersStateChanged += OnCharactersStateChanged;
         _renderHost.CharacterPositionCommitted += OnCharacterPositionCommitted;
+        _renderHost.CharacterRightClicked += OnCharacterRightClicked;
     }
 
     public IReadOnlyList<CharacterConfig> Characters => _config.Characters;
@@ -56,6 +57,8 @@ public sealed class CharacterManager
     public event Action? CharactersChanged;
 
     public event Action<string, double, double>? CharacterScaleChanged;
+
+    public event Action<string>? CharacterRightClicked;
 
     public ICharacterRenderHost RenderHost => _renderHost;
 
@@ -638,6 +641,11 @@ public sealed class CharacterManager
         character.PositionY = top;
         _configService.Save(_config);
         CharactersChanged?.Invoke();
+    }
+
+    private void OnCharacterRightClicked(string characterId)
+    {
+        CharacterRightClicked?.Invoke(characterId);
     }
 
     private CharacterConfig? FindPreferredCharacter(

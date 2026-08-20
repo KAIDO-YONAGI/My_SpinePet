@@ -9,6 +9,7 @@ public interface ICharacterRenderHost
     event Action<string>? CharacterLoadFailed;
     event Action? CharactersStateChanged;
     event Action<string, double, double>? CharacterPositionCommitted;
+    event Action<string>? CharacterRightClicked;
 
     bool IsCharacterLoading(string characterId);
     bool IsCharacterVisible(string characterId);

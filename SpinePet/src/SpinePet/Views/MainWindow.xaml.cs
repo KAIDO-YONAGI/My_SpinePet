@@ -125,6 +125,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         RefreshCharacterList();
         _characterManager.CharactersChanged += RefreshCharacterList;
         _characterManager.CharacterScaleChanged += OnCharacterScaleChanged;
+        _characterManager.CharacterRightClicked += OnCharacterRightClicked;
     }
 
     public ObservableCollection<CharacterViewModel> Characters { get; } = new();
@@ -515,7 +516,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
     {
         if (_isConfigMode)
         {
-            ModeLabel.Text = "Configuration Mode";
             Topmost = true;
             Show();
             Activate();
@@ -526,6 +526,28 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         }
 
         _characterManager.SetConfigMode(_isConfigMode);
+    }
+
+    private void OnCharacterRightClicked(string characterId)
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        CharacterViewModel? viewModel = Characters.FirstOrDefault(
+            item => item.Id == characterId);
+        if (viewModel != null)
+        {
+            if (!CharacterView.Contains(viewModel))
+            {
+                CharacterSearchText = string.Empty;
+            }
+
+            SelectedCharacter = viewModel;
+        }
+
+        SwitchToConfigMode();
     }
 
     private void SyncSelectedCharacterSettings()
@@ -611,6 +633,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         Dispose();
         _characterManager.CharactersChanged -= RefreshCharacterList;
         _characterManager.CharacterScaleChanged -= OnCharacterScaleChanged;
+        _characterManager.CharacterRightClicked -= OnCharacterRightClicked;
 
         base.OnClosed(e);
     }
