@@ -92,12 +92,19 @@
                                     <TextBlock Text="Characters"
                                                FontSize="13"
                                                Style="{StaticResource SectionTitleStyle}" />
-                                    <TextBlock x:Name="CharacterCountText"
-                                               Text="{Binding CharacterCountDisplay}"
-                                               Margin="0,1,0,0"
-                                               Style="{StaticResource EyebrowTextStyle}"
-                                               AutomationProperties.Name="{Binding CharacterSearchStatus}"
-                                               AutomationProperties.LiveSetting="Polite" />
+                                    <Border Margin="0,3,0,0"
+                                            Padding="7,2"
+                                            CornerRadius="8"
+                                            Background="#FFFFFFFF"
+                                            HorizontalAlignment="Left">
+                                        <TextBlock x:Name="CharacterCountText"
+                                                   Text="{Binding CharacterCountDisplay}"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="#FF161616"
+                                                   AutomationProperties.Name="{Binding CharacterSearchStatus}"
+                                                   AutomationProperties.LiveSetting="Polite" />
+                                    </Border>
                                 </StackPanel>
 
                                 <Button Grid.Column="2"
@@ -170,14 +177,14 @@
                             </Grid>
 
                             <!-- Search + thumbnail size slider -->
-                            <Grid Grid.Row="1" Margin="0,0,0,12">
+                            <Grid Grid.Row="1" Margin="0,0,0,10">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
                                 <Border Grid.Column="0"
-                                        Height="40"
+                                        Height="32"
                                         Margin="0,0,10,0">
                                     <Border.Style>
                                         <Style TargetType="Border">
@@ -235,7 +242,7 @@
                                                    Margin="13,0,62,0"
                                                    VerticalAlignment="Center"
                                                    Foreground="{StaticResource MutedBrush}"
-                                                   FontSize="12"
+                                                   FontSize="11"
                                                    IsHitTestVisible="False">
                                             <TextBlock.Style>
                                                 <Style TargetType="TextBlock">
@@ -286,15 +293,15 @@
                                             VerticalAlignment="Center"
                                             ToolTip="Adjust the size of preview items in the library list"
                                             AutomationProperties.Name="Library preview size">
-                                    <Path Width="14"
-                                          Height="14"
+                                    <Path Width="13"
+                                          Height="13"
                                           Margin="0,0,7,0"
                                           VerticalAlignment="Center"
                                           Stretch="Uniform"
                                           Stroke="{StaticResource MutedBrush}"
                                           StrokeThickness="1.6"
                                           Data="M4,12 L4,10 L2,10 L2,12 Z M7,12 L7,7 L5,7 L5,12 Z M10,12 L10,4 L8,4 L8,12 Z M13,12 L13,2 L11,2 L11,12 Z" />
-                                    <Slider Width="74"
+                                    <Slider Width="90"
                                             Minimum="50"
                                             Maximum="150"
                                             SmallChange="5"
@@ -411,6 +418,8 @@
                                                                FontSize="11"
                                                                FontWeight="SemiBold"
                                                                Foreground="{StaticResource MutedBrush}"
+                                                               HorizontalAlignment="Left"
+                                                               TextAlignment="Left"
                                                                MaxWidth="120"
                                                                TextTrimming="CharacterEllipsis"
                                                                ToolTip="{Binding SkinLabel}" />
@@ -575,17 +584,10 @@
                         <!-- Selected character settings, scrolls independently -->
                         <Border Grid.Row="0"
                                 Style="{StaticResource SectionBorderStyle}"
-                                Margin="0,0,0,0">
-                        <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled"
-                                      CanContentScroll="False"
-                                      Focusable="False">
-                            <ScrollViewer.Resources>
-                                <Style TargetType="ScrollBar"
-                                       BasedOn="{StaticResource SlimScrollBarStyle}" />
-                            </ScrollViewer.Resources>
-                            <StackPanel>
-                                <Grid Margin="0,0,0,12">
+                                Margin="0,0,0,0"
+                                Padding="12">
+                        <StackPanel>
+                                <Grid Margin="0,0,0,6">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -593,13 +595,13 @@
                                     </Grid.ColumnDefinitions>
 
                                     <Border Grid.Column="0"
-                                            Width="32"
-                                            Height="32"
-                                            Margin="0,0,10,0"
-                                            CornerRadius="8"
+                                            Width="26"
+                                            Height="26"
+                                            Margin="0,0,8,0"
+                                            CornerRadius="7"
                                             Background="{StaticResource InfoSoftBrush}">
-                                        <Path Width="16"
-                                              Height="16"
+                                        <Path Width="13"
+                                              Height="13"
                                               Stretch="Uniform"
                                               Stroke="#FF9BE9FF"
                                               StrokeThickness="1.6"
@@ -611,13 +613,13 @@
                                         <TextBlock Text="SELECTED CHARACTER"
                                                    Style="{StaticResource EyebrowTextStyle}" />
                                         <TextBlock Text="{Binding SelectedCharacter.Name, TargetNullValue='No character selected'}"
-                                                   Margin="0,3,10,0"
-                                                   FontSize="16"
+                                                   Margin="0,2,10,0"
+                                                   FontSize="14"
                                                    FontWeight="SemiBold"
                                                    Foreground="{StaticResource InfoBrush}"
                                                    TextWrapping="Wrap"
                                                    TextTrimming="None" />
-                                        <WrapPanel Margin="0,5,10,0">
+                                        <WrapPanel Margin="0,3,10,0">
                                             <TextBlock Text="{Binding SelectedCharacter.SkinLabel}"
                                                        FontSize="11"
                                                        FontWeight="SemiBold"
@@ -630,18 +632,18 @@
 
                                     <Button Grid.Column="2"
                                             Style="{StaticResource QuietButtonStyle}"
-                                            Height="34"
-                                            MinHeight="34"
-                                            MinWidth="108"
-                                            Padding="10,0"
+                                            Height="28"
+                                            MinHeight="28"
+                                            MinWidth="88"
+                                            Padding="8,0"
                                             Click="OnResetSelectedPosition"
                                             IsEnabled="{Binding HasSelectedCharacter}"
                                             ToolTip="Move the selected character back to its default position"
                                             AutomationProperties.Name="Reset selected character position">
                                         <StackPanel Orientation="Horizontal">
-                                            <Path Width="12"
-                                                  Height="12"
-                                                  Margin="0,0,7,0"
+                                            <Path Width="11"
+                                                  Height="11"
+                                                  Margin="0,0,6,0"
                                                   Stretch="Uniform"
                                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                                   StrokeThickness="1.7"
@@ -653,36 +655,34 @@
                                 </Grid>
 
                                 <TextBlock Text="ANIMATION"
-                                           Margin="1,0,0,7"
+                                           Margin="1,0,0,6"
                                            Style="{StaticResource EyebrowTextStyle}" />
                                 <ComboBox x:Name="AnimationCombo"
                                           ItemsSource="{Binding SelectedAnimationNames}"
                                           SelectedItem="{Binding SelectedAnimation, Mode=TwoWay}"
                                           SelectionChanged="OnAnimationChanged"
                                           IsEnabled="{Binding HasSelectedCharacter}"
+                                          Height="32"
                                           AutomationProperties.Name="Character animation"
-                                          Margin="0,0,0,12" />
+                                          Margin="0,0,0,6" />
 
                                 <Border Style="{StaticResource ControlGroupStyle}"
-                                        Margin="0,0,0,12">
+                                        Margin="0,0,0,6">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="104" />
+                                            <ColumnDefinition Width="88" />
                                         </Grid.ColumnDefinitions>
-                                        <StackPanel Margin="0,0,14,0">
+                                        <StackPanel Margin="0,0,14,0"
+                                                    VerticalAlignment="Center">
                                             <TextBlock Text="Desktop frame rate"
                                                        Style="{StaticResource FieldLabelStyle}" />
-                                            <TextBlock Text="30 saves power; 60 is balanced; 120 suits high-refresh displays"
-                                                       Margin="0,3,0,0"
-                                                       FontSize="11"
-                                                       Foreground="{StaticResource MutedBrush}"
-                                                       TextWrapping="Wrap" />
                                         </StackPanel>
                                         <ComboBox Grid.Column="1"
                                                   ItemsSource="{Binding FrameRateOptions}"
                                                   SelectedItem="{Binding TargetFrameRate, Mode=TwoWay}"
                                                   VerticalAlignment="Center"
+                                                  Height="28"
                                                   AutomationProperties.Name="Desktop pet frame rate in frames per second"
                                                   AutomationProperties.HelpText="Choose 30 for lower power use, 60 for balanced animation, or 120 for high-refresh displays.">
                                             <ComboBox.ItemTemplate>
@@ -695,7 +695,7 @@
                                 </Border>
 
                                 <Border Style="{StaticResource ControlGroupStyle}"
-                                        Margin="0,0,0,12">
+                                        Margin="0,0,0,6">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -705,26 +705,30 @@
                                             <TextBlock Text="Allow dragging in render mode"
                                                        Style="{StaticResource FieldLabelStyle}" />
                                             <TextBlock Text="Short clicks still play the action animation"
-                                                       Margin="0,3,12,0"
-                                                       FontSize="11"
+                                                       Margin="0,2,12,0"
+                                                       FontSize="10.5"
                                                        Foreground="{StaticResource MutedBrush}" />
                                         </StackPanel>
                                         <CheckBox Grid.Column="1"
                                                   IsChecked="{Binding AllowRenderDrag, Mode=TwoWay}"
+                                                  Checked="OnDragToggleStateChanged"
+                                                  Unchecked="OnDragToggleStateChanged"
+                                                  Loaded="OnDragToggleLoaded"
                                                   VerticalAlignment="Center"
                                                   AutomationProperties.Name="Allow dragging in render mode" />
                                     </Grid>
                                 </Border>
 
                                 <Border Style="{StaticResource ControlGroupStyle}"
-                                        Margin="0,0,0,10">
+                                        Margin="0,0,0,6">
                                     <StackPanel>
-                                        <Grid Margin="0,0,0,7">
+                                        <Grid Margin="0,0,0,4">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <StackPanel Orientation="Horizontal">
+                                            <StackPanel Orientation="Horizontal"
+                                                        VerticalAlignment="Center">
                                                 <Path Width="13"
                                                       Height="13"
                                                       Margin="0,0,8,0"
@@ -736,58 +740,91 @@
                                                 <TextBlock Text="Scale"
                                                            Style="{StaticResource FieldLabelStyle}" />
                                             </StackPanel>
-                                            <Border Grid.Column="1"
-                                                    Padding="8,3"
-                                                    MinWidth="52"
-                                                    CornerRadius="8"
-                                                    Background="{StaticResource AccentSoftBrush}">
-                                                <TextBlock Text="{Binding SelectedScaleDisplay}"
-                                                           Style="{StaticResource ValueTextStyle}"
-                                                           Foreground="#FFDCDCDC"
-                                                           TextAlignment="Center"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center" />
-                                            </Border>
-                                        </Grid>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <Slider x:Name="ScaleSlider"
-                                                    Grid.Column="0"
-                                                    Minimum="0"
-                                                    Maximum="100"
-                                                    Value="{Binding SelectedScalePercent, Mode=TwoWay}"
-                                                    ValueChanged="OnScaleChanged"
-                                                    IsEnabled="{Binding HasSelectedCharacter}"
-                                                    AutomationProperties.Name="Character scale"
-                                                    VerticalAlignment="Center" />
                                             <Button Grid.Column="1"
                                                     Content="Reset"
                                                     Style="{StaticResource QuietButtonStyle}"
-                                                    Width="62"
-                                                    Height="28"
-                                                    MinHeight="28"
-                                                    Padding="8,0"
-                                                    Margin="10,0,0,0"
+                                                    Width="52"
+                                                    Height="24"
+                                                    MinHeight="24"
+                                                    Padding="6,0"
                                                     VerticalAlignment="Center"
                                                     Click="OnResetScale"
                                                     IsEnabled="{Binding HasSelectedCharacter}"
                                                     AutomationProperties.Name="Reset character scale" />
                                         </Grid>
-                                    </StackPanel>
-                                </Border>
 
-                                <Border Style="{StaticResource ControlGroupStyle}"
-                                        Margin="0,0,0,12">
-                                    <StackPanel>
-                                        <Grid Margin="0,0,0,7">
+                                        <!-- Base size 0-100 (maps to 0-20% actual) -->
+                                        <Grid Margin="0,0,0,4">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <StackPanel Orientation="Horizontal">
+                                            <Slider Grid.Column="0"
+                                                    Minimum="0"
+                                                    Maximum="100"
+                                                    SmallChange="1"
+                                                    LargeChange="10"
+                                                    Value="{Binding SelectedScaleBasePercent, Mode=TwoWay}"
+                                                    IsEnabled="{Binding HasSelectedCharacter}"
+                                                    AutomationProperties.Name="Character base scale percent"
+                                                    VerticalAlignment="Center" />
+                                            <Border Grid.Column="1"
+                                                    Padding="8,3"
+                                                    MinWidth="48"
+                                                    Margin="8,0,0,0"
+                                                    CornerRadius="8"
+                                                    Background="{StaticResource InfoSoftBrush}">
+                                                <TextBlock Text="{Binding SelectedScaleBasePercentDisplay}"
+                                                           Style="{StaticResource ValueTextStyle}"
+                                                           Foreground="#FFC6C6C6"
+                                                           TextAlignment="Center"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center" />
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- Multiplier 1-5x -->
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <Slider Grid.Column="0"
+                                                    Minimum="1"
+                                                    Maximum="5"
+                                                    SmallChange="0.1"
+                                                    LargeChange="1"
+                                                    Value="{Binding SelectedScaleMultiplier, Mode=TwoWay}"
+                                                    IsEnabled="{Binding HasSelectedCharacter}"
+                                                    AutomationProperties.Name="Character scale multiplier"
+                                                    VerticalAlignment="Center" />
+                                            <Border Grid.Column="1"
+                                                    Padding="8,3"
+                                                    MinWidth="48"
+                                                    Margin="8,0,0,0"
+                                                    CornerRadius="8"
+                                                    Background="{StaticResource InfoSoftBrush}">
+                                                <TextBlock Text="{Binding SelectedScaleMultiplierDisplay}"
+                                                           Style="{StaticResource ValueTextStyle}"
+                                                           Foreground="#FFC6C6C6"
+                                                           TextAlignment="Center"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center" />
+                                            </Border>
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Style="{StaticResource ControlGroupStyle}"
+                                        Margin="0,0,0,6">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Orientation="Horizontal"
+                                                        VerticalAlignment="Center">
                                                 <Path Width="13"
                                                       Height="13"
                                                       Margin="0,0,8,0"
@@ -800,14 +837,17 @@
                                                 <TextBlock Text="Animation Speed"
                                                            Style="{StaticResource FieldLabelStyle}" />
                                             </StackPanel>
-                                            <Border Grid.Column="1"
-                                                    Padding="8,3"
-                                                    CornerRadius="8"
-                                                    Background="{StaticResource InfoSoftBrush}">
-                                                <TextBlock Text="{Binding SelectedSpeedDisplay}"
-                                                           Style="{StaticResource ValueTextStyle}"
-                                                           Foreground="#FFC6C6C6" />
-                                            </Border>
+                                            <Button Grid.Column="1"
+                                                    Content="Reset"
+                                                    Style="{StaticResource QuietButtonStyle}"
+                                                    Width="52"
+                                                    Height="24"
+                                                    MinHeight="24"
+                                                    Padding="6,0"
+                                                    VerticalAlignment="Center"
+                                                    Click="OnResetSpeed"
+                                                    IsEnabled="{Binding HasSelectedCharacter}"
+                                                    AutomationProperties.Name="Reset animation speed" />
                                         </Grid>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
@@ -823,32 +863,32 @@
                                                     IsEnabled="{Binding HasSelectedCharacter}"
                                                     AutomationProperties.Name="Animation speed"
                                                     VerticalAlignment="Center" />
-                                            <Button Grid.Column="1"
-                                                    Content="Reset"
-                                                    Style="{StaticResource QuietButtonStyle}"
-                                                    Width="62"
-                                                    Height="28"
-                                                    MinHeight="28"
-                                                    Padding="8,0"
+                                            <Border Grid.Column="1"
+                                                    Padding="8,3"
+                                                    CornerRadius="8"
                                                     Margin="10,0,0,0"
-                                                    VerticalAlignment="Center"
-                                                    Click="OnResetSpeed"
-                                                    IsEnabled="{Binding HasSelectedCharacter}"
-                                                    AutomationProperties.Name="Reset animation speed" />
+                                                    Background="{StaticResource InfoSoftBrush}">
+                                                <TextBlock Text="{Binding SelectedSpeedDisplay}"
+                                                           Style="{StaticResource ValueTextStyle}"
+                                                           Foreground="#FFC6C6C6"
+                                                           TextAlignment="Center"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center" />
+                                            </Border>
                                         </Grid>
                                     </StackPanel>
                                 </Border>
 
                                 <Button Style="{StaticResource DangerButtonStyle}"
-                                        Height="38"
+                                        Height="30"
                                         Click="OnDeleteSelectedSkin"
                                         IsEnabled="{Binding HasSelectedCharacter}"
                                         ToolTip="Move the selected skin resources to the Recycle Bin"
                                         AutomationProperties.Name="Delete selected skin">
                                     <StackPanel Orientation="Horizontal">
-                                        <Path Width="13"
-                                              Height="14"
-                                              Margin="0,0,8,0"
+                                        <Path Width="12"
+                                              Height="12"
+                                              Margin="0,0,6,0"
                                               Stretch="Uniform"
                                               Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
                                               StrokeThickness="1.6"
@@ -858,13 +898,12 @@
                                     </StackPanel>
                                 </Button>
                             </StackPanel>
-                        </ScrollViewer>
                         </Border>
 
                         <Button Grid.Row="1"
-                                Margin="0,12,0,0"
+                                Margin="0,10,0,0"
                                 Style="{StaticResource PrimaryButtonStyle}"
-                                Height="44"
+                                Height="36"
                                 Click="OnExitConfiguration"
                                 Content="Finish Configuration"
                                 AutomationProperties.Name="Finish configuration" />

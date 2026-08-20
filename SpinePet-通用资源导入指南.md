@@ -221,6 +221,21 @@ SpinePet\res\<资源全名>\<皮肤ID>\
    Abyss Flower = `c513_01`），不要默认用本体头像；
    核验过程证据在 `NIKKE资源核验报告.md`（已冻结的历史存档）。
 
+**超高缩略图检查（头像过窄过高时的修正）：**
+
+- 卡片头像一旦是超高竖图（高 > 宽 × 1.25，如 488×953、752×1762），
+  说明图标取错了源——通常是误从角色自身文件夹
+  `resources\Characters\<资源名>\Icons\c*_NN.png`（游戏内竖版立绘）
+  复制，而不是 nikkedb 索引图。
+- 正确方形图**只在项目资源目录取**：
+  `resources\nikkedb\github-repository\images\sprite\` 下按
+  `si_c<原角色ID>_<皮肤ID>_00_s.png`（约 128×128 方形）查找
+  （顺序 `_00_s` → `_s` → `_00` → 无后缀）；
+  **不要从 `resources\Characters\<资源名>\Icons\` 里找。**
+- 覆盖前先 `taskkill //IM SpinePet.exe //F`，再复制为
+  `<皮肤目录>\icons\<资源前缀>_icon.png` 覆盖错误图标；
+  原错误图标可先备份。
+
 ### 4.2 默认动画规则
 
 应用层默认动画逻辑（导入后无需配置即按此运行）：

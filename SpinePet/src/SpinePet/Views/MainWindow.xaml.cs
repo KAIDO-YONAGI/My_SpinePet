@@ -7,6 +7,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using SpinePet.Infrastructure;
 using SpinePet.Models;
@@ -21,6 +22,12 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
     private const double DefaultScale = 0.2;
     private const double MinimumScale = 0.05;
     private const double MinimumMaximumScale = 0.2;
+    private const double MinimumScaleBasePercent = 0;
+    private const double MaximumScaleBasePercent = 100;
+    private const double MinimumScaleMultiplier = 1;
+    private const double MaximumScaleMultiplier = 5;
+    // 基础滑条 0–100 只映射 0–20% 的实际缩放。
+    private const double MaximumBaseScale = 0.2;
 
     private readonly CharacterManager _characterManager;
     private readonly CharacterResourceDiscoveryService _resourceDiscovery;
@@ -39,7 +46,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
     private string _selectedAnimation = string.Empty;
     private double _selectedScale = DefaultScale;
     private double _selectedScaleMax = DefaultMaxScale;
-    private double _selectedScalePercent;
+    private double _selectedScaleBasePercent = MaximumScaleBasePercent;
+    private double _selectedScaleMultiplier = 1;
     private double _selectedSpeed = 100;
     private bool _allowRenderDrag;
     private int _targetFrameRate = GlobalConfig.DefaultTargetFrameRate;
@@ -260,24 +268,123 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         }
     }
 
-    public double SelectedScalePercent
+    public double SelectedScaleBasePercent
     {
-        get => _selectedScalePercent;
+        get => _selectedScaleBasePercent;
         set
         {
-            double normalized = Math.Clamp(value, 0, 100);
-            if (NearlyEquals(_selectedScalePercent, normalized))
+            double normalized = Math.Clamp(
+                value,
+                MinimumScaleBasePercent,
+                MaximumScaleBasePercent);
+            if (NearlyEquals(_selectedScaleBasePercent, normalized))
             {
                 return;
             }
 
-            _selectedScalePercent = normalized;
+            _selectedScaleBasePercent = normalized;
             OnPropertyChanged();
-            OnPropertyChanged(nameof(SelectedScaleDisplay));
+            OnPropertyChanged(nameof(SelectedScaleBasePercentDisplay));
+            CommitSelectedScale();
         }
     }
 
-    public string SelectedScaleDisplay => $"{SelectedScalePercent:F0}%";
+    public double SelectedScaleMultiplier
+    {
+        get => _selectedScaleMultiplier;
+        set
+        {
+            double normalized = Math.Clamp(
+                value,
+                MinimumScaleMultiplier,
+                MaximumScaleMultiplier);
+            if (NearlyEquals(_selectedScaleMultiplier, normalized))
+            {
+                return;
+            }
+
+            _selectedScaleMultiplier = normalized;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedScaleMultiplierDisplay));
+            CommitSelectedScale();
+        }
+    }
+
+    public string SelectedScaleBasePercentDisplay =>
+        $"{SelectedScaleBasePercent:F0}%";
+
+    public string SelectedScaleMultiplierDisplay =>
+        $"×{SelectedScaleMultiplier:F1}";
+
+    // 双滑条模型：实际缩放 = 基础百分比(10–20%) × 乘数(1–5)。
+    // 外部给定的 scale 值拆解回这两个分量。
+    private void SetSelectedScaleFromValue(double scale)
+    {
+        double clamped = Math.Clamp(
+            scale,
+            MinimumScale,
+            MaximumBaseScale * MaximumScaleMultiplier);
+        double basePercent;
+        double multiplier;
+        if (clamped <= MaximumBaseScale)
+        {
+            basePercent = Math.Clamp(
+                (clamped / MaximumBaseScale) * 100,
+                MinimumScaleBasePercent,
+                MaximumScaleBasePercent);
+            multiplier = 1;
+        }
+        else
+        {
+            basePercent = MaximumScaleBasePercent;
+            multiplier = Math.Clamp(
+                clamped / MaximumBaseScale,
+                MinimumScaleMultiplier,
+                MaximumScaleMultiplier);
+        }
+
+        _selectedScaleBasePercent = basePercent;
+        _selectedScaleMultiplier = multiplier;
+        _selectedScale = (basePercent / 100.0) * MaximumBaseScale * multiplier;
+        OnPropertyChanged(nameof(SelectedScaleBasePercent));
+        OnPropertyChanged(nameof(SelectedScaleMultiplier));
+        OnPropertyChanged(nameof(SelectedScaleBasePercentDisplay));
+        OnPropertyChanged(nameof(SelectedScaleMultiplierDisplay));
+        OnPropertyChanged(nameof(SelectedScale));
+    }
+
+    private void CommitSelectedScale()
+    {
+        if (_isRefreshingSelection || SelectedCharacter == null)
+        {
+            return;
+        }
+
+        CharacterConfig? character = FindSelectedCharacterConfig();
+        if (character == null)
+        {
+            return;
+        }
+
+        double effectiveMaximumScale =
+            _characterManager.RenderHost.IsCharacterVisible(character.Id)
+                ? _characterManager.RenderHost.GetMaxScale(character.Id)
+                : SelectedScaleMax;
+        SelectedScaleMax = effectiveMaximumScale;
+
+        double scale = Math.Clamp(
+            (SelectedScaleBasePercent / 100.0) *
+                MaximumBaseScale *
+                SelectedScaleMultiplier,
+            MinimumScale,
+            effectiveMaximumScale);
+        SelectedScale = scale;
+        character.Scale = scale;
+        SelectedCharacter.Scale = scale;
+        _characterManager.RenderHost.SetCharacterScale(
+            character.Id,
+            scale);
+    }
 
     public double SelectedSpeed
     {
@@ -528,10 +635,64 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         _characterManager.SetConfigMode(_isConfigMode);
     }
 
+    private void OnDragToggleLoaded(object sender, RoutedEventArgs e)
+    {
+        SetDragToggleKnob(sender, animate: false);
+    }
+
+    private void OnDragToggleStateChanged(
+        object sender,
+        RoutedEventArgs e)
+    {
+        SetDragToggleKnob(sender, animate: true);
+    }
+
+    private static void SetDragToggleKnob(object sender, bool animate)
+    {
+        if (sender is not System.Windows.Controls.CheckBox checkBox ||
+            checkBox.Template?.FindName(
+                "KnobTranslate",
+                checkBox) is not TranslateTransform transform)
+        {
+            return;
+        }
+
+        double target = checkBox.IsChecked == true ? 16 : 0;
+        if (!animate)
+        {
+            transform.BeginAnimation(
+                TranslateTransform.XProperty,
+                null);
+            transform.X = target;
+            return;
+        }
+
+        transform.BeginAnimation(
+            TranslateTransform.XProperty,
+            new DoubleAnimation(
+                target,
+                TimeSpan.FromMilliseconds(180))
+            {
+                EasingFunction = new QuadraticEase
+                {
+                    EasingMode = EasingMode.EaseOut
+                }
+            });
+    }
+
     private void OnCharacterRightClicked(string characterId)
     {
         if (IsDisposed)
         {
+            return;
+        }
+
+        // 面板已打开时再次右键角色 → 关闭面板（保存状态后隐藏）。
+        if (_isConfigMode)
+        {
+            _characterManager.SaveAllState();
+            _isConfigMode = false;
+            ApplyConfigMode();
             return;
         }
 
@@ -560,7 +721,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
             SelectedAnimation = string.Empty;
             SelectedScale = DefaultScale;
             SelectedScaleMax = DefaultMaxScale;
-            SelectedScalePercent = 0;
+            SetSelectedScaleFromValue(DefaultScale);
             SelectedSpeed = 100;
             _isRefreshingSelection = false;
             return;
@@ -577,15 +738,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
                 : DefaultMaxScale,
             MinimumMaximumScale,
             DefaultMaxScale);
-        SelectedScale = Math.Clamp(
+        SetSelectedScaleFromValue(
             SelectedCharacter.Scale > 0
                 ? SelectedCharacter.Scale
-                : DefaultScale,
-            MinimumScale,
-            SelectedScaleMax);
-        SelectedScalePercent = ConvertScaleToPercent(
-            SelectedScale,
-            SelectedScaleMax);
+                : DefaultScale);
         SelectedAnimation =
             !string.IsNullOrEmpty(SelectedCharacter.ConfiguredAnimation)
                 ? SelectedCharacter.ConfiguredAnimation

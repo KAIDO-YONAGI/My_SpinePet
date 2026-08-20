@@ -59,64 +59,10 @@ public partial class MainWindow
             currentScale,
             MinimumScale,
             SelectedScaleMax);
-        SelectedScalePercent = ConvertScaleToPercent(
-            SelectedScale,
-            SelectedScaleMax);
+        SetSelectedScaleFromValue(SelectedScale);
         SelectedCharacter.MaxScale = SelectedScaleMax;
         SelectedCharacter.Scale = SelectedScale;
         _isRefreshingSelection = false;
-    }
-
-    private void OnScaleChanged(
-        object sender,
-        RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (_isRefreshingSelection || SelectedCharacter == null)
-        {
-            return;
-        }
-
-        CharacterConfig? character = FindSelectedCharacterConfig();
-        if (character == null)
-        {
-            return;
-        }
-
-        double effectiveMaximumScale =
-            _characterManager.RenderHost.IsCharacterVisible(character.Id)
-                ? _characterManager.RenderHost.GetMaxScale(character.Id)
-                : SelectedScaleMax;
-
-        if (!NearlyEquals(SelectedScaleMax, effectiveMaximumScale))
-        {
-            _isRefreshingSelection = true;
-            SelectedScaleMax = effectiveMaximumScale;
-            double rendererScale =
-                _characterManager.RenderHost.GetCurrentScale(character.Id);
-            double currentScale = Math.Clamp(
-                rendererScale > 0 ? rendererScale : SelectedScale,
-                MinimumScale,
-                effectiveMaximumScale);
-            SelectedScale = currentScale;
-            SelectedScalePercent = ConvertScaleToPercent(
-                currentScale,
-                effectiveMaximumScale);
-            SelectedCharacter.Scale = currentScale;
-            character.Scale = currentScale;
-            _isRefreshingSelection = false;
-            return;
-        }
-
-        double scale = Math.Clamp(
-            ConvertPercentToScale(
-                SelectedScalePercent,
-                SelectedScaleMax),
-            MinimumScale,
-            effectiveMaximumScale);
-        character.Scale = scale;
-        SelectedCharacter.Scale = scale;
-        SelectedScale = scale;
-        _characterManager.RenderHost.SetCharacterScale(character.Id, scale);
     }
 
     private void OnSpeedChanged(
@@ -142,12 +88,13 @@ public partial class MainWindow
 
     private void OnResetScale(object sender, RoutedEventArgs e)
     {
-        if (SelectedCharacter != null)
+        if (SelectedCharacter == null)
         {
-            SelectedScalePercent = ConvertScaleToPercent(
-                DefaultScale,
-                SelectedScaleMax);
+            return;
         }
+
+        SetSelectedScaleFromValue(DefaultScale);
+        CommitSelectedScale();
     }
 
     private void OnResetSpeed(object sender, RoutedEventArgs e)
@@ -378,26 +325,4 @@ public partial class MainWindow
                 character => character.Id == characterId);
     }
 
-    private static double ConvertScaleToPercent(
-        double scale,
-        double maximumScale)
-    {
-        if (maximumScale <= MinimumScale)
-        {
-            return 100;
-        }
-
-        double normalized =
-            (scale - MinimumScale) / (maximumScale - MinimumScale);
-        return Math.Clamp(normalized * 100, 0, 100);
-    }
-
-    private static double ConvertPercentToScale(
-        double percent,
-        double maximumScale)
-    {
-        double normalized = Math.Clamp(percent, 0, 100) / 100.0;
-        return MinimumScale +
-            ((maximumScale - MinimumScale) * normalized);
-    }
 }
