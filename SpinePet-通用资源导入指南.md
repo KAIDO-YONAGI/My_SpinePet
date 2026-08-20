@@ -34,7 +34,7 @@ zip 压缩包 ──┐
 |---|---|
 | `resources\Characters\` | 所有源资源的唯一入口与备份区 |
 | `resources\zips\` | 入库后的 zip 存放地 |
-| `resources\nikkedb\` | 上游证据库（l2d / indexes / metadata / evidence / archive / github-repository / Preview），只读 |
+| `resources\nikkedb\` | 上游证据库，只读；子目录：`data\`（indexes / metadata / evidence / archive 及核验报告）、`l2d`、`github-repository`、`Preview` |
 | `resources\` 其他子目录 | 清理、试验的暂存工作区 |
 | `SpinePet\res\` | 应用唯一扫描的运行时资源根 |
 | `SpinePet\src\SpinePet\Data\CharacterNames.json` | 角色 ID → 显示名映射（嵌入资源） |
@@ -48,6 +48,12 @@ zip 压缩包 ──┐
 `SpinePet\res\` 是应用唯一资源根；不要让应用扫描 `resources\`。
 `resources\nikkedb\l2d` 目录名的 `YYYY-MM-DD__` 前缀只是排序日期，
 不得带入 `res`。
+
+`github-repository` 已通过 `git sparse-checkout` 排除 `l2d/`
+（与 `nikkedb\l2d` 内容重复，节省约 5 GB 工作树空间）。
+以后直接 `git pull` 更新即可，不会重新拉出该目录；
+如需恢复：`git sparse-checkout disable`。
+图标源 `images\sprite\` 不受影响。
 
 ## 2. 阶段一：入库
 
@@ -206,13 +212,14 @@ SpinePet\res\<资源全名>\<皮肤ID>\
 7. 旧布局卡（`res\<角色>\standing\`，自定义文件名）的图标约定不同：
    放在骨骼同目录，命名为 `<骨骼主文件名>_icon.png`
    （如 `Blanc_WhiteRabbit_icon.png`）。身份用
-   `resources\nikkedb\indexes\resource-date-index.json` 按
+   `resources\nikkedb\data\indexes\resource-date-index.json` 按
    displayName / targetName 反查角色 ID 再找 `si_` 头像；
    没有这张图时应用会退回显示部件贴图（应避免）；
 8. 索引里只有泛化名（`Variant 01/02`）时，服装名到 ID 的对应关系查
-   `resources\nikkedb\NIKKE资源核验报告.md`（如 Noise - Classic Diva =
-   `c430_02`、Little Mermaid - Shell Princess = `c513_03`、
-   Little Mermaid - Abyss Flower = `c513_01`），不要默认用本体头像。
+   `resources\nikkedb\NIKKE服装ID对照表.md`（可持续维护，核验一条加一行；
+   如 Noise - Classic Diva = `c430_02`、Shell Princess = `c513_03`、
+   Abyss Flower = `c513_01`），不要默认用本体头像；
+   核验过程证据在 `NIKKE资源核验报告.md`（已冻结的历史存档）。
 
 ### 4.2 默认动画规则
 

@@ -16,8 +16,8 @@
 3. 清理对象永远是**单个资源**：排除规则、遮罩参数、验证结论
    都不跨资源复用。
 4. 身份以文件名前缀 `c<角色ID>_<皮肤ID>` 为准；需要按名字反查 ID 时
-   用 `resources\nikkedb\indexes\resource-date-index.json`，服装名到
-   ID 的对应关系查 `resources\nikkedb\NIKKE资源核验报告.md`。
+   用 `resources\nikkedb\data\indexes\resource-date-index.json`，服装名到
+   ID 的对应关系查 `resources\nikkedb\NIKKE服装ID对照表.md`。
 
 ## 1. 三层结构与清理原则
 
