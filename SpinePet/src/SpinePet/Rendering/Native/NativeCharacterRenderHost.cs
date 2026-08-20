@@ -374,10 +374,7 @@ public sealed class NativeCharacterRenderHost :
     {
         _configMode = configMode;
         CancelPointerInteraction(commitPosition: false);
-        if (_configMode)
-            _inputWindow?.ClearAndHide();
-        else
-            UpdateWindowRegions();
+        UpdateWindowRegions();
         foreach (NativeCharacterState state in _states.Values)
             SelectModeAnimation(state);
     }
@@ -960,41 +957,37 @@ public sealed class NativeCharacterRenderHost :
 
         // 每帧全速栅格化（AABB 空间网格，成本与可见面积成正比）；
         // 只有区域内容真正变化时 NativeInputWindow 才会重设窗口区域。
+        // 配置模式同样保持区域活跃：面板遮住其矩形内区域，
+        // 其余桌面可直接拖拽角色，不再依赖 WPF 覆盖层。
         _inputRegions.Clear();
         RefreshWorkingAreas();
-        if (!_configMode)
+        foreach (NativeCharacterState state in _states.Values)
         {
-            foreach (NativeCharacterState state in _states.Values)
-            {
-                if (!state.IsVisible)
-                    continue;
+            if (!state.IsVisible)
+                continue;
 
-                float anchorX =
-                    _window.Left + ToClientPixelX(state.Config.PositionX);
-                float anchorY =
-                    _window.Top + ToClientPixelY(state.Config.PositionY);
-                foreach (Rectangle run in RasterizeSilhouette(
-                         state.LastBatches,
-                         state.ScreenBounds,
-                         anchorX,
-                         anchorY,
-                         state.PivotX,
-                         state.PivotY,
-                         (float)state.CurrentScale * _window.DpiScale,
-                         _window.Left,
-                         _window.Top))
-                {
-                    _inputRegions.AddRange(
-                        ClipToWorkingAreas(run, _workingAreas));
-                }
+            float anchorX =
+                _window.Left + ToClientPixelX(state.Config.PositionX);
+            float anchorY =
+                _window.Top + ToClientPixelY(state.Config.PositionY);
+            foreach (Rectangle run in RasterizeSilhouette(
+                     state.LastBatches,
+                     state.ScreenBounds,
+                     anchorX,
+                     anchorY,
+                     state.PivotX,
+                     state.PivotY,
+                     (float)state.CurrentScale * _window.DpiScale,
+                     _window.Left,
+                     _window.Top))
+            {
+                _inputRegions.AddRange(
+                    ClipToWorkingAreas(run, _workingAreas));
             }
         }
 
         _inputWindow.SetInteractiveRegions(_inputRegions);
-        if (_configMode)
-            _inputWindow.ClearAndHide();
-        else
-            _inputWindow.Show();
+        _inputWindow.Show();
     }
 
     internal static IReadOnlyList<Rectangle> RasterizeSilhouette(
@@ -1457,7 +1450,6 @@ public sealed class NativeCharacterRenderHost :
 
         NativePoint point = new() { X = x, Y = y };
         if (message == WmLeftButtonDown &&
-            !_configMode &&
             TryHitCharacter(point, out NativeCharacterState? state))
         {
             _pointerCharacterId = state.Config.Id;

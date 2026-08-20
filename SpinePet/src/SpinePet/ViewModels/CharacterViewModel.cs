@@ -1,12 +1,18 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.IO;
 using System.Runtime.CompilerServices;
+using System.Windows.Media.Imaging;
 using SpinePet.Models;
 
 namespace SpinePet.ViewModels;
 
 public sealed class CharacterViewModel : INotifyPropertyChanged
 {
+    private const double ThumbnailBoxSize = 64;
+    private static readonly Dictionary<string, (double Width, double Height)>
+        FrameSizeCache = new(StringComparer.OrdinalIgnoreCase);
+
     private string _name = string.Empty;
     private string _skinLabel = string.Empty;
     private string _thumbnailPath = string.Empty;
@@ -51,7 +57,86 @@ public sealed class CharacterViewModel : INotifyPropertyChanged
     public string ThumbnailPath
     {
         get => _thumbnailPath;
-        set => SetProperty(ref _thumbnailPath, value);
+        set
+        {
+            if (SetProperty(ref _thumbnailPath, value))
+            {
+                OnPropertyChanged(nameof(ThumbnailFrameWidth));
+                OnPropertyChanged(nameof(ThumbnailFrameHeight));
+            }
+        }
+    }
+
+    // 响应式缩略图框：图片在 64×64 方形边界内等比整体缩放——
+    // 超高的图按比例整体缩小（宽高一起变），不撑高条目。
+    public double ThumbnailFrameWidth =>
+        GetThumbnailFrameSize(ThumbnailPath).Width;
+
+    public double ThumbnailFrameHeight =>
+        GetThumbnailFrameSize(ThumbnailPath).Height;
+
+    private static (double Width, double Height) GetThumbnailFrameSize(
+        string? path)
+    {
+        const double fallback = 64;
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return (fallback, fallback);
+        }
+
+        lock (FrameSizeCache)
+        {
+            if (FrameSizeCache.TryGetValue(path, out var cached))
+            {
+                return cached;
+            }
+        }
+
+        double width = fallback;
+        double height = fallback;
+        try
+        {
+            if (File.Exists(path))
+            {
+                BitmapFrame frame = BitmapFrame.Create(
+                    new Uri(path),
+                    BitmapCreateOptions.DelayCreation,
+                    BitmapCacheOption.None);
+                if (frame.PixelWidth > 0 && frame.PixelHeight > 0)
+                {
+                    double aspect =
+                        frame.PixelHeight / (double)frame.PixelWidth;
+                    if (aspect >= 1)
+                    {
+                        height = ThumbnailBoxSize;
+                        width = Math.Clamp(
+                            ThumbnailBoxSize / aspect,
+                            20,
+                            ThumbnailBoxSize);
+                    }
+                    else
+                    {
+                        width = ThumbnailBoxSize;
+                        height = Math.Clamp(
+                            ThumbnailBoxSize * aspect,
+                            20,
+                            ThumbnailBoxSize);
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // 读不出尺寸就退回方形默认值。
+        }
+
+        var size = (width, height);
+        lock (FrameSizeCache)
+        {
+            FrameSizeCache[path] = size;
+        }
+
+        return size;
     }
 
     public double Scale

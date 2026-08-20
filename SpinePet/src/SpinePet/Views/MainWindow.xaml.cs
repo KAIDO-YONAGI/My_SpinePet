@@ -1,9 +1,12 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Media;
 using System.Windows.Threading;
 using SpinePet.Infrastructure;
 using SpinePet.Models;
@@ -28,7 +31,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
     private readonly DispatcherTimer _searchAnnouncementTimer;
     private Dictionary<string, CharacterResourceFiles> _knownResources =
         new(StringComparer.OrdinalIgnoreCase);
-    private OverlayWindow? _overlayWindow;
     private bool _isRefreshingSelection;
     private bool _isUpdatingCharacterSelection;
     private bool _isDeletingSkin;
@@ -41,6 +43,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
     private double _selectedSpeed = 100;
     private bool _allowRenderDrag;
     private int _targetFrameRate = GlobalConfig.DefaultTargetFrameRate;
+    private int _thumbnailScalePercent = 100;
+    private int _matchingCharacterCount;
     private string _characterSearchText = string.Empty;
     private string? _selectionBeforeSearchId;
     private int _allowClose;
@@ -95,6 +99,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         _characterIconDownloader = characterIconDownloader ?? new();
         _allowRenderDrag = characterManager.AllowRenderDrag;
         _targetFrameRate = characterManager.TargetFrameRate;
+        _thumbnailScalePercent =
+            characterManager.LibraryThumbnailScalePercent;
         CharacterView = CollectionViewSource.GetDefaultView(Characters);
         CharacterView.Filter = item =>
             item is CharacterViewModel character &&
@@ -119,9 +125,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         RefreshCharacterList();
         _characterManager.CharactersChanged += RefreshCharacterList;
         _characterManager.CharacterScaleChanged += OnCharacterScaleChanged;
-
-        LocationChanged += (_, _) => UpdateOverlayBounds();
-        SizeChanged += (_, _) => UpdateOverlayBounds();
     }
 
     public ObservableCollection<CharacterViewModel> Characters { get; } = new();
@@ -176,8 +179,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
     public bool HasCharacterSearchInput =>
         CharacterSearchText.Length > 0;
 
-    public int MatchingCharacterCount =>
-        CharacterView.Cast<object>().Count();
+    public int MatchingCharacterCount => _matchingCharacterCount;
 
     public string CharacterCountDisplay =>
         HasCharacterSearch
@@ -335,6 +337,38 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         }
     }
 
+    public int ThumbnailScalePercent
+    {
+        get => _thumbnailScalePercent;
+        set
+        {
+            int normalized =
+                GlobalConfig.NormalizeLibraryThumbnailScale(value);
+            if (_thumbnailScalePercent == normalized)
+            {
+                return;
+            }
+
+            _thumbnailScalePercent = normalized;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(ThumbnailScaleDisplay));
+            ApplyThumbnailScale();
+            _characterManager.SetLibraryThumbnailScale(normalized);
+        }
+    }
+
+    public string ThumbnailScaleDisplay => $"{ThumbnailScalePercent}%";
+
+    // 只缩放左侧预览列表：对列表整体挂 LayoutTransform，
+    // 条目内图片框/skin 标签/边框/间距全部严格等比，不会互相撑大。
+    private void ApplyThumbnailScale()
+    {
+        double scale = _thumbnailScalePercent / 100.0;
+        CharacterCards.LayoutTransform = scale == 1.0
+            ? Transform.Identity
+            : new ScaleTransform(scale, scale);
+    }
+
     public event PropertyChangedEventHandler? PropertyChanged;
 
     internal bool IsDisposed =>
@@ -368,13 +402,95 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
     private void OnWindowLoaded(object sender, RoutedEventArgs e)
     {
         Rect workArea = SystemParameters.WorkArea;
-        Width = 468;
+        double width = _characterManager.ConfigPanelWidth > 0
+            ? _characterManager.ConfigPanelWidth
+            : 820;
+        double height = _characterManager.ConfigPanelHeight > 0
+            ? _characterManager.ConfigPanelHeight
+            : workArea.Height * 0.6;
+        Width = Math.Clamp(width, MinWidth, workArea.Width);
+        Height = Math.Clamp(height, MinHeight, workArea.Height);
         Left = workArea.Right - Width;
         Top = workArea.Top;
-        Height = workArea.Height;
-        EnsureOverlayWindow();
+        ApplyThumbnailScale();
         ApplyConfigMode();
     }
+
+    // Win 风格无边框缩放：WM_NCHITTEST 把边缘/四角映射为系统
+    // HTLEFT/HTRIGHT/... 命中，由系统接管拖拽与双向光标。
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        base.OnSourceInitialized(e);
+        if (PresentationSource.FromVisual(this) is HwndSource source)
+        {
+            source.AddHook(OnWindowMessage);
+        }
+    }
+
+    private IntPtr OnWindowMessage(
+        IntPtr hwnd,
+        int msg,
+        IntPtr wParam,
+        IntPtr lParam,
+        ref bool handled)
+    {
+        const int wmNcHitTest = 0x0084;
+        const int htClient = 1;
+        if (msg != wmNcHitTest)
+        {
+            return IntPtr.Zero;
+        }
+
+        IntPtr defaultResult = DefWindowProc(hwnd, msg, wParam, lParam);
+        if (defaultResult != new IntPtr(htClient))
+        {
+            return IntPtr.Zero;
+        }
+
+        const double edge = 6;
+        long packed = lParam.ToInt64();
+        var screenPoint = new System.Windows.Point(
+            (short)(packed & 0xffff),
+            (short)((packed >> 16) & 0xffff));
+        System.Windows.Point point = PointFromScreen(screenPoint);
+        bool left = point.X <= edge;
+        bool right = point.X >= ActualWidth - edge;
+        bool top = point.Y <= edge;
+        bool bottom = point.Y >= ActualHeight - edge;
+
+        int hit = htClient;
+        if (left && top)
+            hit = 13;          // HTTOPLEFT
+        else if (right && bottom)
+            hit = 17;          // HTBOTTOMRIGHT
+        else if (right && top)
+            hit = 14;          // HTTOPRIGHT
+        else if (left && bottom)
+            hit = 16;          // HTBOTTOMLEFT
+        else if (left)
+            hit = 10;          // HTLEFT
+        else if (right)
+            hit = 11;          // HTRIGHT
+        else if (top)
+            hit = 12;          // HTTOP
+        else if (bottom)
+            hit = 15;          // HTBOTTOM
+
+        if (hit == htClient)
+        {
+            return IntPtr.Zero;
+        }
+
+        handled = true;
+        return new IntPtr(hit);
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr DefWindowProc(
+        IntPtr window,
+        int message,
+        IntPtr wParam,
+        IntPtr lParam);
 
     private void OnWindowChromeMouseLeftButtonDown(
         object sender,
@@ -400,73 +516,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         if (_isConfigMode)
         {
             ModeLabel.Text = "Configuration Mode";
-            ShowOverlay();
             Topmost = true;
             Show();
             Activate();
         }
         else
         {
-            HideOverlay();
             Hide();
         }
 
         _characterManager.SetConfigMode(_isConfigMode);
-    }
-
-    private void EnsureOverlayWindow()
-    {
-        if (_overlayWindow != null)
-        {
-            return;
-        }
-
-        _overlayWindow = new OverlayWindow(_characterManager);
-        _overlayWindow.CharacterMoved += OnOverlayCharacterMoved;
-        UpdateOverlayBounds();
-        UpdateOverlayState();
-    }
-
-    private void ShowOverlay()
-    {
-        EnsureOverlayWindow();
-        UpdateOverlayBounds();
-        UpdateOverlayState();
-        _overlayWindow?.ShowOverlay();
-    }
-
-    private void HideOverlay()
-    {
-        _overlayWindow?.HideOverlay();
-    }
-
-    private void UpdateOverlayBounds()
-    {
-        if (_overlayWindow == null)
-        {
-            return;
-        }
-
-        Rect workArea = SystemParameters.WorkArea;
-        double previewWidth = Math.Max(0, Left - workArea.Left);
-        _overlayWindow.SetPreviewBounds(
-            new Rect(workArea.Left, workArea.Top, previewWidth, workArea.Height));
-    }
-
-    private void UpdateOverlayState()
-    {
-        if (_overlayWindow == null)
-        {
-            return;
-        }
-
-        _overlayWindow.SelectedCharacterId = SelectedCharacter?.Id;
-        _overlayWindow.MoveSelectedCharacter =
-            MoveSelectedCheckBox?.IsChecked == true;
-        if (!_overlayWindow.MoveSelectedCharacter)
-        {
-            _overlayWindow.CancelDrag();
-        }
     }
 
     private void SyncSelectedCharacterSettings()
@@ -482,7 +541,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
             SelectedScalePercent = 0;
             SelectedSpeed = 100;
             _isRefreshingSelection = false;
-            UpdateOverlayState();
             return;
         }
 
@@ -516,7 +574,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
             200);
 
         _isRefreshingSelection = false;
-        UpdateOverlayState();
     }
 
     protected override void OnClosing(CancelEventArgs e)
@@ -536,9 +593,17 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
             nameof(MainWindow),
             "configuration-panel-close-intercepted");
         e.Cancel = true;
+        SavePanelLayout();
         _characterManager.SaveAllState();
         _isConfigMode = false;
         ApplyConfigMode();
+    }
+
+    private void SavePanelLayout()
+    {
+        _characterManager.SetConfigPanelSize(
+            ActualWidth,
+            ActualHeight);
     }
 
     protected override void OnClosed(EventArgs e)
@@ -546,13 +611,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         Dispose();
         _characterManager.CharactersChanged -= RefreshCharacterList;
         _characterManager.CharacterScaleChanged -= OnCharacterScaleChanged;
-
-        if (_overlayWindow != null)
-        {
-            _overlayWindow.CharacterMoved -= OnOverlayCharacterMoved;
-            _overlayWindow.Close();
-            _overlayWindow = null;
-        }
 
         base.OnClosed(e);
     }

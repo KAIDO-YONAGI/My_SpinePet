@@ -187,6 +187,8 @@ public partial class MainWindow
         try
         {
             CharacterView.Refresh();
+            _matchingCharacterCount =
+                CharacterView.Cast<object>().Count();
 
             CharacterViewModel? nextSelection =
                 preferredSelection != null &&
@@ -602,11 +604,6 @@ public partial class MainWindow
         SyncSelectedCharacterSettings();
     }
 
-    private void OnMoveSelectionChanged(object sender, RoutedEventArgs e)
-    {
-        UpdateOverlayState();
-    }
-
     private async void OnCharacterCardsPreviewKeyDown(
         object sender,
         System.Windows.Input.KeyEventArgs e)
@@ -745,10 +742,8 @@ public partial class MainWindow
                 }
             }
 
-            UpdateOverlayState();
             if (character.Visible && _isConfigMode)
             {
-                ShowOverlay();
                 Activate();
             }
         }

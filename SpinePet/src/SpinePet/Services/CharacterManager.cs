@@ -46,6 +46,13 @@ public sealed class CharacterManager
 
     public int TargetFrameRate => _config.Global.TargetFrameRate;
 
+    public int LibraryThumbnailScalePercent =>
+        _config.Global.LibraryThumbnailScalePercent;
+
+    public double ConfigPanelWidth => _config.Global.ConfigPanelWidth;
+
+    public double ConfigPanelHeight => _config.Global.ConfigPanelHeight;
+
     public event Action? CharactersChanged;
 
     public event Action<string, double, double>? CharacterScaleChanged;
@@ -82,6 +89,40 @@ public sealed class CharacterManager
         _config.Global.TargetFrameRate = normalized;
         _renderHost.SetTargetFrameRate(normalized);
         _configService.Save(_config);
+    }
+
+    public void SetLibraryThumbnailScale(int percent)
+    {
+        int normalized =
+            GlobalConfig.NormalizeLibraryThumbnailScale(percent);
+        if (_config.Global.LibraryThumbnailScalePercent == normalized)
+        {
+            return;
+        }
+
+        _config.Global.LibraryThumbnailScalePercent = normalized;
+        _configService.Save(_config);
+    }
+
+    public void SetConfigPanelSize(double width, double height)
+    {
+        bool changed = false;
+        if (Math.Abs(_config.Global.ConfigPanelWidth - width) > 0.5)
+        {
+            _config.Global.ConfigPanelWidth = width;
+            changed = true;
+        }
+
+        if (Math.Abs(_config.Global.ConfigPanelHeight - height) > 0.5)
+        {
+            _config.Global.ConfigPanelHeight = height;
+            changed = true;
+        }
+
+        if (changed)
+        {
+            _configService.Save(_config);
+        }
     }
 
     public bool AddCharacter(CharacterResourceFiles resources)

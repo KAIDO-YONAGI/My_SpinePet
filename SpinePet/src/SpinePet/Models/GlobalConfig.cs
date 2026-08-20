@@ -10,6 +10,12 @@ public sealed class GlobalConfig
 
     public int TargetFrameRate { get; set; } = DefaultTargetFrameRate;
 
+    public int LibraryThumbnailScalePercent { get; set; } = 100;
+
+    public double ConfigPanelWidth { get; set; } = 820;
+
+    public double ConfigPanelHeight { get; set; }
+
     public static int NormalizeTargetFrameRate(int frameRate) =>
         frameRate switch
         {
@@ -17,4 +23,7 @@ public sealed class GlobalConfig
             HighRefreshTargetFrameRate => HighRefreshTargetFrameRate,
             _ => DefaultTargetFrameRate
         };
+
+    public static int NormalizeLibraryThumbnailScale(int percent) =>
+        Math.Clamp(percent, 50, 150);
 }

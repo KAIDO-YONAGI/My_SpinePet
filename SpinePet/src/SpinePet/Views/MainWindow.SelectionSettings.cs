@@ -12,28 +12,6 @@ namespace SpinePet.Views;
 
 public partial class MainWindow
 {
-    private void OnCharacterCardsPreviewMouseWheel(
-        object sender,
-        MouseWheelEventArgs e)
-    {
-        ScrollViewer? characterScrollViewer =
-            FindVisualChild<ScrollViewer>(CharacterCards);
-        if (characterScrollViewer == null)
-        {
-            return;
-        }
-
-        if (CanScroll(characterScrollViewer, e.Delta))
-        {
-            ScrollByDelta(characterScrollViewer, e.Delta);
-            e.Handled = true;
-            return;
-        }
-
-        ScrollByDelta(MainScrollViewer, e.Delta);
-        e.Handled = true;
-    }
-
     private void OnCharacterScaleChanged(
         string characterId,
         double maximumScale,
@@ -381,30 +359,6 @@ public partial class MainWindow
         }
     }
 
-    private void OnOverlayCharacterMoved(
-        string characterId,
-        double left,
-        double top)
-    {
-        CharacterConfig? character = _characterManager.Characters.FirstOrDefault(
-            item => item.Id == characterId);
-        if (character == null)
-        {
-            return;
-        }
-
-        character.PositionX = left;
-        character.PositionY = top;
-
-        var viewModel = Characters.FirstOrDefault(
-            item => item.Id == characterId);
-        if (viewModel != null)
-        {
-            viewModel.PositionX = (int)left;
-            viewModel.PositionY = (int)top;
-        }
-    }
-
     private void OnExitConfiguration(object sender, RoutedEventArgs e)
     {
         AppLogger.Write(
@@ -445,65 +399,5 @@ public partial class MainWindow
         double normalized = Math.Clamp(percent, 0, 100) / 100.0;
         return MinimumScale +
             ((maximumScale - MinimumScale) * normalized);
-    }
-
-    private static bool CanScroll(
-        ScrollViewer scrollViewer,
-        int wheelDelta)
-    {
-        if (scrollViewer.ScrollableHeight <= 0)
-        {
-            return false;
-        }
-
-        return wheelDelta < 0
-            ? scrollViewer.VerticalOffset < scrollViewer.ScrollableHeight
-            : scrollViewer.VerticalOffset > 0;
-    }
-
-    private static void ScrollByDelta(
-        ScrollViewer scrollViewer,
-        int wheelDelta)
-    {
-        int wheelLines = Math.Clamp(
-            SystemParameters.WheelScrollLines,
-            1,
-            6);
-        double step = Math.Max(
-            48,
-            wheelLines * 16);
-        double nextOffset =
-            scrollViewer.VerticalOffset - (wheelDelta / 120.0 * step);
-        scrollViewer.ScrollToVerticalOffset(
-            Math.Clamp(nextOffset, 0, scrollViewer.ScrollableHeight));
-    }
-
-    private static T? FindVisualChild<T>(DependencyObject? parent)
-        where T : DependencyObject
-    {
-        if (parent == null)
-        {
-            return null;
-        }
-
-        for (int index = 0;
-             index < VisualTreeHelper.GetChildrenCount(parent);
-             index++)
-        {
-            DependencyObject child =
-                VisualTreeHelper.GetChild(parent, index);
-            if (child is T typedChild)
-            {
-                return typedChild;
-            }
-
-            T? descendant = FindVisualChild<T>(child);
-            if (descendant != null)
-            {
-                return descendant;
-            }
-        }
-
-        return null;
     }
 }
