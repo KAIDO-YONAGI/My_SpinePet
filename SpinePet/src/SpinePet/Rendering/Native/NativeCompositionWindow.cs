@@ -45,10 +45,10 @@ internal sealed class NativeCompositionWindow : IDisposable
         $"SpinePet.NativeComposition.{Environment.ProcessId}";
     private static ushort _windowClass;
 
-    private readonly List<Rectangle> _interactiveRegions = [];
+    private readonly List<Rectangle> _renderingRegions = [];
     private readonly List<Rectangle> _normalizedRegionBuffer = [];
     private Rectangle? _passThroughHole;
-    private bool _hasInteractiveRegions;
+    private bool _hasRenderingRegions;
     private bool _inputEnabled;
 
     public NativeCompositionWindow()
@@ -84,7 +84,7 @@ internal sealed class NativeCompositionWindow : IDisposable
         Instances[Handle] = this;
         uint dpi = GetDpiForWindow(Handle);
         DpiScale = dpi > 0 ? dpi / 96f : 1f;
-        SetInteractiveRegions([]);
+        SetRenderingRegions([]);
         ShowWindow(Handle, SwShowNoActivate);
     }
 
@@ -97,7 +97,13 @@ internal sealed class NativeCompositionWindow : IDisposable
     public Func<int, int, bool>? HitTestScreenPoint { get; set; }
     public Action<uint, int, int>? MouseInput { get; set; }
 
-    public void SetInteractiveRegions(
+    /// <summary>
+    /// Sets the native window region used to keep the composition surface
+    /// visible. Mouse hit testing is resolved separately by
+    /// <see cref="HitTestScreenPoint"/>, so transparent overflow can remain
+    /// visible without becoming interactive.
+    /// </summary>
+    public void SetRenderingRegions(
         IReadOnlyCollection<Rectangle> regions,
         Rectangle? passThroughHole = null)
     {
@@ -135,9 +141,9 @@ internal sealed class NativeCompositionWindow : IDisposable
             : null;
         if (normalizedHole is { Width: <= 0 } or { Height: <= 0 })
             normalizedHole = null;
-        if (_hasInteractiveRegions &&
+        if (_hasRenderingRegions &&
             RegionsEqual(
-                _interactiveRegions,
+                _renderingRegions,
                 _normalizedRegionBuffer) &&
             _passThroughHole == normalizedHole)
         {
@@ -217,10 +223,10 @@ internal sealed class NativeCompositionWindow : IDisposable
                 redraw: false) != 0;
             if (transferred)
             {
-                _interactiveRegions.Clear();
-                _interactiveRegions.AddRange(_normalizedRegionBuffer);
+                _renderingRegions.Clear();
+                _renderingRegions.AddRange(_normalizedRegionBuffer);
                 _passThroughHole = normalizedHole;
-                _hasInteractiveRegions = true;
+                _hasRenderingRegions = true;
             }
         }
         finally

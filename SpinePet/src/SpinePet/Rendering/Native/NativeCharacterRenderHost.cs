@@ -29,7 +29,7 @@ public sealed class NativeCharacterRenderHost :
     private readonly Dictionary<string, NativeCharacterState> _states =
         new(StringComparer.Ordinal);
     private readonly List<PendingFrame> _pendingFrames = [];
-    private readonly List<Rectangle> _interactiveRegions = [];
+    private readonly List<Rectangle> _renderingRegions = [];
     private readonly List<Rectangle> _workingAreas = [];
     private readonly NativeCharacterZOrder _zOrder = new();
     private readonly Dispatcher _dispatcher;
@@ -781,12 +781,12 @@ public sealed class NativeCharacterRenderHost :
             _window.Left + ToClientPixelX(state.Config.PositionX);
         float anchorY =
             _window.Top + ToClientPixelY(state.Config.PositionY);
-        state.PreviousWindowRegionBounds =
-            state.WindowRegionBounds;
+        state.PreviousRenderRegionBounds =
+            state.RenderRegionBounds;
         if (bounds.IsEmpty)
         {
             state.ScreenBounds = RectangleF.Empty;
-            state.WindowRegionBounds = RectangleF.Empty;
+            state.RenderRegionBounds = RectangleF.Empty;
             return;
         }
 
@@ -795,7 +795,10 @@ public sealed class NativeCharacterRenderHost :
             anchorY + (bounds.Top - state.PivotY) * pixelScale,
             anchorX + (bounds.Right - state.PivotX) * pixelScale,
             anchorY + (bounds.Bottom - state.PivotY) * pixelScale);
-        state.WindowRegionBounds = state.ScreenBounds;
+        state.RenderRegionBounds = GetSurfaceScreenBounds(
+            state.Surface,
+            anchorX,
+            anchorY);
     }
 
     private float ToClientPixelX(double x) =>
@@ -951,18 +954,18 @@ public sealed class NativeCharacterRenderHost :
         if (_window == null)
             return;
 
-        _interactiveRegions.Clear();
+        _renderingRegions.Clear();
         RefreshWorkingAreas();
         foreach (NativeCharacterState state in _states.Values)
         {
             if (!state.IsVisible)
                 continue;
 
-            AddClippedWindowRegion(state.PreviousWindowRegionBounds);
-            if (state.WindowRegionBounds !=
-                state.PreviousWindowRegionBounds)
+            AddRenderingWindowRegion(state.PreviousRenderRegionBounds);
+            if (state.RenderRegionBounds !=
+                state.PreviousRenderRegionBounds)
             {
-                AddClippedWindowRegion(state.WindowRegionBounds);
+                AddRenderingWindowRegion(state.RenderRegionBounds);
             }
         }
 
@@ -985,7 +988,7 @@ public sealed class NativeCharacterRenderHost :
             int clientX = screenPoint.X - _window.Left;
             int clientY = screenPoint.Y - _window.Top;
             bool pointInsideRegion = false;
-            foreach (Rectangle region in _interactiveRegions)
+            foreach (Rectangle region in _renderingRegions)
             {
                 if (!region.Contains(clientX, clientY))
                 {
@@ -1003,12 +1006,12 @@ public sealed class NativeCharacterRenderHost :
             }
         }
 
-        _window.SetInteractiveRegions(
-            _interactiveRegions,
+        _window.SetRenderingRegions(
+            _renderingRegions,
             passThroughHole);
     }
 
-    private void AddClippedWindowRegion(RectangleF screenBounds)
+    private void AddRenderingWindowRegion(RectangleF screenBounds)
     {
         if (_window == null)
         {
@@ -1026,7 +1029,7 @@ public sealed class NativeCharacterRenderHost :
                 workingArea);
             if (visibleRegion.Width > 0 && visibleRegion.Height > 0)
             {
-                _interactiveRegions.Add(visibleRegion);
+                _renderingRegions.Add(visibleRegion);
             }
         }
     }

@@ -6,11 +6,15 @@ namespace SpinePet.Tests;
 
 public sealed class NativeCompositionWindowTests
 {
+    private const uint WmNcHitTest = 0x0084;
+    private static readonly IntPtr HitTransparent = new(-1);
+    private static readonly IntPtr HitClient = new(1);
+
     [Fact]
-    public void InteractiveRegionExcludesDesktopOutsideCharacterArea()
+    public void RenderingRegionExcludesDesktopOutsideCharacterArea()
     {
         using NativeCompositionWindow window = new();
-        window.SetInteractiveRegions(
+        window.SetRenderingRegions(
             [new Rectangle(100, 120, 240, 360)]);
 
         IntPtr region = CreateRectRgn(0, 0, 0, 0);
@@ -70,10 +74,10 @@ public sealed class NativeCompositionWindowTests
     }
 
     [Fact]
-    public void InteractiveRegionUsesPhysicalClientPixels()
+    public void RenderingRegionUsesPhysicalClientPixels()
     {
         using NativeCompositionWindow window = new();
-        window.SetInteractiveRegions(
+        window.SetRenderingRegions(
             [new Rectangle(300, 150, 600, 300)]);
 
         IntPtr region = CreateRectRgn(0, 0, 0, 0);
@@ -99,7 +103,7 @@ public sealed class NativeCompositionWindowTests
         using NativeCompositionWindow window = new();
         Rectangle renderingRegion = new(100, 120, 240, 360);
         Rectangle passThroughPixel = new(150, 200, 1, 1);
-        window.SetInteractiveRegions(
+        window.SetRenderingRegions(
             [renderingRegion],
             passThroughPixel);
 
@@ -120,6 +124,35 @@ public sealed class NativeCompositionWindowTests
         {
             DeleteObject(region);
         }
+    }
+
+    [Fact]
+    public void RenderingOverflowRemainsVisibleButReturnsTransparentHitTest()
+    {
+        using NativeCompositionWindow window = new();
+        Rectangle renderingRegion = new(300, 150, 600, 300);
+        Rectangle characterRegion = new(500, 200, 100, 100);
+        window.SetRenderingRegions([renderingRegion]);
+        window.HitTestScreenPoint = (x, y) =>
+            characterRegion.Contains(x - window.Left, y - window.Top);
+
+        IntPtr characterPoint = SendMessage(
+            window.Handle,
+            WmNcHitTest,
+            IntPtr.Zero,
+            PackScreenPoint(
+                window.Left + characterRegion.Left + 20,
+                window.Top + characterRegion.Top + 20));
+        IntPtr overflowPoint = SendMessage(
+            window.Handle,
+            WmNcHitTest,
+            IntPtr.Zero,
+            PackScreenPoint(
+                window.Left + renderingRegion.Left + 20,
+                window.Top + renderingRegion.Top + 20));
+
+        Assert.Equal(HitClient, characterPoint);
+        Assert.Equal(HitTransparent, overflowPoint);
     }
 
     [Fact]
@@ -164,6 +197,16 @@ public sealed class NativeCompositionWindowTests
     [DllImport("gdi32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool DeleteObject(IntPtr handle);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SendMessage(
+        IntPtr window,
+        uint message,
+        IntPtr wParam,
+        IntPtr lParam);
+
+    private static IntPtr PackScreenPoint(int x, int y) =>
+        new((y << 16) | (x & 0xffff));
 
     [StructLayout(LayoutKind.Sequential)]
     private struct NativeRectangle

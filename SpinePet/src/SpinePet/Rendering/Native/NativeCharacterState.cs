@@ -12,9 +12,9 @@ internal sealed class NativeCharacterState : IDisposable
     public NativeSpineBounds SetupBounds { get; set; } = NativeSpineBounds.Empty;
     public NativeSpineBounds Envelope { get; set; } = NativeSpineBounds.Empty;
     public RectangleF ScreenBounds { get; set; } = RectangleF.Empty;
-    public RectangleF PreviousWindowRegionBounds { get; set; } =
+    public RectangleF PreviousRenderRegionBounds { get; set; } =
         RectangleF.Empty;
-    public RectangleF WindowRegionBounds { get; set; } =
+    public RectangleF RenderRegionBounds { get; set; } =
         RectangleF.Empty;
     public IReadOnlyList<NativeSpineDrawBatch> LastBatches { get; set; } =
         Array.Empty<NativeSpineDrawBatch>();
