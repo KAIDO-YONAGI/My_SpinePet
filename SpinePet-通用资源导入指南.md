@@ -114,7 +114,72 @@ D:\SpineTools\SpinePet\res\<角色显示名>\standing\
 不要继续向旧布局添加新资源。已使用规范文件名前缀的旧资源可以交给迁移
 脚本；自定义文件名资源必须先确认身份并规范化，不能假定迁移脚本会处理。
 
-## 5. 手动导入步骤
+## 5. 压缩包一键流程（入库 + 导入）
+
+拿到下载的资源压缩包（形如
+`PC _ Computer - Goddess of Victory_ Nikke - <名称>.zip`）后，整个流程分两段，
+前段由脚本自动完成，后段由操作者按报告执行，两段连续做完即完成导入。
+
+### 第一段：脚本自动入库并出报告
+
+```powershell
+pwsh -NoProfile -File 'D:\SpineTools\SpinePet\tools\zip-intake\Import-ResourceZip.ps1' `
+  -Zip 'D:\下载\DOWNLOAD\PC _ Computer - Goddess of Victory_ Nikke - Burst - Helm_ Aquamarine.zip'
+```
+
+脚本自动执行：
+
+1. 解压 zip 到临时目录，要求顶层是唯一文件夹，否则报错中止。
+2. 按命名规范备份解压内容到
+   `D:\SpineTools\resources\Characters\<外层名>\<内层名>\`。
+3. 把 zip 剪切到 `D:\SpineTools\resources\zips\`。
+4. 递归扫描备份目录中的 `c<角色ID>_<皮肤ID>*.skel`，输出每个骨骼集的
+   位置、atlas 是否齐全，以及 `CharacterNames.json` 中缺失的角色 ID。
+
+入库命名规范：
+
+- zip 文件名去掉 `PC _ Computer - Goddess of Victory_ Nikke - ` 前缀，
+  剩余部分中的 `_ `（下划线+空格）替换为 ` - `，得到外层目录名，
+  例如 `Burst - Helm_ Aquamarine` → `Burst - Helm - Aquamarine`。
+- 内层目录名 = 外层名去掉首个 `Burst - ` 等稀有度前缀，
+  例如 `Helm - Aquamarine`。
+- 目标目录已存在时脚本会报错并保留现场，由人工确认后处理，
+  不会静默覆盖。
+
+### 第二段：按报告导入 res
+
+脚本不自动写 `res` 和 `CharacterNames.json`，因为显示名和骨骼集选择
+需要人工判断。按报告执行：
+
+1. 选择骨骼集：优先 Standing，其次 Lobby，最后 Battle；
+   Battle/Lobby 的 `skillcut` 骨骼是特写取景，可能出现下半身不可见，
+   属于源资源设计而非导入错误。
+2. `CharacterNames.json` 缺角色 ID 时，参考外层目录名补充显示名。
+3. 将选中骨骼集的 `.skel`、`.atlas` 和 atlas 引用的全部纹理页原样复制到
+   `D:\SpineTools\SpinePet\res\<显示名>\<皮肤ID>\standing\`。
+   不做行尾规范化、不附加排除规则，除非另行要求清理。
+4. 启动 SpinePet，点击 **Scan** 验证。
+
+### 注意事项
+
+- **Burst/cutscene（skillcut）资源视作单独一个模型配置**，不是同一角色
+  的一张皮肤。参考现有正确配置：Helm 站立版是 `c352_02`、Helm Aquamarine
+  burst 版是 `c353_00`，各自独立目录、独立角色 ID。
+- burst 的独立目录名 = zip 外层名去掉稀有度前缀，
+  例如 `Burst - Cinderella - Crystal Wave` → `res\Cinderella Crystal Wave\00\standing\`。
+- 扫描器按文件名前缀 `c<角色ID>_<皮肤ID>` 作为唯一键去重。burst 源文件
+  与已导入站立版共用角色 ID 时（如都是 `c515_00`），为 burst 分配一个
+  未使用的本地角色 ID（如 `515` → `5150`），只改文件名前缀中的角色数字段，
+  皮肤号保持源文件原值；同时在 `CharacterNames.json` 为新 ID 添加显示名。
+  改名时同步修改 atlas 首行的页面 png 引用，`.attachments.exclude`
+  文件名跟随骨骼主名。**不要发明 `00cut` 之类皮肤代号**——应用里不存在
+  这种配置方式。
+- `CharacterNames.json` 是嵌入资源，修改后必须重新构建
+  （`dotnet build src/SpinePet/SpinePet.csproj -c Release`）才生效。
+  仓库 `global.json` 已放宽为 `rollForward: Major`，本机 SDK 10 可直接构建。
+- Battle 与 Lobby 的 skillcut 文件通常逐字节相同，任选其一（默认 Lobby）。
+
+## 6.## 6. 手动导入步骤
 
 1. 从 `D:\SpineTools\resources` 或 `D:\SpineTools\nikkedb\l2d` 选择源资源。
 2. 从文件名前缀解析角色 ID 和皮肤 ID；指定导入的资源直接进入下一步。
@@ -129,7 +194,7 @@ D:\SpineTools\SpinePet\res\<角色显示名>\standing\
 不要直接在 `nikkedb\l2d` 内修改原始骨骼、Atlas 或 PNG。需要清理或试验
 时，先复制到 `D:\SpineTools\resources`，验证完成后再导入运行时目录。
 
-## 6. 迁移现有旧布局
+## 7. 迁移现有旧布局
 
 迁移脚本只识别以 `c<数字角色ID>_<皮肤ID>` 开头的资源。先从 SpinePet
 仓库根目录预览：
@@ -180,7 +245,7 @@ Unrecognized or incomplete file left in place
 
 不要为了消除迁移警告而猜测 ID。身份无法确认的资源保留在暂存区。
 
-## 7. UnityFS 导入
+## 8. UnityFS 导入
 
 应用的 **Add** 支持现有 `.skel` 或 UnityFS bundle。bundle 文件名应以
 以下格式开头：
@@ -200,7 +265,7 @@ standing bundle 会提取完整骨骼、图集和 atlas 页面到对应皮肤的
 `standing` 目录；icons bundle 只写入该皮肤的 `icons` 目录。图标导入
 本身不会创建角色卡。
 
-## 8. 导入后验证
+## 9. 导入后验证
 
 检查 atlas 引用的 PNG 是否齐全：
 
