@@ -1,3 +1,6 @@
 [submodule "SpinePet"]
 	path = SpinePet
 	url = https://github.com/Tiwelia/SpinePet
+[submodule "tools/SpineSkeletonDataConverter"]
+	path = tools/SpineSkeletonDataConverter
+	url = https://github.com/wang606/SpineSkeletonDataConverter.git
