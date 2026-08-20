@@ -2,7 +2,7 @@
 setlocal
 title SpineTools Build
 
-set "ROOT=%~dp0"
+set "ROOT=%~dp0..\"
 set "PROJECT=%ROOT%SpinePet"
 
 if not exist "%PROJECT%\SpinePet.sln" (

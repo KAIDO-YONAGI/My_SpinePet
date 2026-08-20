@@ -9,8 +9,8 @@ echo ==============================================
 echo   SpineTools 本地备份  %TS%
 echo ==============================================
 
-call :backup_repo "D:\SpineTools" "SpineTools 主仓库"
-call :backup_repo "D:\SpineTools\SpinePet" "SpinePet"
+call :backup_repo "%~dp0.." "SpineTools 主仓库"
+call :backup_repo "%~dp0..\SpinePet" "SpinePet"
 
 echo.
 echo 全部完成。
