@@ -1,13 +1,10 @@
 # 大体积资源镜像（外部来源，可重新拉取），不入库
 /resources/
 
-# SpinePet 是独立 git 仓库，由备份脚本单独提交
-/SpinePet/
-
 # 本地工具与会话产物
 .zcode/
 .fetch-cache/
-
+.codegraph
 # 系统杂项
 Thumbs.db
 desktop.ini
