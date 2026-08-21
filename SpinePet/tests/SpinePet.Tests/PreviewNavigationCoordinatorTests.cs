@@ -39,6 +39,23 @@ public sealed class PreviewNavigationCoordinatorTests
     }
 
     [Theory]
+    [InlineData(0, 1)]
+    [InlineData(7, 6)]
+    public void BoundaryWheelStepsOneItemBackIntoContent(
+        int selectedIndex,
+        int expectedIndex)
+    {
+        Assert.Equal(
+            expectedIndex,
+            PreviewNavigationRules.FindBoundaryWheelSelectionIndex(
+                itemCount: 8,
+                selectedIndex,
+                wheelDelta: selectedIndex == 0 ? -120 : 120,
+                verticalOffset: selectedIndex == 0 ? 0 : 640,
+                maximumOffset: 640));
+    }
+
+    [Theory]
     [InlineData(0, 120, 0, 640)]
     [InlineData(7, -120, 640, 640)]
     [InlineData(3, 120, 320, 640)]
@@ -278,5 +295,15 @@ public sealed class PreviewNavigationCoordinatorTests
         Assert.True(coordinator.IsRevealing);
         Assert.True(coordinator.HandleRevealState("character-1", true));
         Assert.False(coordinator.IsRevealing);
+    }
+
+    [Fact]
+    public void PendingScrollSelectionIsConsumedOnce()
+    {
+        PreviewNavigationCoordinator coordinator = new();
+        coordinator.QueuePendingScrollSelection(4);
+
+        Assert.Equal(4, coordinator.ConsumePendingScrollSelection());
+        Assert.Null(coordinator.ConsumePendingScrollSelection());
     }
 }

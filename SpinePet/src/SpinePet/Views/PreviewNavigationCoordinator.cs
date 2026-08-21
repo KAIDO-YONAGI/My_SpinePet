@@ -37,10 +37,24 @@ internal static class PreviewNavigationRules
         }
 
         if (wheelDelta < 0 &&
+            atTop &&
+            selectedIndex < itemCount - 1)
+        {
+            return selectedIndex + 1;
+        }
+
+        if (wheelDelta < 0 &&
             atBottom &&
             selectedIndex < itemCount - 1)
         {
             return selectedIndex + 1;
+        }
+
+        if (wheelDelta > 0 &&
+            atBottom &&
+            selectedIndex > 0)
+        {
+            return selectedIndex - 1;
         }
 
         return null;
@@ -202,6 +216,7 @@ internal static class PreviewNavigationRules
 internal sealed class PreviewNavigationCoordinator
 {
     private string? _revealTargetId;
+    private int? _pendingScrollSelectionIndex;
 
     public bool IsApplyingScrollSelection { get; private set; }
 
@@ -212,6 +227,7 @@ internal sealed class PreviewNavigationCoordinator
 
     public void BeginReveal(string characterId)
     {
+        _pendingScrollSelectionIndex = null;
         if (!string.IsNullOrWhiteSpace(characterId))
         {
             _revealTargetId = characterId;
@@ -241,6 +257,24 @@ internal sealed class PreviewNavigationCoordinator
     public void ClearReveal()
     {
         _revealTargetId = null;
+        _pendingScrollSelectionIndex = null;
+    }
+
+    public void QueuePendingScrollSelection(int index)
+    {
+        _pendingScrollSelectionIndex = index;
+    }
+
+    public int? ConsumePendingScrollSelection()
+    {
+        int? pendingIndex = _pendingScrollSelectionIndex;
+        _pendingScrollSelectionIndex = null;
+        return pendingIndex;
+    }
+
+    public void ClearPendingScrollSelection()
+    {
+        _pendingScrollSelectionIndex = null;
     }
 
     public void ApplyScrollSelection(Action selection)

@@ -12,6 +12,7 @@ namespace SpinePet.Views;
 internal sealed class CharacterPreviewNavigationController
 {
     private const int PreviewColumnCount = 2;
+    private const double ScrollBoundaryTolerance = 1.0;
 
     private readonly ListBox _cards;
     private readonly ICollectionView _view;
@@ -50,6 +51,7 @@ internal sealed class CharacterPreviewNavigationController
 
     public void SelectAndReveal(CharacterViewModel character)
     {
+        _session.ClearPendingScrollSelection();
         _cards.SelectedItem = character;
         Reveal(character);
     }
@@ -106,6 +108,21 @@ internal sealed class CharacterPreviewNavigationController
 
         try
         {
+            int? pendingIndex = _session.ConsumePendingScrollSelection();
+            if (pendingIndex is int pending &&
+                pending >= 0 &&
+                pending < _cards.Items.Count &&
+                _cards.Items[pending] is CharacterViewModel pendingTarget)
+            {
+                if (!ReferenceEquals(pendingTarget, _cards.SelectedItem))
+                {
+                    _session.ApplyScrollSelection(
+                        () => _cards.SelectedItem = pendingTarget);
+                }
+
+                return;
+            }
+
             double maximumOffset = Math.Max(
                 0,
                 scrollViewer.ExtentHeight - scrollViewer.ViewportHeight);
@@ -171,9 +188,24 @@ internal sealed class CharacterPreviewNavigationController
             return false;
         }
 
+        bool atTop =
+            scrollViewer.VerticalOffset <= ScrollBoundaryTolerance;
+        bool atBottom =
+            maximumOffset <= ScrollBoundaryTolerance ||
+            scrollViewer.VerticalOffset >=
+                maximumOffset - ScrollBoundaryTolerance;
+        bool consumeWheel =
+            maximumOffset <= ScrollBoundaryTolerance ||
+            (wheelDelta > 0 && atTop) ||
+            (wheelDelta < 0 && atBottom);
+        if (!consumeWheel)
+        {
+            _session.QueuePendingScrollSelection(index);
+        }
+
         _session.ApplyScrollSelection(
             () => _cards.SelectedItem = target);
-        return true;
+        return consumeWheel;
     }
 
     private void ScheduleRevealCompletion(CharacterViewModel character)
