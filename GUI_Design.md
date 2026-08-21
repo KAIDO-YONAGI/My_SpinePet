@@ -1,0 +1,76 @@
+# SpinePet GUI 设计说明
+
+本文档以当前代码为准，只记录已经实现的 GUI 功能。主界面由 WPF 配置面板和独立的原生 Spine 桌面渲染层组成。
+
+## 1. 界面结构
+
+| 区域 | 已实现设计 | 主要实现 |
+|---|---|---|
+| 配置窗口 | 无边框、置顶、可缩放的深色窗口；默认宽 1020，启动时贴齐工作区右上方，高度约为工作区的 60% | `MainWindow.xaml`、`MainWindowLifecycleController.cs` |
+| 左侧角色库 | 两列角色卡片，包含自适应缩略图、角色名、显示状态、Show/Hide 和 Position 操作；卡片不显示 Skin 文本 | `MainWindow.xaml`、`CharacterViewModel.cs` |
+| 右侧详情栏 | 固定 300 宽，显示当前角色名与 Skin，并提供动画、全局设置、缩放、速度和删除 Skin 等控件 | `MainWindow.xaml`、`CharacterSettingsController.cs` |
+| 窗口操作 | 拖动空白区域可移动窗口，边缘可调整大小；Finish Configuration、Alt+F4 或关闭动作会保存状态并隐藏面板 | `MainWindow.xaml.cs`、`MainWindowLifecycleController.cs` |
+
+## 2. 左侧角色库
+
+| 功能 | 具体实现 | 状态 |
+|---|---|---|
+| 角色卡片 | 按角色名排序并以两列展示；缩略图在 64×64 边界内保持比例，高图或宽图不会撑高卡片 | 已实现 |
+| 预览尺寸 | 50%–150% 滑条整体缩放卡片列表，并反向补偿滚动条宽度；数值保存到全局配置 | 已实现 |
+| 显示状态 | Hidden、Visible、Loading 三种状态；角色已显示时 Show/Hide 按钮使用白色强调，加载期间禁止重复操作 | 已实现 |
+| Show/Hide | 显示或隐藏角色，并把该角色设为右侧详情对象；不会为了按钮操作强制滚动左侧列表 | 已实现 |
+| Position | 将角色恢复到默认位置，同时切换右侧详情对象；不会强制滚动左侧列表 | 已实现 |
+| 卡片选择 | 点击卡片后更新右侧详情；普通选择会确保条目可见 | 已实现 |
+| 滚动跟随 | 用户滚动时，按两列阅读顺序和视口中心更新右侧详情；到达顶部或底部后继续滚轮可逐项切换边界条目 | 已实现 |
+| 搜索 | 按角色名、当前 Skin、可用 Skin 编号及资源名进行不区分大小写的多词过滤 | 已实现 |
+| 搜索快捷键 | Ctrl+F 聚焦搜索；Down/Enter 进入结果；Esc 清空；Clear 按钮仅在有输入时出现 | 已实现 |
+| 键盘操作 | 方向键选择卡片；Enter/Space 切换显示；Shift+F10 打开 Skin 菜单 | 已实现 |
+| Skin 切换 | 右键卡片或 Shift+F10 打开可用 Skin 菜单，当前 Skin 带选中状态；切换后复用角色配置并重载资源 | 已实现 |
+
+## 3. 右侧详情与设置
+
+| 功能 | 具体实现 | 状态 |
+|---|---|---|
+| 当前角色 | 显示所选角色名和当前 Skin；未选择时显示空状态 | 已实现 |
+| 动画 | 下拉框列出骨骼动画；选择后立即循环播放并保存为该角色的配置动画 | 已实现 |
+| Desktop frame rate | 提供 30、60、120 FPS 三档，标注为 `Global Setting`，立即应用并持久化 | 已实现 |
+| Allow dragging | iOS 风格开关，标注为 `Global Setting`；控制渲染模式是否允许拖动全部角色 | 已实现 |
+| Scale 基础比例 | 0%–100% 表示基础缩放范围 0–0.2，显示整数百分比 | 已实现 |
+| Scale 倍率 | 1.0–5.0 倍纯乘数，独立乘在当前基础比例上，不反向刷新基础比例 | 已实现 |
+| Scale 计算 | 最终值为 `基础比例 ÷ 100 × 0.2 × 倍率`，并受角色实际最大缩放限制；两个分量分别持久化 | 已实现 |
+| Scale Reset | 恢复默认缩放 0.2，对应 100% 与 1.0 倍 | 已实现 |
+| Animation Speed | 0.10–2.00 倍实时调速；Reset 恢复 1.00 倍 | 已实现 |
+| Delete Current Skin | 二次确认后把当前 Skin 整个目录移入 Windows 回收站；有其他 Skin 时切换到替代 Skin，最后一个 Skin 删除后移除角色 | 已实现 |
+
+## 4. 桌面角色交互
+
+| 功能 | 具体实现 | 状态 |
+|---|---|---|
+| 左键点击 | 命中角色且未形成拖动时，按 `action`、`click`、`touch` 等优先名称播放点击动画，之后回到待机动画 | 已实现 |
+| 左键拖动 | 全局拖动开关开启后，超过系统拖动阈值即移动角色；释放时提交并保存新位置，动画播放保持连续 | 已实现 |
+| 右键角色 | 面板关闭时打开面板、必要时清除搜索，并选中且居中显示对应左侧条目；面板已打开时保存并关闭面板 | 已实现 |
+| 配置模式 | 面板开启期间渲染层进入配置模式；完成配置后隐藏面板并恢复桌面交互模式 | 已实现 |
+
+## 5. 资源与应用入口
+
+| 功能 | 具体实现 | 状态 |
+|---|---|---|
+| Add | 文件选择器接受 `.skel` 或符合命名规则的 UnityFS bundle；导入 standing 资源后尝试自动补齐角色图标 | 已实现 |
+| Scan | 扫描 `res`，同步新增、删除和 Skin 变化；可见角色资源改变时尝试即时重载 | 已实现 |
+| Folder | 创建并打开当前生效的 `res` 资源目录 | 已实现 |
+| 托盘菜单 | 双击托盘图标打开面板；菜单提供 Open Panel、Show All、Hide All、Exit | 已实现 |
+| 重复启动 | 同一 EXE 目录只保留一个实例并激活已有面板；不同 EXE 目录使用不同互斥锁，可同时运行 | 已实现 |
+| 紧急退出 | 全局快捷键 Ctrl+Alt+Shift+F12 请求退出；界面线程失去响应时会强制结束进程 | 已实现 |
+| 状态持久化 | 保存角色显隐、位置、缩放分量、动画、速度，以及帧率、拖动和预览尺寸等全局设置 | 已实现 |
+
+## 6. 实现分层
+
+- `Views/MainWindow.xaml`：布局、控件、绑定、视觉状态和无障碍文本。
+- `Views/MainWindow.xaml.cs`：视图装配、事件路由、属性绑定和窗口命中测试。
+- `Views/CharacterLibraryController.cs`：搜索、导入、扫描、显隐、Skin 切换和列表同步。
+- `Views/CharacterSettingsController.cs`：动画、缩放、速度、位置和 Skin 删除。
+- `Views/CharacterPreviewNavigationController.cs`：选择、定位、滚动跟随与边界滚轮规则。
+- `Views/CharacterPanelActivationController.cs`：桌面角色右键打开/关闭面板的流程。
+- `Services/CharacterManager.cs`：配置状态与渲染层之间的协调和持久化。
+- `Rendering/Native/NativeCharacterRenderHost.cs`：Spine 渲染、点击动画、拖动与位置提交。
+- `App.xaml.cs`、`TrayIconService.cs`：启动、托盘、单实例激活和退出。

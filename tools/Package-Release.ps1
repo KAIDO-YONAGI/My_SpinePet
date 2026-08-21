@@ -1,7 +1,7 @@
 # 打包 SpinePet 便携版（时间戳目录 + app\ 子文件夹布局）：
 #   release\<构建名>\app\      程序本体（publish 自包含多文件，仅 zh-Hans 语言资源）
 #   release\<构建名>\res\      默认角色资源
-#   release\<构建名>\config.json / Launch.bat / README.txt
+#   release\<构建名>\config.json / Launch.bat / UserTips.txt
 #   → dist\<构建名>.zip
 # 用法: pwsh -NoProfile -File Package-Release.ps1 [-Character '角色名'] [-ReleaseName '构建名']
 [CmdletBinding()]
@@ -21,6 +21,7 @@ $AppDir = Join-Path $WorkRelease 'app'
 $Dist = Join-Path $Root 'dist'
 $Project = Join-Path $Root 'SpinePet\src\SpinePet\SpinePet.csproj'
 $ResourceRoot = Join-Path $Root 'SpinePet\res'
+$UserTipsSource = Join-Path $Root 'UserTips.txt'
 $stage = $null
 $tempZipPath = $null
 
@@ -31,11 +32,21 @@ if ([string]::IsNullOrWhiteSpace($ReleaseName) -or
 if (Test-Path $Release) {
     throw "构建目录已存在：$Release"
 }
+if (-not (Test-Path -LiteralPath $UserTipsSource -PathType Leaf)) {
+    throw "使用说明不存在：$UserTipsSource"
+}
 
 New-Item -ItemType Directory -Path $ReleaseRoot -Force | Out-Null
 
 # 1) 清理旧版平铺产物和 publish 中间产物；历史时间戳构建保留
-$legacyReleaseEntries = @('app', 'res', 'config.json', 'Launch.bat', '使用说明.txt')
+$legacyReleaseEntries = @(
+    'app',
+    'res',
+    'config.json',
+    'Launch.bat',
+    'UserTips.txt',
+    '使用说明.txt'
+)
 foreach ($entry in $legacyReleaseEntries) {
     $legacyPath = Join-Path $ReleaseRoot $entry
     if (Test-Path $legacyPath) {
@@ -92,37 +103,19 @@ try {
     $launcher = "@echo off`r`nif not defined WINDIR if defined SystemRoot set `"WINDIR=%SystemRoot%`"`r`nstart `"`" `"%~dp0app\SpinePet.exe`" >nul 2>&1`r`n"
     [IO.File]::WriteAllText((Join-Path $WorkRelease 'Launch.bat'), $launcher)
 
-    # 7) README.txt（文件名用英文，内容中文）
-    $readme = @"
-SpinePet 桌宠（NIKKE Spine 桌面宠物）使用说明
-================================================
+    # 7) 使用根目录 UserTips.txt 作为唯一说明来源，并附加本次打包信息
+    $userTips = [IO.File]::ReadAllText($UserTipsSource).TrimEnd()
+    $packageInfo = @"
 
-【启动】
-双击「Launch.bat」，或直接双击 app\SpinePet.exe。
-开箱默认显示一只桌宠（$Character），在屏幕底部边缘找她。
-右下角托盘图标：左键打开设置面板 / 显示全部 / 隐藏全部 / 退出。
-界面卡死时的紧急退出热键：Ctrl+Alt+Shift+F12。
 
-【目录结构】
-Launch.bat        启动入口，效果同直接运行 app\SpinePet.exe
-config.json       便携配置：角色、位置、缩放、动画速度都记录在这里，随文件夹走
-res\              角色资源库（默认已带 $Character）
-app\              程序本体：exe、运行时组件、内部工具，请勿改动或改名
-Logs\             运行日志（首次运行后生成，排查问题用）
-
-【添加新角色】
-把角色资源放进 res\，按以下结构（皮肤号没有就建一个 00）：
-    res\<角色名>\<皮肤号>\standing\<资源名>.skel / .atlas / .png
-    res\<角色名>\<皮肤号>\icons\<资源名>_icon.png    （角色头像，可选）
-重启程序后在设置面板的角色库里即可看到并显示。
-也可以直接在设置面板里导入 NIKKE 资源 zip，程序会自动入库。
-
-【卸载】
-直接删除整个文件夹即可；便携模式下不在注册表或 AppData 留下任何东西。
-
-SpinePet · 构建时间 $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')
+【本发布包】
+- 默认角色：$Character
+- 构建时间：$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')
 "@
-    Set-Content -Path (Join-Path $WorkRelease '使用说明.txt') -Value $readme -Encoding utf8BOM
+    Set-Content `
+        -LiteralPath (Join-Path $WorkRelease 'UserTips.txt') `
+        -Value ($userTips + $packageInfo) `
+        -Encoding utf8BOM
 
     # 8) 打 zip（顶层带时间戳目录，防止解压时文件散落）
     New-Item -ItemType Directory -Path $Dist -Force | Out-Null

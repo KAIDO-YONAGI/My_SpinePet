@@ -635,17 +635,6 @@
                                     </StackPanel>
                                 </Grid>
 
-                                <TextBlock Text="ANIMATION"
-                                           Margin="1,0,0,6"
-                                           Style="{StaticResource EyebrowTextStyle}" />
-                                <ComboBox x:Name="AnimationCombo"
-                                          ItemsSource="{Binding SelectedAnimationNames}"
-                                          SelectedItem="{Binding SelectedAnimation, Mode=TwoWay}"
-                                          IsEnabled="{Binding HasSelectedCharacter}"
-                                          Height="32"
-                                          AutomationProperties.Name="Character animation"
-                                          Margin="0,0,0,6" />
-
                                 <Border Style="{StaticResource ControlGroupStyle}"
                                         Margin="0,0,0,6">
                                     <Grid>
@@ -699,6 +688,17 @@
                                                   AutomationProperties.Name="Allow dragging in render mode" />
                                     </Grid>
                                 </Border>
+
+                                <TextBlock Text="ANIMATION"
+                                           Margin="1,0,0,6"
+                                           Style="{StaticResource EyebrowTextStyle}" />
+                                <ComboBox x:Name="AnimationCombo"
+                                          ItemsSource="{Binding SelectedAnimationNames}"
+                                          SelectedItem="{Binding SelectedAnimation, Mode=TwoWay}"
+                                          IsEnabled="{Binding HasSelectedCharacter}"
+                                          Height="32"
+                                          AutomationProperties.Name="Character animation"
+                                          Margin="0,0,0,6" />
 
                                 <Border Style="{StaticResource ControlGroupStyle}"
                                         Margin="0,0,0,6">

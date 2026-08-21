@@ -638,11 +638,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
 
         if (button.Tag is CharacterViewModel character)
         {
-            if (!character.IsVisible)
-            {
-                _previewNavigation.SelectWithoutReveal(character);
-            }
-
+            _previewNavigation.SelectWithoutReveal(character);
             _ = _libraryController.ToggleCharacterAsync(character);
         }
     }
