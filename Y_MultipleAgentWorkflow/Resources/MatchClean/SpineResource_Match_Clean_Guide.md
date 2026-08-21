@@ -1,8 +1,12 @@
 # Spine 资源匹配与清理规范
 
+> 文档 ID：`RES-MATCH-CLEAN-GUIDE`  
+> 状态：`Active`  
+> 最后核验：`2026-08-21`
+
 本文是**清理规范**：在导入 SpinePet 之前或之后，移除资源中的非角色
 元素（背景、海面、特效、UI）并排查点击/动画问题。与
-`SpinePet-通用资源导入指南.md` 配套使用——导入规范管"进 res"，
+`..\Load\SpinePet_Resources_Load_Guide.md` 配套使用——导入规范管"进 res"，
 本文管"清什么、怎么清、清到什么程度"。
 
 **所有相对路径以 `D:\SpineTools` 为根。**

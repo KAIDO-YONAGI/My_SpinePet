@@ -1,12 +1,17 @@
 # SpinePet 资源导入规范
 
+> 文档 ID：`RES-LOAD-GUIDE`  
+> 状态：`Active`  
+> 最后核验：`2026-08-21`
+
 本文是流程化规范：资源从拿到手到出现在 SpinePet 里，按
 **入库 → 判定 → 导入 → 验证** 四个阶段推进，每个阶段写明执行顺序和
 硬性要求。
 
 **本文所有相对路径均以 `D:\SpineTools` 为根**，例如
 `resources\Characters\` 指 `D:\SpineTools\resources\Characters\`。
-背景清理等进阶操作见 `Spine资源匹配与清理通用指南.md`。
+背景清理等进阶操作见
+`..\MatchClean\SpineResource_Match_Clean_Guide.md`。
 
 ## 0. 流程总览
 
@@ -43,6 +48,17 @@ zip 压缩包 ──┐
 | `SpinePet\tools\atlas-cleaner\` | Atlas 清理与贴图遮罩 |
 | `SpinePet\tools\resource-layout\` | 旧布局迁移脚本 |
 | `SpinePet\tools\icons-downloader\` | 图标下载脚本（应用运行时调用） |
+
+### 1.1 nikkedb 文档入口
+
+`resources\nikkedb\README.md` 是证据库结构总入口。常用查询依次为：
+
+- `NIKKE服装ID对照表.md`：现行服装名与上游 ID 对照。
+- `NIKKE资源日期索引.md`：日期索引说明及 JSON/CSV 索引路径。
+- `NIKKE资源核验报告.md`：冻结的历史核验过程，不再追加。
+
+需要子目录证据时沿这些文档列出的 `data\indexes`、`data\evidence` 和
+`data\archive` 路径定位，不在工作流文档中复制证据库目录清单。
 | `tools\`（仓库根） | nikkedb 维护工具（contact sheet 生成、资源提取、骨骼转换） |
 
 `SpinePet\res\` 是应用唯一资源根；不要让应用扫描 `resources\`。
@@ -282,7 +298,7 @@ SpinePet\res\<资源全名>\<皮肤ID>\
 ### 6.1 背景清理（按需，默认不做）
 
 只在使用方明确要求时清理，完整方法见
-`Spine资源匹配与清理通用指南.md`。要点：
+`..\MatchClean\SpineResource_Match_Clean_Guide.md`。要点：
 
 - 在 `resources\` 的暂存副本上做，不在 `Characters` 源或 `res` 上
   直接试验；
@@ -305,4 +321,5 @@ SpinePet\res\<资源全名>\<皮肤ID>\
 
 ### 6.4 aim / cover
 
-不可导入、不可渲染；限制说明见 `SpinePet\AIM_COVER_SUPPORT_NOTES.md`。
+不可导入、不可渲染；限制说明见
+`..\StateSupport\Aim_Cover_Proposal.md`。

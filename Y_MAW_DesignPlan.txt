@@ -1,13 +1,28 @@
-多 Agent 工作流与并发租约体系
+多 Agent 工作流与并发租约体系：最终设计基线
 
-## 总体设计
+状态：Reference
+基线日期：2026-08-21
 
-建立受 Git 管理的 `Y_MultipleAgentWorkflow/`，作为 Codex、Claude、ZCode 共用的唯一权威文档入口，并加入 `WorkingAgent/` 临时租约注册表。
+本文件记录设计目标、最终实现和验证结果，不是运行时操作入口。发生冲突时，
+以 `Y_MultipleAgentWorkflow\Router.md` 及其指向的 Guide/Design 为准。
+
+## 1. 目标
+
+建立受 Git 管理的 `Y_MultipleAgentWorkflow\`，作为 Codex、Claude、ZCode
+共用的项目文档入口。Agent 根据任务只读取相关业务知识，并通过 WorkingAgent
+租约在共享工作树中协调并发。
+
+跨项目通用配置方法见：
+
+`Y_MultipleAgentWorkflow\Workflow_Configuration_Guide.md`
+
+## 2. 最终结构
 
 ```text
 Y_MultipleAgentWorkflow/
 ├─ Router.md
 ├─ DeveloperLog.md
+├─ Workflow_Configuration_Guide.md
 ├─ WorkingAgent/
 │  └─ README.md
 ├─ Workflow/
@@ -15,6 +30,7 @@ Y_MultipleAgentWorkflow/
 │  ├─ DeveloperLog.md
 │  ├─ Workflow_Guide.md
 │  ├─ Concurrency_Guide.md
+│  ├─ Project_Validation_Guide.md
 │  ├─ Templates/
 │  │  ├─ BusinessRouter.template.md
 │  │  └─ DeveloperLog.template.md
@@ -42,42 +58,44 @@ Y_MultipleAgentWorkflow/
       └─ Aim_Cover_Proposal.md
 ```
 
-ZCode 与 Codex 共用根 `AGENTS.md`；Claude 使用根 `CLAUDE.md`。两者只负责要求读取根 Router，不复制项目操作规则。删除 `SpinePet/AGENTS.md` 与 `SpinePet/CLAUDE.md`。
+根 `AGENTS.md` 和 `CLAUDE.md` 只导航到根 Router。嵌套入口、旧指南和零散
+计划已迁移或删除，不保留双重权威。`.zcode\skills` 只负责触发和导航。
+项目构建、发布和运行验证不是通用默认规则；初始化时必须由用户选择是否
+创建独立的 `Workflow\Project_Validation_Guide.md`，Router 只负责索引。
 
-## WorkingAgent 协议
+## 3. 已验证的分类结论
 
-Agent 可以先进行轻量只读探索以确定任务类型，但在详细工作、创建子 Agent或首次修改前必须取得租约。
+一级根按稳定知识域划分：
 
-标记文件使用用户约定的格式：
+- `Workflow`：工作流自身。
+- `GUI`：界面和交互。
+- `Resources`：资源生命周期。
+
+二级按任务阶段或处理目标划分：
+
+- `Resources.Load`：识别、入库、ID、图标和部署。
+- `Resources.MatchClean`：附件匹配、清理和动画排查。
+- `Resources.StateSupport`：aim/cover 等状态能力；未实施内容保持 Proposal。
+
+分类不按模型、Agent、语言或文件类型。只有具备独立触发词、权威文档、并发
+资源或维护周期时才增殖业务根。索引最多五层。
+
+## 4. WorkingAgent 最终协议
+
+Agent 可先轻量只读探索，但在详细分析、创建子 Agent、首次修改或启动会改变
+状态的工具前必须取得租约。
+
+租约文件名：
 
 ```text
 <AgentName>_<Hash>.txt
 ```
 
-Hash 取 Agent 名、模型、会话 ID、UTC 启动时间和随机 nonce 的 SHA-256 前 12 位。文件内容采用 JSON：
+Hash 使用 Agent 名、模型、会话 ID、UTC 启动时间和随机 nonce 的 SHA-256
+前 12 位。JSON schemaVersion 为 1，保存租约 ID、所有者、任务类别、访问
+模式、资源范围、状态、UTC 时间、冲突和覆盖批准记录。
 
-```json
-{
-  "schemaVersion": 1,
-  "leaseId": "唯一租约ID",
-  "agentName": "Codex",
-  "model": "模型名称",
-  "sessionId": "会话或线程标识",
-  "parentLeaseId": null,
-  "taskType": "GUI",
-  "categories": ["GUI"],
-  "summary": "任务简述",
-  "accessMode": "read|write|exclusive",
-  "resources": ["path:...", "runtime:...", "pipeline:..."],
-  "status": "active|waiting|override",
-  "startedAtUtc": "...",
-  "heartbeatAtUtc": "...",
-  "conflictingLeaseIds": [],
-  "overrideApprovedAtUtc": null
-}
-```
-
-`WorkingAgent.ps1` 提供统一接口：
+接口：
 
 ```powershell
 -Action Acquire
@@ -88,98 +106,103 @@ Hash 取 Agent 名、模型、会话 ID、UTC 启动时间和随机 nonce 的 SH
 -Action Status
 ```
 
-所有扫描、登记、更新和删除操作都通过固定注册表锁以独占文件句柄执行，避免两个 Agent 同时扫描到空目录后一起登记成功。Agent 只能更新或删除与自己 `leaseId` 匹配的文件。
+扫描、写入和删除均在固定注册表锁的独占文件句柄下完成。普通更新和释放必须
+同时匹配 `leaseId` 与 `sessionId`。
 
-只读子 Agent若不能自行登记，由父 Agent代为创建带 `parentLeaseId` 的租约。
+## 5. 实施后纠正
 
-## 冲突规则
+以下内容以真实测试修正了实施前假设：
 
-冲突同时参考业务类别、访问模式和资源声明，不只比较任务名称。
+1. `Wait` 在同一次注册表锁内重新检测并原子转为 `active`。
+2. 等待循环每次按租约 ID 重新读取注册表，已释放的 waiting 记录不会被旧
+   内存对象复活。
+3. `startedAtUtc`、`heartbeatAtUtc` 和覆盖时间写盘、更新和输出均规范化为
+   UTC ISO 8601。
+4. 超过 15 分钟仅标记 `suspectedStale`，禁止自动删除或接管。
+5. 路径父子关系视为相交；没有足够资源范围的同业务写任务默认冲突。
+6. `UpdateScope` 在提交新范围前检测冲突；失败时保留旧范围。
+7. Router/Log 使用短时 `workflow:<业务根>`，根结构使用 `workflow:root`。
+8. `pipeline:BuildPublishRun` 与所有活动写/独占租约形成全局屏障。
+9. 普通 `OverrideConflict` 不包含构建屏障，必须另行
+   `ConfirmBuildBarrierOverride`。
+10. PowerShell 数组应直接传入脚本或使用 `ProcessStartInfo.ArgumentList`，
+    避免外层命令字符串把引号写进资源名。
 
-- `read + read` 可并行。
-- 路径相交时，任何包含 `write` 的组合均冲突；父目录与子目录视为相交。
-- `exclusive` 与相同资源上的所有任务冲突。
-- 写任务没有提供足够的资源范围时，同一业务根内默认冲突。
-- Agent 工作中扩大修改范围时，必须先调用 `UpdateScope` 重新检测，不能先改后补登记。
-- Router 与 DeveloperLog 的更新使用短时 `workflow:<业务根>` 独占资源，不把同类任务全程判为冲突。
-- 根路由结构调整使用 `workflow:root` 独占资源。
+## 6. 心跳、等待和覆盖
 
-预定义共享资源至少包括：
+- 活动或等待 Agent 每 5 分钟、长操作前后和扩大范围时更新心跳。
+- 非冲突的疑似失活记录只提示。
+- 冲突时向用户报告所有者、任务、资源和最后心跳。
+- 用户可以等待、在明确范围内覆盖、确认旧 Agent 已停止后清理，或停止当前
+  任务。
+- 等待默认每 60 秒检查，30 分钟未解除则返回超时并保留 waiting 标记。
+- 任务完成、失败和取消都应在 finally 路径释放；崩溃遗留由后续任务识别。
 
-```text
-runtime:SpinePet
-pipeline:BuildPublishRun
-config:SpinePetUser
-git:index
-workflow:root
-workflow:GUI
-workflow:Resources.Load
-workflow:Resources.MatchClean
-workflow:Resources.StateSupport
+## 7. 路由与维护
+
+权威顺序：
+
+用户最新要求 -> 实际代码/资源/实验 -> Guide/Design -> 业务 Router ->
+DeveloperLog/Proposal -> 模型入口与 Skill。
+
+没有同类业务时在最近大类下从模板初始化；新增顶级大类或工作区规则必须先
+询问用户。每个实际影响业务且成功完成的任务计数 `+1`，第五次完成后复查
+周期证据和实际代码；无需修改时记录 `reviewed-no-change` 后归零。
+
+外部 nikkedb 文档保持原位，由根 Router 索引，不复制进工作流。
+
+## 8. 迁移结果
+
+- GUI 稳定结论迁入 `GUI\GUI_Design.md`，过程进入 GUI DeveloperLog。
+- 资源导入指南迁入
+  `Resources\Load\SpinePet_Resources_Load_Guide.md`。
+- 资源匹配清理指南迁入
+  `Resources\MatchClean\SpineResource_Match_Clean_Guide.md`。
+- Aim/Cover 内容迁入 `Resources\StateSupport\Aim_Cover_Proposal.md`。
+- `.gitignore` 跟踪入口、工作流、脚本和项目 Skill，只忽略临时租约、锁和
+  可重建产物。
+
+## 9. 验证结果
+
+`Test-WorkingAgent.ps1` 真实子进程回归结果为 `12/12`，覆盖：
+
+- 只读并行和不相交写并行。
+- 同路径、父子路径、共享资源与隐式范围冲突。
+- 两进程同时 Acquire 仅一个成功。
+- 心跳、15 分钟疑似失活、禁止自动删除和确认清理。
+- 等待后原子取得租约。
+- 用户覆盖及冲突记录。
+- 扩大范围发现新冲突且保留旧范围。
+- Router/Log 短临界区。
+- Build/Publish/Run 独立确认屏障。
+- 租约所有权。
+- 异常退出标记可发现。
+
+路由演练覆盖 GUI、资源导入、清理、Aim/Cover、跨业务、未知业务、第五次
+维护和超过五层，全部符合规则。迁移后旧操作路径和旧文件名引用仅允许作为
+索引中的旧路径元数据。
+
+首次完整收尾验证：Build 0 警告 0 错误，Publish 成功生成 release 与 zip，
+Run 后 `SpinePet.exe` 持续运行。
+
+## 10. 已知环境事项
+
+执行首次 Run 的 Codex 子进程环境中 `WINDIR` 为空，WPF FontCache 因此抛出
+URI 格式异常。仅对 Run 子进程设置：
+
+```powershell
+$env:WINDIR = $env:SystemRoot
 ```
 
-共享工作树允许路径不重叠的写任务并行，但 Build、Publish、Run 是全局独占屏障。执行前必须确认没有其他活动写租约；若仍存在，必须等待或再次向用户确认是否接受把其他 Agent 的未完成修改一起构建和运行。
+后验证成功。该问题属于调用进程环境，不是 SpinePet 代码、工作流协议或需要
+永久修改的系统配置。
 
-## 心跳、等待与强制继续
+## 11. 跨项目 Skill
 
-- 活动或等待中的 Agent 每 5 分钟、每次长操作前后以及扩大任务范围时刷新心跳。
-- 15 分钟没有心跳仅标记为“疑似失活”，不得自动删除或接管。
-- 非冲突的疑似失活记录不阻塞任务，但应在状态输出中提示。
-- 活动或疑似失活租约与当前任务冲突时，向用户报告 Agent、任务、资源、最后心跳和并发后果。
+通用 Skill 名称为 `multiple-agent-workflow-config`。唯一实体位于：
 
-用户可以选择：
+`C:\Users\12248\.agents\skills\multiple-agent-workflow-config`
 
-1. **等待**：当前 Agent 写入 `waiting` 状态，每 60 秒重新检查；冲突解除后原子获取活动租约。等待 30 分钟仍未解除时报告用户并保持等待状态。
-2. **继续**：记录冲突租约和用户确认时间，以 `override` 状态开始；只放行本次声明的冲突范围。
-3. **确认旧 Agent 已停止**：清理指定疑似失活租约后重新原子获取。
-4. **停止当前任务**：释放当前等待租约，不进行修改。
-
-普通并发覆盖许可不自动包含 Build/Publish/Run；构建屏障仍有冲突时必须单独确认。
-
-任务完成、失败或取消后都应在 `finally` 路径释放租约。若 Agent 崩溃导致无法释放，由心跳机制在后续任务中识别。
-
-## 路由、增殖与文档维护
-
-- 根 Router 规定权威顺序：用户最新要求 → 实际代码/资源 → Guide/Design → 业务 Router → Log/Proposal → 模型入口与 Skill。
-- 文档索引记录文档 ID、路径、职责摘要、触发任务、状态、更新时间、核验时间和旧路径。
-- 没有同类业务时，在最近大类下使用模板创建业务根；新增顶级大类或改变工作区规则必须先询问用户。
-- `Y_MultipleAgentWorkflow` 以下最多五层；即将出现第六层时必须合并、提升或精简分类。
-- 未实施设计统一标记为 `Proposal`，不能作为现行能力使用。
-
-每个业务 Router 保存维护计数 `0/5`，DeveloperLog 保存任务证据：
-
-- 完成且实际影响该业务的任务增加一次。
-- 跨业务任务对每个受影响业务分别增加一次。
-- 失败、取消、并发登记和纯文档维护不计数。
-- 第五次完成后复查该周期任务与代码，更新权威文档和路径索引；无需修改时记录 `reviewed-no-change`，然后重置计数。
-
-## 资料迁移与版本管理
-
-- 修正并迁移三份权威文档到新结构。
-- GUI 重构稳定结论并入 `GUI_Design.md`，历史过程进入 GUI 日志。
-- Aim/Cover 内容迁入 `Aim_Cover_Proposal.md`。
-- `.zcode/skills` 保留触发描述，但具体硬规则迁入 Router 和指南，Skill 只负责导航。
-- 更新 `.gitignore`，跟踪根入口、工作流文档、脚本和 `.zcode/skills`。
-- 忽略 `WorkingAgent/*.txt`、注册表锁和临时文件，只跟踪 `WorkingAgent/README.md`。
-- 迁移完成后删除旧指南、零散计划和嵌套入口，不保留双重权威或跳转存根。
-
-## 验证
-
-运行 `Test-WorkingAgent.ps1`，覆盖：
-
-- 两个只读任务并行。
-- 不相交写任务并行。
-- 同路径、父子路径和隐式共享资源冲突。
-- 两个进程同时 Acquire 时只有一个成功。
-- 心跳正常、15 分钟疑似失活和禁止自动删除。
-- 等待后自动取得租约。
-- 用户覆盖继续及冲突记录。
-- 工作中扩大范围后发现新冲突。
-- Router/Log 短时临界区。
-- Build/Publish/Run 全局屏障。
-- Agent 不能释放其他租约。
-- 异常退出留下的标记可被后续识别。
-
-再演练 GUI、资源导入、清理、Aim/Cover、跨业务、未知业务、第五次维护和超过五层等路由场景，并全仓确认旧路径和旧文件名引用已经消失。
-
-由于新增 PowerShell 并发控制脚本属于非文档改动，实施完成后必须终止已有 `SpinePet.exe`，依次执行 `Build.bat`、`Publish.bat`、`Run.bat`，最后确认新进程持续运行。
+Claude 与 ZCode 通过目录 Junction 共用该实体。Skill 提供分类分析、用户
+确认、工作流初始化、自包含 WorkingAgent 复制和结构校验。模型入口默认不
+修改，必须先让用户选择“保留并加入导航”或“替换为精简入口”。

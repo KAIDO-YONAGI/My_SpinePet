@@ -1,5 +1,9 @@
 # Aim / Cover 未支持原因与解决方案
 
+> 文档 ID：`STATE-AIM-COVER-PROP`  
+> 状态：`Proposal`（未实施，不可当作当前能力）  
+> 最后核验：`2026-08-21`
+
 ## 当前结论
 
 `Anis PaidSkin` 中的以下两套资源本身是完整的 Spine `4.1.20`

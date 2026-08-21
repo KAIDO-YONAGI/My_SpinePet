@@ -2,12 +2,19 @@
 /resources/
 
 # 本地工具与会话产物
-.zcode/
+.zcode/*
+!.zcode/agents/
+!.zcode/agents/**
+!.zcode/skills/
+!.zcode/skills/**
 .fetch-cache/
 .codegraph
 prompts.txt
-/AGENTS.md
-/CLAUDE.md
+
+# 多 Agent 工作流运行时租约（文档与脚本纳入版本管理）
+/Y_MultipleAgentWorkflow/WorkingAgent/*.txt
+/Y_MultipleAgentWorkflow/WorkingAgent/_registry.lock
+/Y_MultipleAgentWorkflow/WorkingAgent/*.tmp
 
 # 系统杂项
 Thumbs.db
