@@ -27,6 +27,10 @@ public sealed class CharacterConfig
     public double PositionX { get; set; } = 200;
     public double PositionY { get; set; } = 200;
     public double Scale { get; set; } = 0.1;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? ScaleBasePercent { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public double? ScaleMultiplier { get; set; }
 
     // Keep the existing JSON key so installed configurations migrate without data loss.
     [JsonPropertyName("CurrentAnimation")]

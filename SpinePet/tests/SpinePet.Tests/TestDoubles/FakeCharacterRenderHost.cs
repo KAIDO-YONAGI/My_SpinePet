@@ -9,6 +9,7 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
     public List<string> ShownSkeletonPaths { get; } = [];
 
     public Func<CharacterConfig, Task>? ShowCharacterHandler { get; set; }
+    public Action<string, double>? SetCharacterScaleHandler { get; set; }
 
     public int TargetFrameRate { get; private set; } =
         GlobalConfig.DefaultTargetFrameRate;
@@ -38,7 +39,8 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
     public void HideCharacter(string characterId) { }
     public void RemoveCharacter(string characterId) =>
         RemovedCharacterIds.Add(characterId);
-    public void SetCharacterScale(string characterId, double scale) { }
+    public void SetCharacterScale(string characterId, double scale) =>
+        SetCharacterScaleHandler?.Invoke(characterId, scale);
     public void SetCharacterSpeed(string characterId, double speed) { }
     public void PlayCharacterAnimation(
         string characterId,

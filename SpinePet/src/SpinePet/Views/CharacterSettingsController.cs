@@ -115,7 +115,6 @@ internal sealed class CharacterSettingsController
                 currentScale,
                 CharacterSettingsDefaults.MinimumScale,
                 _host.SelectedScaleMax);
-            SetSelectedScaleFromValue(_host.SelectedScale);
             _host.SelectedCharacter.MaxScale = _host.SelectedScaleMax;
             _host.SelectedCharacter.Scale = _host.SelectedScale;
         }
@@ -403,10 +402,22 @@ internal sealed class CharacterSettingsController
                     : CharacterSettingsDefaults.DefaultMaxScale,
                 CharacterSettingsDefaults.MinimumMaximumScale,
                 CharacterSettingsDefaults.DefaultMaxScale);
-            SetSelectedScaleFromValue(
-                _host.SelectedCharacter.Scale > 0
-                    ? _host.SelectedCharacter.Scale
-                    : CharacterSettingsDefaults.DefaultScale);
+            CharacterConfig? selectedConfig = FindSelectedCharacterConfig();
+            if (selectedConfig == null ||
+                !TrySetSelectedScaleFromComponents(selectedConfig))
+            {
+                SetSelectedScaleFromValue(
+                    _host.SelectedCharacter.Scale > 0
+                        ? _host.SelectedCharacter.Scale
+                        : CharacterSettingsDefaults.DefaultScale);
+                if (selectedConfig != null)
+                {
+                    selectedConfig.ScaleBasePercent =
+                        _host.SelectedScaleBasePercent;
+                    selectedConfig.ScaleMultiplier =
+                        _host.SelectedScaleMultiplier;
+                }
+            }
             _host.SelectedAnimation =
                 !string.IsNullOrEmpty(
                     _host.SelectedCharacter.ConfiguredAnimation)
@@ -452,16 +463,38 @@ internal sealed class CharacterSettingsController
             effectiveMaximumScale);
         _host.SelectedScale = scale;
         character.Scale = scale;
+        character.ScaleBasePercent = _host.SelectedScaleBasePercent;
+        character.ScaleMultiplier = _host.SelectedScaleMultiplier;
         _host.SelectedCharacter.Scale = scale;
         _characterManager.RenderHost.SetCharacterScale(
             character.Id,
             scale);
     }
 
+    private bool TrySetSelectedScaleFromComponents(CharacterConfig character)
+    {
+        if (character.ScaleBasePercent is not double basePercent ||
+            character.ScaleMultiplier is not double multiplier ||
+            !double.IsFinite(basePercent) ||
+            !double.IsFinite(multiplier) ||
+            basePercent <
+                CharacterSettingsDefaults.MinimumScaleBasePercent ||
+            basePercent >
+                CharacterSettingsDefaults.MaximumScaleBasePercent ||
+            multiplier <
+                CharacterSettingsDefaults.MinimumScaleMultiplier ||
+            multiplier >
+                CharacterSettingsDefaults.MaximumScaleMultiplier)
+        {
+            return false;
+        }
+
+        SetSelectedScaleComponents(basePercent, multiplier);
+        return true;
+    }
+
     private void SetSelectedScaleFromValue(double scale)
     {
-        bool wasRefreshing = _host.IsRefreshingSelection;
-        _host.IsRefreshingSelection = true;
         double clamped = Math.Clamp(
             scale,
             CharacterSettingsDefaults.MinimumScale,
@@ -486,6 +519,15 @@ internal sealed class CharacterSettingsController
                 CharacterSettingsDefaults.MaximumScaleMultiplier);
         }
 
+        SetSelectedScaleComponents(basePercent, multiplier);
+    }
+
+    private void SetSelectedScaleComponents(
+        double basePercent,
+        double multiplier)
+    {
+        bool wasRefreshing = _host.IsRefreshingSelection;
+        _host.IsRefreshingSelection = true;
         try
         {
             _host.SelectedScaleBasePercent = basePercent;
