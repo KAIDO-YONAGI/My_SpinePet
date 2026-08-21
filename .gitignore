@@ -12,3 +12,4 @@ desktop.ini
 
 # 自包含打包产物（可重新构建），不入库
 /release/
+/dist/

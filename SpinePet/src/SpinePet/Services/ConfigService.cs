@@ -18,11 +18,18 @@ public sealed class ConfigService
     };
 
     private readonly string _configPath;
+    private readonly Rect? _workArea;
     private bool _protectExistingConfig;
 
     public ConfigService(string? configPath = null)
+        : this(configPath, null)
+    {
+    }
+
+    internal ConfigService(string? configPath, Rect? workArea)
     {
         _configPath = configPath ?? AppPaths.ConfigFile;
+        _workArea = workArea;
     }
 
     public AppConfig Load()
@@ -40,7 +47,7 @@ public sealed class ConfigService
                 JsonSerializer.Deserialize<AppConfig>(json, JsonOptions) ??
                 throw new JsonException(
                     "The configuration root cannot be null.");
-            Normalize(config);
+            NormalizeConfiguration(config);
             _protectExistingConfig = false;
             return config;
         }
@@ -63,6 +70,21 @@ public sealed class ConfigService
     }
 
     internal static void Normalize(AppConfig config)
+    {
+        NormalizeCore(config, null);
+    }
+
+    internal static void Normalize(AppConfig config, Rect workArea)
+    {
+        NormalizeCore(config, workArea);
+    }
+
+    private void NormalizeConfiguration(AppConfig config)
+    {
+        NormalizeCore(config, _workArea);
+    }
+
+    private static void NormalizeCore(AppConfig config, Rect? workArea)
     {
         string sourceVersion = config.Version ?? string.Empty;
         bool migrateLegacyPositions = IsLegacyVersion(sourceVersion);
@@ -92,11 +114,12 @@ public sealed class ConfigService
             config.Characters.Any(character =>
                 !double.IsFinite(character.PositionX) ||
                 !double.IsFinite(character.PositionY));
-        Rect workArea = needsWorkArea
-            ? SystemParameters.WorkArea
+        Rect normalizedWorkArea = needsWorkArea
+            ? workArea ?? SystemParameters.WorkArea
             : Rect.Empty;
-        double centerX = workArea.Left + workArea.Width / 2;
-        double feetY = workArea.Bottom - 24;
+        double centerX = normalizedWorkArea.Left +
+            normalizedWorkArea.Width / 2;
+        double feetY = normalizedWorkArea.Bottom - 24;
         HashSet<string> characterIds = new(StringComparer.Ordinal);
 
         foreach (CharacterConfig character in config.Characters)
@@ -174,8 +197,8 @@ public sealed class ConfigService
                  index++)
             {
                 visibleCharacters[index].PositionX =
-                    workArea.Left +
-                    workArea.Width *
+                    normalizedWorkArea.Left +
+                    normalizedWorkArea.Width *
                     (index + 1) /
                     (visibleCharacters.Length + 1);
                 visibleCharacters[index].PositionY = feetY;
@@ -251,7 +274,7 @@ public sealed class ConfigService
         string temporaryPath = $"{_configPath}.tmp";
         try
         {
-            Normalize(config);
+            NormalizeConfiguration(config);
             string? directory = Path.GetDirectoryName(_configPath);
             if (!string.IsNullOrEmpty(directory))
             {

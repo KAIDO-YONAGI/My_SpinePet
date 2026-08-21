@@ -18,6 +18,8 @@ internal sealed class NativeCharacterState : IDisposable
         RectangleF.Empty;
     public IReadOnlyList<NativeSpineDrawBatch> LastBatches { get; set; } =
         Array.Empty<NativeSpineDrawBatch>();
+    public IReadOnlyList<string> CachedAnimationNames { get; set; } =
+        Array.Empty<string>();
     public bool IsVisible { get; set; }
     public bool IsLoading { get; set; }
     public double CurrentScale { get; set; } = 0.2;

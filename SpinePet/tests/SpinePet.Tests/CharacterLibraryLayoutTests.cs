@@ -1,4 +1,5 @@
 using System.Xml.Linq;
+using SpinePet.Models;
 
 namespace SpinePet.Tests;
 
@@ -45,6 +46,20 @@ public sealed class CharacterLibraryLayoutTests
     }
 
     [Fact]
+    public void ConfigurationPanelUsesExpandedDefaultWidth()
+    {
+        XDocument document = LoadMainWindowXaml();
+
+        Assert.Equal(
+            1020d,
+            GlobalConfig.DefaultConfigPanelWidth);
+        Assert.Equal(
+            GlobalConfig.DefaultConfigPanelWidth.ToString(
+                System.Globalization.CultureInfo.InvariantCulture),
+            (string?)document.Root?.Attribute("Width"));
+    }
+
+    [Fact]
     public void CharacterCardsOwnThePositionResetAction()
     {
         XDocument document = LoadMainWindowXaml();
@@ -78,6 +93,31 @@ public sealed class CharacterLibraryLayoutTests
                     "AutomationProperties.Name") ==
                 "Reset character position");
         Assert.Same(visibilityButton.Parent, resetButton.Parent);
+    }
+
+    [Fact]
+    public void CharacterCardItemsStayTopAlignedAndHaveAMaximumHeight()
+    {
+        XDocument styles = LoadConfigPanelStyles();
+        XNamespace presentation =
+            "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace x =
+            "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        XElement cardStyle = Assert.Single(
+            styles.Descendants(presentation + "Style"),
+            element => (string?)element.Attribute(x + "Key") ==
+                "CharacterCardItemStyle");
+
+        Assert.Contains(
+            cardStyle.Descendants(presentation + "Setter"),
+            setter => (string?)setter.Attribute("Property") ==
+                    "VerticalAlignment" &&
+                (string?)setter.Attribute("Value") == "Top");
+        Assert.Contains(
+            cardStyle.Descendants(presentation + "Setter"),
+            setter => (string?)setter.Attribute("Property") == "MaxHeight" &&
+                (string?)setter.Attribute("Value") == "120");
     }
 
     [Fact]

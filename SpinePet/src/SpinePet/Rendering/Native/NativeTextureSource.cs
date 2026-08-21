@@ -18,7 +18,10 @@ internal sealed class NativeTextureSource
         byte[] pixels)
     {
         Path = path;
-        Bitmap = bitmap;
+        // 只缓存宽高：完整 WIC 位图在像素交给 GPU/mask 后就不再保留，
+        // 否则每张纹理会多占一份 ~W*H*4 的非托管内存。
+        Width = bitmap.PixelWidth;
+        Height = bitmap.PixelHeight;
         _requiresPremultiplication =
             !sourcePremultipliedAlpha &&
             bitmap.Format != PixelFormats.Pbgra32;
@@ -29,9 +32,8 @@ internal sealed class NativeTextureSource
     }
 
     public string Path { get; }
-    public BitmapSource Bitmap { get; }
-    public int Width => Bitmap.PixelWidth;
-    public int Height => Bitmap.PixelHeight;
+    public int Width { get; }
+    public int Height { get; }
 
     public byte[] CopyBgraPixels()
     {
@@ -41,12 +43,10 @@ internal sealed class NativeTextureSource
         if (uploadPixels != null)
             return uploadPixels;
 
-        int stride = checked(Width * 4);
-        byte[] pixels = new byte[checked(stride * Height)];
-        Bitmap.CopyPixels(pixels, stride, 0);
-        if (_requiresPremultiplication)
-            PremultiplyBgraPixels(pixels);
-        return pixels;
+        // 像素只能被消费一次：资源在则 GPU 纹理必然存在，
+        // 资源被卸载后会整体重新加载，不存在二次上传的场景。
+        throw new InvalidOperationException(
+            $"Texture pixels for '{Path}' were already consumed.");
     }
 
     public bool IsVisiblePixel(float u, float v, float opacity)

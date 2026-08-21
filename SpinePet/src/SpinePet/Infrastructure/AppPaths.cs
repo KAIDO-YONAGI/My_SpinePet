@@ -22,9 +22,11 @@ internal static class AppPaths
 
     public static string ProjectRoot { get; } = FindProjectRoot();
 
-    public static string ResourceDirectory { get; } = Path.Combine(
-        ProjectRoot,
-        "res");
+    // Published layouts keep resources next to the executable, so the
+    // exe-adjacent folder wins over the repository lookup (which only
+    // applies to development runs from bin\).
+    public static string ResourceDirectory { get; } =
+        ResolveResourceDirectory();
 
     public static string BundleExtractorScript { get; } =
         ResolveBundledFile(
@@ -55,10 +57,64 @@ internal static class AppPaths
             return Path.GetFullPath(overridePath);
         }
 
+        // Portable layout: a config.json next to the executable (or in the
+        // parent folder when the payload lives in an app\ subfolder) keeps
+        // all user state (config, logs) inside the application folder.
+        foreach (string candidate in GetPortableBaseDirectories())
+        {
+            string portableConfigPath = Path.Combine(candidate, "config.json");
+            if (File.Exists(portableConfigPath))
+            {
+                return candidate;
+            }
+        }
+
         return Path.Combine(
             Environment.GetFolderPath(
                 Environment.SpecialFolder.LocalApplicationData),
             ApplicationDirectoryName);
+    }
+
+    private static string ResolveResourceDirectory()
+    {
+        // Published layouts keep resources beside the executable or beside
+        // the parent folder of an app\ payload; the repository lookup only
+        // applies to development runs from bin\.
+        foreach (string candidate in GetPortableBaseDirectories())
+        {
+            string candidateResources = Path.Combine(candidate, "res");
+            if (Directory.Exists(candidateResources))
+            {
+                return candidateResources;
+            }
+        }
+
+        return Path.Combine(ProjectRoot, "res");
+    }
+
+    private static IEnumerable<string> GetPortableBaseDirectories()
+    {
+        yield return AppContext.BaseDirectory;
+
+        // The packaged layout keeps the payload in an app\ subfolder next to
+        // config.json/res. Only that exact folder name opts into the parent
+        // lookup, so a stray config.json somewhere above a flat install can
+        // never be mistaken for SpinePet's portable configuration.
+        string baseDirectory = Path.TrimEndingDirectorySeparator(
+            AppContext.BaseDirectory);
+        if (!string.Equals(
+                Path.GetFileName(baseDirectory),
+                "app",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            yield break;
+        }
+
+        string? parentDirectory = Path.GetDirectoryName(baseDirectory);
+        if (parentDirectory != null)
+        {
+            yield return parentDirectory;
+        }
     }
 
     private static string FindProjectRoot()

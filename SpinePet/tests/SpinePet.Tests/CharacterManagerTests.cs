@@ -1,5 +1,6 @@
 using System.IO;
 using System.Text.Json;
+using System.Windows;
 using SpinePet.Models;
 using SpinePet.Services;
 using SpinePet.Tests.TestDoubles;
@@ -8,6 +9,8 @@ namespace SpinePet.Tests;
 
 public sealed class CharacterManagerTests : IDisposable
 {
+    private static readonly Rect TestWorkArea = new(0, 0, 1920, 1080);
+
     private readonly string _temporaryDirectory = Path.Combine(
         Path.GetTempPath(),
         "SpinePet.Tests",
@@ -601,7 +604,8 @@ public sealed class CharacterManagerTests : IDisposable
                     ["010"] = "Rapi",
                     ["007"] = "Neon"
                 }),
-            renderHost);
+            renderHost,
+            TestWorkArea);
     }
 
     private ConfigService SaveConfig(

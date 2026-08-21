@@ -736,7 +736,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         SetDragToggleKnob(sender, animate: true);
 
     private void OnWindowClosing(object? sender, CancelEventArgs e) =>
-        _lifecycle.HandleClosing(e, SavePanelLayout);
+        _lifecycle.HandleClosing(e);
 
     private void OnWindowClosed(object? sender, EventArgs e)
     {
@@ -757,13 +757,6 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             characterId,
             maximumScale,
             currentScale);
-
-    private void SavePanelLayout()
-    {
-        _characterManager.SetConfigPanelSize(
-            ActualWidth,
-            ActualHeight);
-    }
 
     private void SyncSelectedCharacterSettings() =>
         _settingsController?.SyncSelectedCharacterSettings();

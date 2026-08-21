@@ -9,6 +9,8 @@ namespace SpinePet.Tests;
 
 public sealed class ConfigServiceTests : IDisposable
 {
+    private static readonly Rect TestWorkArea = new(0, 0, 1920, 1080);
+
     private readonly string _temporaryDirectory = Path.Combine(
         Path.GetTempPath(),
         "SpinePet.Tests",
@@ -23,7 +25,7 @@ public sealed class ConfigServiceTests : IDisposable
     public void SaveAndLoadRoundTripsConfiguration()
     {
         string configPath = Path.Combine(_temporaryDirectory, "config.json");
-        ConfigService service = new(configPath);
+        ConfigService service = new(configPath, TestWorkArea);
         AppConfig expected = new()
         {
             Global = new GlobalConfig
@@ -87,7 +89,7 @@ public sealed class ConfigServiceTests : IDisposable
             }
             """);
 
-        ConfigService service = new(configPath);
+        ConfigService service = new(configPath, TestWorkArea);
         AppConfig config = service.Load();
 
         Assert.Equal(AppConfig.CurrentVersion, config.Version);
@@ -98,11 +100,10 @@ public sealed class ConfigServiceTests : IDisposable
         Assert.True(character.RequiresStandingMigration);
         Assert.Null(character.LegacyResourceType);
         Assert.Equal(
-            SystemParameters.WorkArea.Left +
-            SystemParameters.WorkArea.Width / 2,
+            TestWorkArea.Left + TestWorkArea.Width / 2,
             character.PositionX);
         Assert.Equal(
-            SystemParameters.WorkArea.Bottom - 24,
+            TestWorkArea.Bottom - 24,
             character.PositionY);
 
         service.Save(config);
@@ -139,7 +140,7 @@ public sealed class ConfigServiceTests : IDisposable
         string backupPath =
             $"{configPath}.{timestamp}.corrupt";
 
-        ConfigService service = new(configPath);
+        ConfigService service = new(configPath, TestWorkArea);
         AppConfig recovered = service.Load();
 
         Assert.Equal(AppConfig.CurrentVersion, recovered.Version);
@@ -212,7 +213,7 @@ public sealed class ConfigServiceTests : IDisposable
             Characters = [first, null!, second]
         };
 
-        ConfigService.Normalize(config);
+        ConfigService.Normalize(config, new Rect(0, 0, 1920, 1080));
 
         Assert.Equal(2, config.Characters.Count);
         Assert.Equal("duplicate", first.Id);

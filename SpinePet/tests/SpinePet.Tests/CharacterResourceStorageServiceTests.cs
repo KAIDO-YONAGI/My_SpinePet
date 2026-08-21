@@ -149,7 +149,17 @@ public sealed class CharacterResourceStorageServiceTests : IDisposable
         Directory.CreateDirectory(externalDirectory);
         string externalFile = Path.Combine(externalDirectory, "keep.txt");
         File.WriteAllText(externalFile, "keep");
-        Directory.CreateSymbolicLink(linkDirectory, externalDirectory);
+        try
+        {
+            Directory.CreateSymbolicLink(linkDirectory, externalDirectory);
+        }
+        catch (Exception exception) when (
+            exception is UnauthorizedAccessException or
+                IOException or
+                PlatformNotSupportedException)
+        {
+            return;
+        }
         CharacterResourceStorageService service = new(_ =>
             throw new InvalidOperationException("must not be called"));
 

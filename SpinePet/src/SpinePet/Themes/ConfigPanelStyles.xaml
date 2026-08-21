@@ -589,6 +589,8 @@
         <Setter Property="Margin" Value="0,0,0,8" />
         <Setter Property="HorizontalContentAlignment" Value="Stretch" />
         <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Top" />
+        <Setter Property="MaxHeight" Value="120" />
         <Setter Property="Focusable" Value="True" />
         <Setter Property="AutomationProperties.Name"
                 Value="{Binding AccessibilitySummary}" />

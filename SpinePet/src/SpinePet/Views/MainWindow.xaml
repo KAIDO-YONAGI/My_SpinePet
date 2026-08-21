@@ -4,7 +4,7 @@
         xmlns:views="clr-namespace:SpinePet.Views"
         Title="SpinePet"
         Icon="pack://application:,,,/Assets/Brand/SpinePet.ico"
-        Width="820"
+        Width="1020"
         MinWidth="640"
         MinHeight="560"
         WindowStyle="None"

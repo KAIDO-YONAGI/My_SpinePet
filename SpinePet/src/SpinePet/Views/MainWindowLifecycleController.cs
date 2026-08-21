@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Windows;
 using SpinePet.Infrastructure;
+using SpinePet.Models;
 using SpinePet.Services;
 
 namespace SpinePet.Views;
@@ -34,12 +35,8 @@ internal sealed class MainWindowLifecycleController : IDisposable
     public void HandleLoaded(Action applyThumbnailScale)
     {
         Rect workArea = SystemParameters.WorkArea;
-        double width = _characterManager.ConfigPanelWidth > 0
-            ? _characterManager.ConfigPanelWidth
-            : 820;
-        double height = _characterManager.ConfigPanelHeight > 0
-            ? _characterManager.ConfigPanelHeight
-            : workArea.Height * 0.6;
+        double width = GlobalConfig.DefaultConfigPanelWidth;
+        double height = workArea.Height * 0.6;
         _window.Width = Math.Clamp(width, _window.MinWidth, workArea.Width);
         _window.Height = Math.Clamp(height, _window.MinHeight, workArea.Height);
         _window.Left = workArea.Right - _window.Width;
@@ -73,9 +70,7 @@ internal sealed class MainWindowLifecycleController : IDisposable
         Dispose();
     }
 
-    public void HandleClosing(
-        CancelEventArgs e,
-        Action savePanelLayout)
+    public void HandleClosing(CancelEventArgs e)
     {
         if (_window.Dispatcher.HasShutdownStarted ||
             _window.Dispatcher.HasShutdownFinished)
@@ -87,7 +82,6 @@ internal sealed class MainWindowLifecycleController : IDisposable
             nameof(MainWindowLifecycleController),
             "configuration-panel-close-intercepted");
         e.Cancel = true;
-        savePanelLayout();
         _characterManager.SaveAllState();
         IsConfigMode = false;
         ApplyConfigMode();

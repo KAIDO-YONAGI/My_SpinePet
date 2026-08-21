@@ -18,6 +18,7 @@ public sealed class CharacterManager
         "CA1859:Use concrete types when possible for improved performance",
         Justification = "The renderer backend is intentionally isolated behind this contract.")]
     private readonly ICharacterRenderHost _renderHost;
+    private readonly Rect? _workArea;
     private readonly AppConfig _config;
     private bool _isConfigMode;
     private int _configModeVersion;
@@ -26,9 +27,19 @@ public sealed class CharacterManager
         ConfigService configService,
         CharacterIdentityService? identityService = null,
         ICharacterRenderHost? renderHost = null)
+        : this(configService, identityService, renderHost, null)
+    {
+    }
+
+    internal CharacterManager(
+        ConfigService configService,
+        CharacterIdentityService? identityService,
+        ICharacterRenderHost? renderHost,
+        Rect? workArea)
     {
         _configService = configService;
         _identityService = identityService ?? new CharacterIdentityService();
+        _workArea = workArea;
         _config = configService.Load();
         _renderHost = renderHost ?? new NativeCharacterRenderHost();
         _renderHost.SetRenderDragEnabled(_config.Global.AllowRenderDrag);
@@ -49,10 +60,6 @@ public sealed class CharacterManager
 
     public int LibraryThumbnailScalePercent =>
         _config.Global.LibraryThumbnailScalePercent;
-
-    public double ConfigPanelWidth => _config.Global.ConfigPanelWidth;
-
-    public double ConfigPanelHeight => _config.Global.ConfigPanelHeight;
 
     public event Action? CharactersChanged;
 
@@ -105,27 +112,6 @@ public sealed class CharacterManager
 
         _config.Global.LibraryThumbnailScalePercent = normalized;
         _configService.Save(_config);
-    }
-
-    public void SetConfigPanelSize(double width, double height)
-    {
-        bool changed = false;
-        if (Math.Abs(_config.Global.ConfigPanelWidth - width) > 0.5)
-        {
-            _config.Global.ConfigPanelWidth = width;
-            changed = true;
-        }
-
-        if (Math.Abs(_config.Global.ConfigPanelHeight - height) > 0.5)
-        {
-            _config.Global.ConfigPanelHeight = height;
-            changed = true;
-        }
-
-        if (changed)
-        {
-            _configService.Save(_config);
-        }
     }
 
     public bool AddCharacter(CharacterResourceFiles resources)
@@ -340,6 +326,7 @@ public sealed class CharacterManager
         int updatedCount = 0;
         int removedCount = 0;
         int mergedCount = 0;
+        bool wasEmptyConfiguration = _config.Characters.Count == 0;
 
         foreach (var group in existingGroups)
         {
@@ -462,6 +449,17 @@ public sealed class CharacterManager
 
             _config.Characters.Add(CreateCharacter(standingResources));
             addedCount++;
+        }
+
+        // A freshly seeded configuration (e.g. the shipped portable package)
+        // starts with exactly one visible character instead of showing every
+        // discovered resource at once.
+        if (wasEmptyConfiguration && _config.Characters.Count > 0)
+        {
+            for (int index = 0; index < _config.Characters.Count; index++)
+            {
+                _config.Characters[index].Visible = index == 0;
+            }
         }
 
         CharacterResourceSynchronizationResult result = new(
@@ -749,10 +747,10 @@ public sealed class CharacterManager
         _config.Characters.Remove(character);
     }
 
-    private static CharacterConfig CreateCharacter(
+    private CharacterConfig CreateCharacter(
         CharacterResourceFiles resources)
     {
-        Rect workArea = SystemParameters.WorkArea;
+        Rect workArea = _workArea ?? SystemParameters.WorkArea;
         return new CharacterConfig
         {
             Name = resources.Identity.DisplayName,

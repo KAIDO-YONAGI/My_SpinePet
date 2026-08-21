@@ -33,6 +33,7 @@ public sealed class NativeCharacterRenderHost :
     private static readonly TimeSpan SilhouetteRefreshInterval =
         TimeSpan.FromMilliseconds(100);
     private const float SilhouetteAnchorEpsilonPixels = 2f;
+    private const int MaxConcurrentCharacterLoads = 2;
 
     private readonly Dictionary<string, NativeCharacterState> _states =
         new(StringComparer.Ordinal);
@@ -45,6 +46,9 @@ public sealed class NativeCharacterRenderHost :
     private readonly DispatcherTimer _scaleSettleTimer;
     private readonly Stopwatch _frameClock = new();
     private readonly CancellationTokenSource _lifetimeCancellation = new();
+    private readonly SemaphoreSlim _loadGate = new(
+        MaxConcurrentCharacterLoads,
+        MaxConcurrentCharacterLoads);
     private readonly bool _performanceTelemetryEnabled = string.Equals(
         Environment.GetEnvironmentVariable("SPINEPET_PERF_LOG"),
         "1",
@@ -111,9 +115,8 @@ public sealed class NativeCharacterRenderHost :
         state.IsVisible;
 
     public IReadOnlyList<string> GetAnimationNames(string characterId) =>
-        _states.TryGetValue(characterId, out NativeCharacterState? state) &&
-        state.Resource != null
-            ? state.Resource.AnimationNames
+        _states.TryGetValue(characterId, out NativeCharacterState? state)
+            ? state.Resource?.AnimationNames ?? state.CachedAnimationNames
             : Array.Empty<string>();
 
     public double GetMaxScale(string characterId) =>
@@ -178,26 +181,37 @@ public sealed class NativeCharacterRenderHost :
 
         try
         {
-            var loaded = await Task.Run(() =>
+            // 加载包含完整纹理解码：Show All 的几十路并发曾把内存峰值
+            // 推到系统 commit 耗尽直接杀进程，用信号量限制同时解码数。
+            await _loadGate.WaitAsync(_lifetimeCancellation.Token);
+            (NativeSpineResource resource, NativeSpineBounds Setup, NativeSpineBounds Envelope) loaded;
+            try
             {
-                _lifetimeCancellation.Token.ThrowIfCancellationRequested();
-                NativeSpineResource resource =
-                    NativeSpineResource.Load(character);
-                try
+                loaded = await Task.Run(() =>
                 {
                     _lifetimeCancellation.Token.ThrowIfCancellationRequested();
-                    var bounds =
-                        NativeSpineEnvelopeCalculator.Calculate(
-                            resource.SkeletonData);
-                    _lifetimeCancellation.Token.ThrowIfCancellationRequested();
-                    return (resource, bounds.Setup, bounds.Envelope);
-                }
-                catch
-                {
-                    resource.Dispose();
-                    throw;
-                }
-            }, _lifetimeCancellation.Token);
+                    NativeSpineResource resource =
+                        NativeSpineResource.Load(character);
+                    try
+                    {
+                        _lifetimeCancellation.Token.ThrowIfCancellationRequested();
+                        var bounds =
+                            NativeSpineEnvelopeCalculator.Calculate(
+                                resource.SkeletonData);
+                        _lifetimeCancellation.Token.ThrowIfCancellationRequested();
+                        return (resource, bounds.Setup, bounds.Envelope);
+                    }
+                    catch
+                    {
+                        resource.Dispose();
+                        throw;
+                    }
+                }, _lifetimeCancellation.Token);
+            }
+            finally
+            {
+                _loadGate.Release();
+            }
 
             await _dispatcher.InvokeAsync(() =>
             {
@@ -213,6 +227,8 @@ public sealed class NativeCharacterRenderHost :
                 }
 
                 current.Resource = loaded.resource;
+                current.CachedAnimationNames =
+                    loaded.resource.AnimationNames;
                 current.SetupBounds = loaded.Setup;
                 current.Envelope = loaded.Envelope;
                 current.Surface = _graphics!.CreateSurface();
@@ -291,9 +307,8 @@ public sealed class NativeCharacterRenderHost :
 
         CancelPointerIfCharacter(characterId);
         state.IsVisible = false;
-        state.IsLoading = false;
         state.Config.Visible = false;
-        state.Surface?.SetVisible(false);
+        ReleaseCharacterResources(state);
         UpdateFrameTimerState();
         CommitComposition();
         CharactersStateChanged?.Invoke();
@@ -309,12 +324,10 @@ public sealed class NativeCharacterRenderHost :
         }
 
         CancelPointerIfCharacter(characterId);
-        state.LoadVersion++;
         _scaleShrinkPending.Remove(characterId);
         _zOrder.Remove(characterId);
-        state.Dispose();
+        ReleaseCharacterResources(state);
         UpdateFrameTimerState();
-        PurgeUnusedTextures();
         CommitComposition();
         CharactersStateChanged?.Invoke();
     }
@@ -462,14 +475,57 @@ public sealed class NativeCharacterRenderHost :
         foreach (NativeCharacterState state in _states.Values)
         {
             state.IsVisible = false;
-            state.IsLoading = false;
             state.Config.Visible = false;
-            state.Surface?.SetVisible(false);
+            ReleaseCharacterResources(state);
         }
 
         UpdateFrameTimerState();
         CommitComposition();
         CharactersStateChanged?.Invoke();
+    }
+
+    private void ReleaseCharacterResources(NativeCharacterState state)
+    {
+        state.LoadVersion++;
+        state.IsLoading = false;
+        if (state.Resource == null &&
+            state.Surface == null &&
+            state.LastBatches.Count == 0)
+        {
+            return;
+        }
+
+        // 隐藏即卸载：释放骨骼、托管纹理与 GPU 纹理、合成表面；
+        // 动画名缓存保留，面板在角色隐藏期间仍能显示完整动画列表。
+        state.HasCachedSilhouette = false;
+        state.CachedSilhouetteRuns.Clear();
+        state.LastBatches = Array.Empty<NativeSpineDrawBatch>();
+        state.ScreenBounds = RectangleF.Empty;
+        state.RenderRegionBounds = RectangleF.Empty;
+        state.PreviousRenderRegionBounds = RectangleF.Empty;
+        state.Surface?.Dispose();
+        state.Surface = null;
+        state.Resource?.Dispose();
+        state.Resource = null;
+        PurgeUnusedTextures();
+        CollectIfIdleAfterUnload();
+    }
+
+    private void CollectIfIdleAfterUnload()
+    {
+        // 渲染循环停止后不再产生新分配，普通 GC 可能长时间不触发；
+        // 在最后一只可见角色隐藏时做一次后台压缩回收，
+        // 让"隐藏即释放"立即体现在进程内存上。
+        if (_states.Values.Any(state => state.IsVisible))
+        {
+            return;
+        }
+
+        GC.Collect(
+            GC.MaxGeneration,
+            GCCollectionMode.Forced,
+            blocking: false,
+            compacting: true);
     }
 
     public async Task RestoreVisibleCharactersAsync(
