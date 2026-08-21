@@ -233,6 +233,55 @@ public sealed class CharacterLibraryLayoutTests
                     StringComparison.OrdinalIgnoreCase)));
     }
 
+    [Fact]
+    public void CharacterCardsDoNotDisplaySkinLabels()
+    {
+        XDocument document = LoadMainWindowXaml();
+        XNamespace presentation =
+            "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace x =
+            "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        XElement characterCards = Assert.Single(
+            document.Descendants(presentation + "ListBox"),
+            element => (string?)element.Attribute(x + "Name") ==
+                "CharacterCards");
+
+        Assert.DoesNotContain(
+            characterCards.Descendants(presentation + "TextBlock"),
+            element => (string?)element.Attribute("Text") ==
+                "{Binding SkinLabel}");
+        Assert.Contains(
+            document.Descendants(presentation + "TextBlock"),
+            element => (string?)element.Attribute("Text") ==
+                "{Binding SelectedCharacter.SkinLabel}");
+    }
+
+    [Fact]
+    public void GlobalSettingsUseMatchingDescriptionsWithoutCenteringFrameRateText()
+    {
+        XDocument document = LoadMainWindowXaml();
+        XNamespace presentation =
+            "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+
+        XElement frameRateLabel = Assert.Single(
+            document.Descendants(presentation + "TextBlock"),
+            element => (string?)element.Attribute("Text") ==
+                "Desktop frame rate");
+        XElement draggingLabel = Assert.Single(
+            document.Descendants(presentation + "TextBlock"),
+            element => (string?)element.Attribute("Text") ==
+                "Allow dragging in render mode");
+
+        Assert.Null(frameRateLabel.Parent?.Attribute("VerticalAlignment"));
+        Assert.Contains(
+            frameRateLabel.Parent?.Elements(presentation + "TextBlock") ?? [],
+            element => (string?)element.Attribute("Text") == "Global Setting");
+        Assert.Contains(
+            draggingLabel.Parent?.Elements(presentation + "TextBlock") ?? [],
+            element => (string?)element.Attribute("Text") == "Global Setting");
+    }
+
     private static XDocument LoadMainWindowXaml()
     {
         string xamlPath = Path.Combine(

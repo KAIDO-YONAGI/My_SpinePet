@@ -1,7 +1,7 @@
 @echo off
 setlocal
-rem Create one immutable, UTC-timestamped portable release per successful build.
-for /f "usebackq delims=" %%I in (`pwsh -NoProfile -Command "Get-Date -AsUTC -Format 'yyyy-MM-dd-HHmmssZ'"`) do set "BUILD_TIMESTAMP=%%I"
+rem Create one immutable release using the required local timestamp format.
+for /f "usebackq delims=" %%I in (`pwsh -NoProfile -Command "Get-Date -Format 'yyyy-MM-dd-HH mm ss'"`) do set "BUILD_TIMESTAMP=%%I"
 if not defined BUILD_TIMESTAMP (
     echo Failed to generate the release timestamp.
     exit /b 1

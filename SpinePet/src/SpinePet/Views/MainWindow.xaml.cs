@@ -627,12 +627,22 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
                 "Reset character position",
                 StringComparison.Ordinal))
         {
+            if (button.Tag is CharacterViewModel positionCharacter)
+            {
+                _previewNavigation.SelectWithoutReveal(positionCharacter);
+            }
+
             _settingsController.ResetCharacterPosition(button);
             return;
         }
 
         if (button.Tag is CharacterViewModel character)
         {
+            if (!character.IsVisible)
+            {
+                _previewNavigation.SelectWithoutReveal(character);
+            }
+
             _ = _libraryController.ToggleCharacterAsync(character);
         }
     }

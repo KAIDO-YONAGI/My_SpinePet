@@ -56,6 +56,12 @@ internal sealed class CharacterPreviewNavigationController
         Reveal(character);
     }
 
+    public void SelectWithoutReveal(CharacterViewModel character)
+    {
+        _session.ClearReveal();
+        _cards.SelectedItem = character;
+    }
+
     public void Reveal(CharacterViewModel character)
     {
         if (_isDisposed() ||

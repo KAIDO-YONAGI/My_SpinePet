@@ -306,4 +306,17 @@ public sealed class PreviewNavigationCoordinatorTests
         Assert.Equal(4, coordinator.ConsumePendingScrollSelection());
         Assert.Null(coordinator.ConsumePendingScrollSelection());
     }
+
+    [Fact]
+    public void ClearRevealCancelsRevealAndPendingScrollSelection()
+    {
+        PreviewNavigationCoordinator coordinator = new();
+        coordinator.BeginReveal("character-1");
+        coordinator.QueuePendingScrollSelection(4);
+
+        coordinator.ClearReveal();
+
+        Assert.False(coordinator.IsRevealing);
+        Assert.Null(coordinator.ConsumePendingScrollSelection());
+    }
 }

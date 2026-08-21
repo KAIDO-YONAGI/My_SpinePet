@@ -7,7 +7,7 @@
 [CmdletBinding()]
 param(
     [string] $Character = 'Scarlet Overload',
-    [string] $ReleaseName = ('SpinePet-Release-' + (Get-Date -AsUTC -Format 'yyyy-MM-dd-HHmmssZ'))
+    [string] $ReleaseName = ('SpinePet-Release-' + (Get-Date -Format 'yyyy-MM-dd-HH mm ss'))
 )
 
 $ErrorActionPreference = 'Stop'
@@ -120,7 +120,7 @@ Logs\             运行日志（首次运行后生成，排查问题用）
 【卸载】
 直接删除整个文件夹即可；便携模式下不在注册表或 AppData 留下任何东西。
 
-SpinePet · 构建时间 $(Get-Date -AsUTC -Format 'yyyy-MM-dd HH:mm:ss UTC')
+SpinePet · 构建时间 $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')
 "@
     Set-Content -Path (Join-Path $WorkRelease '使用说明.txt') -Value $readme -Encoding utf8BOM
 
