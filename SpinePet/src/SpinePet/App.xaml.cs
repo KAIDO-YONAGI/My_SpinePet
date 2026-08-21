@@ -10,10 +10,8 @@ namespace SpinePet;
 
 public sealed class App : Application
 {
-    private const string SingleInstanceMutexName =
-        @"Local\SpinePet.SingleInstance.v1";
-    private const string ActivationEventName =
-        @"Local\SpinePet.Activate.v1";
+    private static readonly SingleInstanceNames InstanceNames =
+        SingleInstanceNameFactory.Create(AppContext.BaseDirectory);
 
     private TrayIconService? _trayIcon;
     private CharacterManager? _characterManager;
@@ -46,7 +44,7 @@ public sealed class App : Application
 
         _singleInstanceMutex = new Mutex(
             initiallyOwned: true,
-            SingleInstanceMutexName,
+            InstanceNames.MutexName,
             out bool isFirstInstance);
         if (!isFirstInstance)
         {
@@ -63,7 +61,7 @@ public sealed class App : Application
             _activationEvent = new EventWaitHandle(
                 initialState: false,
                 EventResetMode.AutoReset,
-                ActivationEventName);
+                InstanceNames.ActivationEventName);
         }
         catch (Exception exception)
         {
@@ -216,7 +214,7 @@ public sealed class App : Application
             {
                 using EventWaitHandle activationEvent =
                     EventWaitHandle.OpenExisting(
-                        ActivationEventName);
+                        InstanceNames.ActivationEventName);
                 activationEvent.Set();
                 AppLogger.Write(
                     nameof(App),

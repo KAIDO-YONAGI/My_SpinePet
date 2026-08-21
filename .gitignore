@@ -6,6 +6,9 @@
 .fetch-cache/
 .codegraph
 prompts.txt
+/AGENTS.md
+/CLAUDE.md
+
 # 系统杂项
 Thumbs.db
 desktop.ini
