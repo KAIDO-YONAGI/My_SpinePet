@@ -442,11 +442,22 @@
                                                 <StackPanel Grid.Column="2"
                                                             VerticalAlignment="Center">
                                                     <Button x:Name="VisibilityButton"
-                                                            Style="{StaticResource DetailActionButtonStyle}"
                                                             IsEnabled="{Binding CanToggleVisibility}"
                                                             Tag="{Binding}"
                                                             IsTabStop="False"
                                                             AutomationProperties.Name="{Binding VisibilityActionAutomationLabel}">
+                                                        <Button.Style>
+                                                            <Style TargetType="Button"
+                                                                   BasedOn="{StaticResource DetailActionButtonStyle}">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding IsVisible}" Value="True">
+                                                                        <Setter Property="Background" Value="#FFFFFFFF" />
+                                                                        <Setter Property="BorderBrush" Value="#FFFFFFFF" />
+                                                                        <Setter Property="Foreground" Value="#FF161616" />
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </Button.Style>
                                                         <StackPanel Orientation="Horizontal">
                                                             <Path x:Name="VisibilityIcon"
                                                                   Width="13"
