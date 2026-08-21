@@ -6,7 +6,7 @@
 适用环境：`Windows + PowerShell 7`
 
 本文说明如何把已经在 SpineTools 验证过的多 Agent 路由、业务文档和并发租约
-体系配置到其他项目。通用方法由全局 Skill
+体系配置到其他项目。通用方法由独立分发仓库中的 Skill
 `multiple-agent-workflow-config` 提供；本文记录 SpineTools 的项目实例与验证
 证据。项目中的现行操作始终以根 `Router.md` 及其指向的 Guide/Design 为准。
 
@@ -164,8 +164,9 @@ PowerShell 内调用数组参数时，优先直接调用脚本并传递数组：
 2. **替换为精简入口**：入口只要求读取根 Router。适合规则已经完成迁移、
    且用户明确接受移除旧入口内容的项目。
 
-未得到明确选择前不得修改入口。不得在 Codex、Claude、ZCode 目录分别复制
-同一 Skill；应先确定唯一实体，再为其他客户端建立目录 Junction。
+未得到明确选择前不得修改入口。发布用户可以按客户端复制安装；维护该 Skill
+的开发机应让三个客户端入口通过 Junction 指向同一份受版本控制的源码，
+避免三处手工维护。
 
 ## 7. 初始化步骤
 
@@ -186,7 +187,7 @@ PowerShell 内调用数组参数时，优先直接调用脚本并传递数组：
 示例：
 
 ```powershell
-$skill = 'C:\Users\12248\.agents\skills\multiple-agent-workflow-config'
+$skill = 'D:\My_Tools\Y_MultipleAgentWorkflow\src\skills\multiple-agent-workflow-config'
 
 & "$skill\scripts\Initialize-Workflow.ps1" `
   -ProjectRoot 'D:\ExampleProject' `
@@ -201,7 +202,25 @@ $skill = 'C:\Users\12248\.agents\skills\multiple-agent-workflow-config'
 初始化脚本不会修改模型入口。目标工作流已存在时默认拒绝覆盖；`-Merge`
 只补充缺失文件，不重写现有内容。先用 `-WhatIf` 查看计划。
 
-## 8. 文档维护
+## 8. 分发与升级
+
+通用分发仓库位于 `D:\My_Tools\Y_MultipleAgentWorkflow`。其中 `src` 是唯一
+源码，`release-layout` 是由构建脚本生成并提交的客户端适配快照，项目中的
+`Y_MultipleAgentWorkflow` 仍是复制初始化的项目实例，不使用 Junction 或
+Submodule。
+
+- `Install-MAW.ps1` 支持 Copy、Junction、离线包和 `-WhatIf`。
+- `Update-MAW.ps1` 只在显式调用时访问私有 GitHub Release，并校验包清单与
+  SHA-256。
+- `Uninstall-MAW.ps1` 只删除安装记录能够证明由 MAW 创建的入口。
+- `Update-WorkflowInstance.ps1` 只更新
+  `Workflow\WorkflowInstance.json` 登记且未漂移的托管文件。
+- 模型入口和项目验证命令不属于分发器自动修改范围。
+
+项目实例中的 Router、DeveloperLog、Guide、Design 和 Proposal 永远是
+`projectOwned`。通用指南变化只形成迁移建议，不自动覆盖项目结论。
+
+## 9. 文档维护
 
 每个成功且实际影响业务的任务使该业务维护计数 `+1`。跨业务分别计数。
 失败、取消、并发登记、只读调查和纯文档维护不计数。
@@ -215,7 +234,7 @@ $skill = 'C:\Users\12248\.agents\skills\multiple-agent-workflow-config'
 
 路径迁移与文档更新必须在同一次变更中同步索引。
 
-## 9. SpineTools 验证实例
+## 10. SpineTools 验证实例
 
 SpineTools 使用：
 
@@ -235,7 +254,7 @@ Agent 启动环境曾缺少 `WINDIR`，导致 WPF FontCache URI 异常。验证�
 Run 子进程设置 `$env:WINDIR=$env:SystemRoot` 后成功；这是调用进程环境
 问题，不应写成应用代码或通用项目规则。
 
-## 10. 验收清单
+## 11. 验收清单
 
 - 根 Router 能把已知、跨业务和未知任务路由到正确位置。
 - 每个业务根都有 Router、DeveloperLog 和明确能力边界。

@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "distributionName": "Y_MultipleAgentWorkflow",
+  "packageVersion": "1.0.0",
+  "skillVersion": "1.0.0",
+  "workflowTemplateVersion": "1.0.0",
+  "workflowRootName": "Y_MultipleAgentWorkflow",
+  "projectValidationMode": "Guide",
+  "categories": [
+    "Workflow",
+    "GUI",
+    "Resources",
+    "Resources.Load",
+    "Resources.MatchClean",
+    "Resources.StateSupport"
+  ],
+  "installedAtUtc": "2026-08-21T21:35:00.0000000Z",
+  "updatedAtUtc": "2026-08-21T21:35:00.0000000Z",
+  "managedFiles": [
+    {
+      "path": "Workflow/Scripts/WorkingAgent.ps1",
+      "installedHash": "d5938657519980b3f856a7020ae2537a7c249e295cc359c7e48e20501cdc115f"
+    },
+    {
+      "path": "Workflow/Scripts/Test-WorkingAgent.ps1",
+      "installedHash": "8a776fbd2a031a5ab3309a8d0a14941840e381f2e83ffddcbe6e838c5cf3768f"
+    },
+    {
+      "path": "Workflow/Templates/BusinessRouter.template.md",
+      "installedHash": "b18dc760305e151f005dc127ec276400a9152f51e2526edd91830192b45bbbc0"
+    },
+    {
+      "path": "Workflow/Templates/DeveloperLog.template.md",
+      "installedHash": "ab010c85248ba56e9c734e615c00349437b054fb580738f58f84af0a40468d15"
+    },
+    {
+      "path": "WorkingAgent/.gitignore",
+      "installedHash": "aac0321d51496c76515b06f647080173f7de8025ddb90c429312f534c8a4d109"
+    }
+  ]
+}

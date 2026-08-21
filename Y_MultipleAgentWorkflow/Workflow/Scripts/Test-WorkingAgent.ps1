@@ -214,8 +214,8 @@ try {
         Assert-True ($child.ExitCode -eq 2) 'Parent and child paths should conflict.'
 
         $namedRegistry = New-TestRegistry 'named-conflict'
-        $namedA = Invoke-Agent (New-AcquireArguments $namedRegistry 'nr-1' 'write' @('runtime:SpinePet'))
-        $namedB = Invoke-Agent (New-AcquireArguments $namedRegistry 'nr-2' 'read' @('runtime:SpinePet'))
+        $namedA = Invoke-Agent (New-AcquireArguments $namedRegistry 'nr-1' 'write' @('runtime:ExampleApp'))
+        $namedB = Invoke-Agent (New-AcquireArguments $namedRegistry 'nr-2' 'read' @('runtime:ExampleApp'))
         Assert-True ($namedA.ExitCode -eq 0 -and $namedB.ExitCode -eq 2) `
             'Named shared resource should conflict with a writer.'
 

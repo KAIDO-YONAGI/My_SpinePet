@@ -1,5 +1,19 @@
 # Workflow Developer Log
 
+## 2026-08-21：独立分发仓库与三客户端发布
+
+- 建立独立源仓库 `D:\My_Tools\Y_MultipleAgentWorkflow`，通用 Skill 源码只在
+  `src\skills\multiple-agent-workflow-config` 维护。
+- 生成 Codex、Claude、ZCode 插件布局、离线包、SHA-256 清单及显式安装、
+  更新、卸载和项目实例升级接口；不提供后台联网检查。
+- 新增 `Workflow\WorkflowInstance.json`，仅允许自动更新未漂移的 WorkingAgent
+  脚本、回归测试、业务模板和租约忽略规则。Router、日志、Guide、Design 与
+  Proposal 保持项目所有。
+- 分发回归覆盖初始化、五层限制、WorkingAgent `12/12`、Copy/Junction、
+  拒绝覆盖、替换、卸载、离线安装和托管文件漂移保护。
+- Skill frontmatter 与 OpenAI 元数据通过 `quick_validate.py`。
+- 本次实际扩展 Workflow 能力，维护计数：`2/5 -> 3/5`。
+
 ## 2026-08-21：跨项目配置方法与全局 Skill
 
 - 将已验证的分类方法整理为跨项目配置指南，并以 SpineTools 作为实例。

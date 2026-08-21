@@ -1,4 +1,4 @@
-多 Agent 工作流与并发租约体系：最终设计基线
+# 多 Agent 工作流与并发租约体系：最终设计基线
 
 状态：Reference
 基线日期：2026-08-21
@@ -31,6 +31,7 @@ Y_MultipleAgentWorkflow/
 │  ├─ Workflow_Guide.md
 │  ├─ Concurrency_Guide.md
 │  ├─ Project_Validation_Guide.md
+│  ├─ WorkflowInstance.json
 │  ├─ Templates/
 │  │  ├─ BusinessRouter.template.md
 │  │  └─ DeveloperLog.template.md
@@ -197,12 +198,18 @@ $env:WINDIR = $env:SystemRoot
 后验证成功。该问题属于调用进程环境，不是 SpinePet 代码、工作流协议或需要
 永久修改的系统配置。
 
-## 11. 跨项目 Skill
+## 11. 跨项目 Skill 与分发
 
-通用 Skill 名称为 `multiple-agent-workflow-config`。唯一实体位于：
+通用 Skill 名称为 `multiple-agent-workflow-config`。唯一源码实体位于：
 
-`C:\Users\12248\.agents\skills\multiple-agent-workflow-config`
+`D:\My_Tools\Y_MultipleAgentWorkflow\src\skills\multiple-agent-workflow-config`
 
-Claude 与 ZCode 通过目录 Junction 共用该实体。Skill 提供分类分析、用户
-确认、工作流初始化、自包含 WorkingAgent 复制和结构校验。模型入口默认不
-修改，必须先让用户选择“保留并加入导航”或“替换为精简入口”。
+Codex、Claude 与 ZCode 的用户级入口通过目录 Junction 共用该实体。独立
+私有仓库从同一源码生成三个客户端插件包和统一离线包，并以 `SHA256SUMS`
+校验发布资产。更新只在显式调用时访问 GitHub，不进行后台检查。
+
+项目实例使用 `Workflow\WorkflowInstance.json` 记录版本、初始化选择、托管
+文件及安装哈希。WorkingAgent 脚本、回归测试、业务模板和租约忽略规则属于
+`managed`；Router、日志、Guide、Design 与 Proposal 属于 `projectOwned`。
+托管文件发生项目漂移时停止覆盖并输出差异状态。模型入口默认不修改，必须
+先让用户选择“保留并加入导航”或“替换为精简入口”。
