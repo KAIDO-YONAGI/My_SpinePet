@@ -82,14 +82,16 @@ public sealed class NativeCompositionWindowTests
     {
         Rectangle inputRegion = new(0, 0, 2560, 1440);
         Rectangle bottomTaskbarWorkArea = new(0, 0, 2560, 1392);
+        List<Rectangle> clipped = [];
 
-        Rectangle clipped = Assert.Single(
-            NativeCharacterRenderHost.ClipToWorkingAreas(
-                inputRegion,
-                [bottomTaskbarWorkArea]));
+        NativeCharacterRenderHost.ClipToWorkingAreas(
+            clipped,
+            inputRegion,
+            [bottomTaskbarWorkArea]);
 
-        Assert.Equal(bottomTaskbarWorkArea, clipped);
-        Assert.False(clipped.Contains(100, 1420));
+        Rectangle region = Assert.Single(clipped);
+        Assert.Equal(bottomTaskbarWorkArea, region);
+        Assert.False(region.Contains(100, 1420));
     }
 
     [Fact]

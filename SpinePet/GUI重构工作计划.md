@@ -233,6 +233,31 @@
 - 烟囱验证标准（替代旧标准）：启动成功必须等到日志出现
   `[App] startup-complete`（带超时）；仅凭"进程存活"一律视为未验证。
 
+### 2026-08-21：渲染性能修复（栅格化节流 + 免分配裁剪）
+
+- 背景：空闲 CPU 可达 10%。排查结论：日志非主因（空闲约 1 行/分钟，
+  性能遥测默认关闭）；主因是 `UpdateWindowRegions` 每帧全量执行
+  `RasterizeSilhouette`（成本随角色屏幕面积线性增长）× 高帧率档位
+  （60/120fps），多宠物再线性叠加。
+- 改动：
+  - `NativeCharacterState` 新增轮廓缓存字段（runs 列表、锚点、缩放、时间戳）。
+  - `UpdateWindowRegions` 栅格化节流：`SilhouetteRefreshInterval` 100ms；
+    锚点位移 ≥2px（`SilhouetteAnchorEpsilonPixels`）或缩放变化立即刷新
+    （拖拽时仍每帧更新）；每帧只做缓存拼装。注意 `RasterizeSilhouette`
+    返回共享 scratch 列表，缓存前必须复制（`CopySilhouetteRuns`）。
+  - `ClipToWorkingAreas` 从每 run 的 LINQ `ToArray` 改为向预分配列表追加，
+    消除每帧 14KB+ 的 GC 分配。
+- 实测（同一宠物、60fps、SPINEPET_PERF_LOG=1）：
+  - avg-frame-ms：2.42 → 0.67（-72%）；
+  - allocated-bytes-per-frame：约 66KB → 约 11KB（-83%，剩余来自 spine 更新）；
+  - 进程 CPU（单核口径）：1.3% → 0.26%。
+- 验证：Release 构建 0 警告 0 错误；全量测试 162 通过 + 3 个既有环境失败
+  （符号链接权限 ×2、56px 图标），新增 `NativeSilhouetteRefreshTests`
+  5 项节流决策测试通过；端到端右键命中角色成功弹出配置面板，
+  确认节流后输入区域仍工作。
+- 遗留：多宠物/大缩放场景成本仍随面积线性增长（栅格化本身未变，
+  只是降到 10Hz）；剩余每帧约 11KB 分配来自 spine 动画更新路径。
+
 ### 后续记录格式
 
 - 日期：

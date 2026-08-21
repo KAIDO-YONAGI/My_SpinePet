@@ -23,6 +23,12 @@ internal sealed class NativeCharacterState : IDisposable
     public double CurrentScale { get; set; } = 0.2;
     public double MaxScale { get; set; } = 2;
     public int LoadVersion { get; set; }
+    public List<Rectangle> CachedSilhouetteRuns { get; } = [];
+    public bool HasCachedSilhouette { get; set; }
+    public float CachedAnchorX { get; set; }
+    public float CachedAnchorY { get; set; }
+    public float CachedPixelScale { get; set; } = -1;
+    public long CachedSilhouetteTimestamp { get; set; }
 
     public float PivotX =>
         (SetupBounds.Left + SetupBounds.Right) * 0.5f;

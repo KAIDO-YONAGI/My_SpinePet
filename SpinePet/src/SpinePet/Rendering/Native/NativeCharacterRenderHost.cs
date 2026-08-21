@@ -30,6 +30,9 @@ public sealed class NativeCharacterRenderHost :
     private const double PerformanceWindowSeconds = 2;
     private static readonly TimeSpan WorkingAreaRefreshInterval =
         TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan SilhouetteRefreshInterval =
+        TimeSpan.FromMilliseconds(100);
+    private const float SilhouetteAnchorEpsilonPixels = 2f;
 
     private readonly Dictionary<string, NativeCharacterState> _states =
         new(StringComparer.Ordinal);
@@ -957,12 +960,15 @@ public sealed class NativeCharacterRenderHost :
         if (_window == null || _inputWindow == null)
             return;
 
-        // 每帧全速栅格化（AABB 空间网格，成本与可见面积成正比）；
+        // 输入区域以 8px 格子为精度，动画的亚像素变化不影响点击判定：
+        // 栅格化按 100ms 节流（锚点或缩放变化超过阈值时立即刷新），
+        // 每帧只做免分配的缓存拼装与工作区裁剪；
         // 只有区域内容真正变化时 NativeInputWindow 才会重设窗口区域。
         // 配置模式同样保持区域活跃：面板遮住其矩形内区域，
         // 其余桌面可直接拖拽角色，不再依赖 WPF 覆盖层。
         _inputRegions.Clear();
         RefreshWorkingAreas();
+        long now = Stopwatch.GetTimestamp();
         foreach (NativeCharacterState state in _states.Values)
         {
             if (!state.IsVisible)
@@ -972,24 +978,79 @@ public sealed class NativeCharacterRenderHost :
                 _window.Left + ToClientPixelX(state.Config.PositionX);
             float anchorY =
                 _window.Top + ToClientPixelY(state.Config.PositionY);
-            foreach (Rectangle run in RasterizeSilhouette(
-                     state.LastBatches,
-                     state.ScreenBounds,
-                     anchorX,
-                     anchorY,
-                     state.PivotX,
-                     state.PivotY,
-                     (float)state.CurrentScale * _window.DpiScale,
-                     _window.Left,
-                     _window.Top))
+            float pixelScale =
+                (float)state.CurrentScale * _window.DpiScale;
+            if (NeedsSilhouetteRefresh(
+                    state,
+                    anchorX,
+                    anchorY,
+                    pixelScale,
+                    now))
             {
-                _inputRegions.AddRange(
-                    ClipToWorkingAreas(run, _workingAreas));
+                CopySilhouetteRuns(
+                    state,
+                    RasterizeSilhouette(
+                        state.LastBatches,
+                        state.ScreenBounds,
+                        anchorX,
+                        anchorY,
+                        state.PivotX,
+                        state.PivotY,
+                        pixelScale,
+                        _window.Left,
+                        _window.Top));
+                state.HasCachedSilhouette = true;
+                state.CachedAnchorX = anchorX;
+                state.CachedAnchorY = anchorY;
+                state.CachedPixelScale = pixelScale;
+                state.CachedSilhouetteTimestamp = now;
+            }
+
+            foreach (Rectangle run in state.CachedSilhouetteRuns)
+            {
+                ClipToWorkingAreas(_inputRegions, run, _workingAreas);
             }
         }
 
         _inputWindow.SetInteractiveRegions(_inputRegions);
         _inputWindow.Show();
+    }
+
+    internal static bool NeedsSilhouetteRefresh(
+        NativeCharacterState state,
+        float anchorX,
+        float anchorY,
+        float pixelScale,
+        long nowTimestamp)
+    {
+        if (!state.HasCachedSilhouette)
+            return true;
+
+        if (Math.Abs(anchorX - state.CachedAnchorX) >=
+                SilhouetteAnchorEpsilonPixels ||
+            Math.Abs(anchorY - state.CachedAnchorY) >=
+                SilhouetteAnchorEpsilonPixels)
+            return true;
+
+        if (pixelScale != state.CachedPixelScale)
+            return true;
+
+        return Stopwatch.GetElapsedTime(
+            state.CachedSilhouetteTimestamp,
+            nowTimestamp) >= SilhouetteRefreshInterval;
+    }
+
+    private static void CopySilhouetteRuns(
+        NativeCharacterState state,
+        IReadOnlyList<Rectangle> runs)
+    {
+        // RasterizeSilhouette 返回的是共享 scratch 列表，
+        // 必须在下一次栅格化前复制到角色自己的缓存。
+        state.CachedSilhouetteRuns.Clear();
+        foreach (Rectangle run in runs)
+        {
+            state.CachedSilhouetteRuns.Add(run);
+        }
     }
 
     internal static IReadOnlyList<Rectangle> RasterizeSilhouette(
@@ -1411,14 +1472,18 @@ public sealed class NativeCharacterRenderHost :
             surface.PixelHeight);
     }
 
-    internal static IReadOnlyList<Rectangle> ClipToWorkingAreas(
+    internal static void ClipToWorkingAreas(
+        List<Rectangle> clipped,
         Rectangle characterRegion,
-        IEnumerable<Rectangle> workingAreas)
+        IReadOnlyList<Rectangle> workingAreas)
     {
-        return workingAreas
-            .Select(area => Rectangle.Intersect(characterRegion, area))
-            .Where(region => region.Width > 0 && region.Height > 0)
-            .ToArray();
+        foreach (Rectangle area in workingAreas)
+        {
+            Rectangle intersection =
+                Rectangle.Intersect(characterRegion, area);
+            if (intersection.Width > 0 && intersection.Height > 0)
+                clipped.Add(intersection);
+        }
     }
 
     internal static Rectangle ToClientPixelRectangle(
