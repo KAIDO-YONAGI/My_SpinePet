@@ -442,15 +442,8 @@
                                                 <StackPanel Grid.Column="2"
                                                             VerticalAlignment="Center">
                                                     <Button x:Name="VisibilityButton"
-                                                            Style="{StaticResource BaseButtonStyle}"
+                                                            Style="{StaticResource DetailActionButtonStyle}"
                                                             IsEnabled="{Binding CanToggleVisibility}"
-                                                            Width="78"
-                                                            Height="36"
-                                                            MinHeight="36"
-                                                            Padding="10,0"
-                                                            Background="#FF2A2A2A"
-                                                            BorderBrush="#FF5A5A5A"
-                                                            Foreground="#FFDCDCDC"
                                                             Tag="{Binding}"
                                                             IsTabStop="False"
                                                             AutomationProperties.Name="{Binding VisibilityActionAutomationLabel}">
@@ -468,12 +461,8 @@
                                                             <TextBlock Text="{Binding VisibilityActionLabel}" />
                                                         </StackPanel>
                                                     </Button>
-                                                    <Button Style="{StaticResource QuietButtonStyle}"
-                                                            Width="78"
-                                                            Height="28"
-                                                            MinHeight="28"
+                                                    <Button Style="{StaticResource DetailActionButtonStyle}"
                                                             Margin="0,5,0,0"
-                                                            Padding="6,0"
                                                             Tag="{Binding}"
                                                             IsTabStop="False"
                                                             ToolTip="Move this character back to its default position"
@@ -497,9 +486,6 @@
                                                     <Setter TargetName="StateDot" Property="Background" Value="{StaticResource SuccessBrush}" />
                                                     <Setter TargetName="CardStateText" Property="Text" Value="Visible on desktop" />
                                                     <Setter TargetName="CardStateText" Property="Foreground" Value="#FFBDBDBD" />
-                                                    <Setter TargetName="VisibilityButton" Property="Background" Value="{StaticResource AccentBrush}" />
-                                                    <Setter TargetName="VisibilityButton" Property="BorderBrush" Value="#FFFFFFFF" />
-                                                    <Setter TargetName="VisibilityButton" Property="Foreground" Value="#FF161616" />
                                                 </DataTrigger>
                                                 <DataTrigger Binding="{Binding IsLoading}" Value="True">
                                                     <Setter TargetName="StateDot" Property="Background" Value="{StaticResource WarningBrush}" />
@@ -763,11 +749,8 @@
                                                     AutomationProperties.Name="Character base scale percent"
                                                     VerticalAlignment="Center" />
                                             <Border Grid.Column="1"
-                                                    Padding="8,3"
-                                                    MinWidth="48"
-                                                    Margin="8,0,0,0"
-                                                    CornerRadius="8"
-                                                    Background="{StaticResource InfoSoftBrush}">
+                                                    Style="{StaticResource SliderValueBadgeStyle}"
+                                                    Margin="8,0,0,0">
                                                 <TextBlock Text="{Binding SelectedScaleBasePercentDisplay}"
                                                            Style="{StaticResource ValueTextStyle}"
                                                            Foreground="#FFC6C6C6"
@@ -793,11 +776,8 @@
                                                     AutomationProperties.Name="Character scale multiplier"
                                                     VerticalAlignment="Center" />
                                             <Border Grid.Column="1"
-                                                    Padding="8,3"
-                                                    MinWidth="48"
-                                                    Margin="8,0,0,0"
-                                                    CornerRadius="8"
-                                                    Background="{StaticResource InfoSoftBrush}">
+                                                    Style="{StaticResource SliderValueBadgeStyle}"
+                                                    Margin="8,0,0,0">
                                                 <TextBlock Text="{Binding SelectedScaleMultiplierDisplay}"
                                                            Style="{StaticResource ValueTextStyle}"
                                                            Foreground="#FFC6C6C6"
@@ -857,10 +837,8 @@
                                                     AutomationProperties.Name="Animation speed"
                                                     VerticalAlignment="Center" />
                                             <Border Grid.Column="1"
-                                                    Padding="8,3"
-                                                    CornerRadius="8"
-                                                    Margin="10,0,0,0"
-                                                    Background="{StaticResource InfoSoftBrush}">
+                                                    Style="{StaticResource SliderValueBadgeStyle}"
+                                                    Margin="10,0,0,0">
                                                 <TextBlock Text="{Binding SelectedSpeedDisplay}"
                                                            Style="{StaticResource ValueTextStyle}"
                                                            Foreground="#FFC6C6C6"

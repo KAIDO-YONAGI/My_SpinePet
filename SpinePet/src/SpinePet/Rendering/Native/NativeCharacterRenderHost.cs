@@ -392,9 +392,6 @@ public sealed class NativeCharacterRenderHost :
     {
         _configMode = configMode;
         CancelPointerInteraction(commitPosition: false);
-        UpdateWindowRegions();
-        foreach (NativeCharacterState state in _states.Values)
-            SelectModeAnimation(state);
     }
 
     public void SetRenderDragEnabled(bool enabled)
@@ -445,7 +442,6 @@ public sealed class NativeCharacterRenderHost :
     {
         if (_explicitMoveDepth > 0)
             _explicitMoveDepth--;
-        CommitComposition();
     }
 
     public void ResetCharacterPosition(string characterId)
@@ -904,7 +900,7 @@ public sealed class NativeCharacterRenderHost :
 
         if (_configMode)
         {
-            resource.SetAnimation(
+            resource.SetAnimationIfNeeded(
                 state.Config.ConfiguredAnimation,
                 true);
             return;
@@ -916,7 +912,7 @@ public sealed class NativeCharacterRenderHost :
             resource.SkeletonData.FindAnimation(configured) != null
                 ? configured
                 : SelectIdleAnimationName(resource.AnimationNames);
-        resource.SetAnimation(animation, true);
+        resource.SetAnimationIfNeeded(animation, true);
     }
 
     private static void PlayClickAnimation(NativeCharacterState state)
@@ -992,28 +988,15 @@ public sealed class NativeCharacterRenderHost :
                (animationNames.Count > 0 ? animationNames[0] : null);
     }
 
-    private static void PlayDragAnimation(NativeCharacterState state)
-    {
-        NativeSpineResource? resource = state.Resource;
-        if (resource == null)
-            return;
-
-        string[] candidates = resource.AnimationNames
-            .Where(name =>
-                !name.Equals("idle", StringComparison.OrdinalIgnoreCase) &&
-                !name.Equals("action", StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        if (candidates.Length == 0)
-            return;
-
-        resource.SetAnimation(
-            candidates[Random.Shared.Next(candidates.Length)],
-            true);
-    }
-
     private void UpdateWindowRegions()
     {
         if (_window == null || _inputWindow == null)
+            return;
+
+        // Mouse capture keeps drag input alive outside the old region. Avoid
+        // rebuilding and applying GDI regions on every drag frame; the cache
+        // is translated once when the drag ends.
+        if (_pointerDragging)
             return;
 
         // 输入区域以 8px 格子为精度，动画的亚像素变化不影响点击判定：
@@ -1575,10 +1558,10 @@ public sealed class NativeCharacterRenderHost :
         NativePoint point = new() { X = x, Y = y };
         if (message == WmRightButtonDown)
         {
-            ResetPointerState();
+            CancelPointerInteraction(commitPosition: false);
             if (TryHitCharacter(point, out NativeCharacterState? rightClickedState))
             {
-                CharacterRightClicked?.Invoke(rightClickedState.Config.Id);
+                QueueRightClick(rightClickedState.Config.Id);
             }
             return;
         }
@@ -1612,12 +1595,6 @@ public sealed class NativeCharacterRenderHost :
             {
                 _pointerDragging = true;
                 BeginCharacterMove();
-                if (_states.TryGetValue(
-                        _pointerCharacterId,
-                        out NativeCharacterState? dragState))
-                {
-                    PlayDragAnimation(dragState);
-                }
             }
 
             if (_pointerDragging)
@@ -1637,9 +1614,9 @@ public sealed class NativeCharacterRenderHost :
             {
                 if (_pointerDragging)
                 {
+                    AlignSilhouetteCacheToCurrentPosition(releasedState);
                     EndCharacterMove();
-                    SelectModeAnimation(releasedState);
-                    CharacterPositionCommitted?.Invoke(
+                    QueueCharacterPositionCommitted(
                         characterId,
                         releasedState.Config.PositionX,
                         releasedState.Config.PositionY);
@@ -1823,6 +1800,82 @@ public sealed class NativeCharacterRenderHost :
             (_pointerLatest.Y - _pointerStart.Y) / _window.DpiScale);
     }
 
+    private void AlignSilhouetteCacheToCurrentPosition(
+        NativeCharacterState state)
+    {
+        if (_window == null || !state.HasCachedSilhouette)
+            return;
+
+        float anchorX =
+            _window.Left + ToClientPixelX(state.Config.PositionX);
+        float anchorY =
+            _window.Top + ToClientPixelY(state.Config.PositionY);
+        int offsetX = (int)Math.Round(
+            anchorX - state.CachedAnchorX);
+        int offsetY = (int)Math.Round(
+            anchorY - state.CachedAnchorY);
+        if (offsetX != 0 || offsetY != 0)
+        {
+            for (int index = 0;
+                 index < state.CachedSilhouetteRuns.Count;
+                 index++)
+            {
+                Rectangle translated = state.CachedSilhouetteRuns[index];
+                translated.Offset(offsetX, offsetY);
+                state.CachedSilhouetteRuns[index] = translated;
+            }
+        }
+
+        state.CachedAnchorX = anchorX;
+        state.CachedAnchorY = anchorY;
+        state.CachedSilhouetteTimestamp = Stopwatch.GetTimestamp();
+    }
+
+    private void QueueCharacterPositionCommitted(
+        string characterId,
+        double left,
+        double top)
+    {
+        try
+        {
+            _dispatcher.BeginInvoke(
+                DispatcherPriority.ContextIdle,
+                new Action(() =>
+                {
+                    if (!_closed)
+                    {
+                        CharacterPositionCommitted?.Invoke(
+                            characterId,
+                            left,
+                            top);
+                    }
+                }));
+        }
+        catch (InvalidOperationException)
+        {
+            // The dispatcher can start shutting down while the input window
+            // is releasing mouse capture.
+        }
+    }
+
+    private void QueueRightClick(string characterId)
+    {
+        try
+        {
+            _dispatcher.BeginInvoke(
+                DispatcherPriority.Input,
+                new Action(() =>
+                {
+                    if (!_closed)
+                        CharacterRightClicked?.Invoke(characterId);
+                }));
+        }
+        catch (InvalidOperationException)
+        {
+            // Ignore input queued during application shutdown.
+        }
+    }
+
     private void CancelPointerIfCharacter(string characterId)
     {
         if (string.Equals(
@@ -1844,11 +1897,11 @@ public sealed class NativeCharacterRenderHost :
             FlushPendingPointerMove();
             if (_pointerDragging)
             {
+                AlignSilhouetteCacheToCurrentPosition(state);
                 EndCharacterMove();
-                SelectModeAnimation(state);
                 if (commitPosition)
                 {
-                    CharacterPositionCommitted?.Invoke(
+                    QueueCharacterPositionCommitted(
                         state.Config.Id,
                         state.Config.PositionX,
                         state.Config.PositionY);

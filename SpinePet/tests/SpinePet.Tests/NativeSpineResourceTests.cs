@@ -226,6 +226,32 @@ public sealed class NativeSpineResourceTests
         }
     }
 
+    [Fact]
+    public void InputAnimationTransitionsDoNotCrossFade()
+    {
+        string repositoryRoot = FindRepositoryRoot();
+        string resourceRoot = Path.Combine(repositoryRoot, "res");
+        if (!Directory.Exists(resourceRoot))
+            return;
+
+        IReadOnlyList<CharacterResourceFiles> installedResources =
+            new CharacterResourceDiscoveryService()
+                .DiscoverAll(resourceRoot);
+        if (installedResources.Count == 0)
+            return;
+        CharacterResourceFiles installed = installedResources[0];
+
+        CharacterConfig config = new()
+        {
+            AtlasPath = installed.AtlasPath,
+            SkeletonPath = installed.SkeletonPath
+        };
+
+        using NativeSpineResource resource = NativeSpineResource.Load(config);
+
+        Assert.Equal(0, resource.AnimationStateData.DefaultMix);
+    }
+
     private static string FindRepositoryRoot()
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);

@@ -20,7 +20,8 @@ internal sealed class NativeSpineResource : IDisposable
         Skeleton = new Skeleton(skeletonData);
         AnimationStateData = new AnimationStateData(skeletonData)
         {
-            DefaultMix = 0.15f
+            // Input-driven state changes must start from the selected state.
+            DefaultMix = 0
         };
         AnimationState = new AnimationState(AnimationStateData);
         AnimationNames = skeletonData.Animations
@@ -76,15 +77,28 @@ internal sealed class NativeSpineResource : IDisposable
 
     public void SetAnimation(string? animationName, bool repeat)
     {
-        string? selected = animationName;
-        if (string.IsNullOrWhiteSpace(selected) ||
-            SkeletonData.FindAnimation(selected) == null)
-        {
-            selected = AnimationNames.Count > 0 ? AnimationNames[0] : null;
-        }
+        string? selected = ResolveAnimationName(animationName);
 
         if (selected != null)
             AnimationState.SetAnimation(0, selected, repeat);
+    }
+
+    public void SetAnimationIfNeeded(string? animationName, bool repeat)
+    {
+        string? selected = ResolveAnimationName(animationName);
+        if (selected == null)
+            return;
+
+        TrackEntry? current = AnimationState.GetCurrent(0);
+        if (current?.Animation?.Name.Equals(
+                selected,
+                StringComparison.OrdinalIgnoreCase) == true &&
+            current.Loop == repeat)
+        {
+            return;
+        }
+
+        AnimationState.SetAnimation(0, selected, repeat);
     }
 
     public void Update(float elapsedSeconds)
@@ -97,6 +111,17 @@ internal sealed class NativeSpineResource : IDisposable
     public void Dispose()
     {
         Atlas.Dispose();
+    }
+
+    private string? ResolveAnimationName(string? animationName)
+    {
+        if (!string.IsNullOrWhiteSpace(animationName) &&
+            SkeletonData.FindAnimation(animationName) != null)
+        {
+            return animationName;
+        }
+
+        return AnimationNames.Count > 0 ? AnimationNames[0] : null;
     }
 
     private static SkeletonData LoadSkeletonData(string path, Atlas atlas)
