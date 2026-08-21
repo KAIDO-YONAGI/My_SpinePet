@@ -109,20 +109,16 @@ internal sealed class CharacterPreviewNavigationController
             double maximumOffset = Math.Max(
                 0,
                 scrollViewer.ExtentHeight - scrollViewer.ViewportHeight);
-            int? targetIndex = PreviewNavigationRules.FindBoundaryItemIndex(
+            int? targetIndex = PreviewNavigationRules.FindScrollSelectionIndex(
                 _cards.Items.Count,
                 scrollViewer.VerticalOffset,
                 maximumOffset,
+                GetItemGeometries(scrollViewer),
+                scrollViewer.ViewportHeight,
                 _cards.SelectedIndex >= 0
                     ? _cards.SelectedIndex
-                    : null);
-            targetIndex ??= PreviewNavigationRules.FindCenterItemIndex(
-                    GetItemGeometries(scrollViewer),
-                    scrollViewer.ViewportHeight,
-                    _cards.SelectedIndex >= 0
-                        ? _cards.SelectedIndex
-                        : null,
-                    PreviewColumnCount);
+                    : null,
+                PreviewColumnCount);
             if (targetIndex is int index &&
                 _cards.Items[index] is CharacterViewModel target &&
                 !ReferenceEquals(target, _cards.SelectedItem))
@@ -137,6 +133,47 @@ internal sealed class CharacterPreviewNavigationController
                 nameof(CharacterPreviewNavigationController),
                 $"scroll-follow-failed message={exception.Message}");
         }
+    }
+
+    public bool HandlePreviewMouseWheel(
+        int wheelDelta,
+        bool isUpdatingSelection)
+    {
+        if (!_isConfigMode() ||
+            isUpdatingSelection ||
+            !_cards.HasItems ||
+            _session.IsRevealing ||
+            wheelDelta == 0)
+        {
+            return false;
+        }
+
+        ScrollViewer? scrollViewer = GetScrollViewer();
+        if (scrollViewer == null)
+        {
+            return false;
+        }
+
+        double maximumOffset = Math.Max(
+            0,
+            scrollViewer.ExtentHeight - scrollViewer.ViewportHeight);
+        int? targetIndex =
+            PreviewNavigationRules.FindBoundaryWheelSelectionIndex(
+                _cards.Items.Count,
+                _cards.SelectedIndex,
+                wheelDelta,
+                scrollViewer.VerticalOffset,
+                maximumOffset);
+        if (targetIndex is not int index ||
+            _cards.Items[index] is not CharacterViewModel target ||
+            ReferenceEquals(target, _cards.SelectedItem))
+        {
+            return false;
+        }
+
+        _session.ApplyScrollSelection(
+            () => _cards.SelectedItem = target);
+        return true;
     }
 
     private void ScheduleRevealCompletion(CharacterViewModel character)

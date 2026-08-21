@@ -4,6 +4,98 @@ namespace SpinePet.Tests;
 
 public sealed class PreviewNavigationCoordinatorTests
 {
+    [Theory]
+    [InlineData(4, 3)]
+    [InlineData(1, 0)]
+    public void BoundaryWheelStepsOneItemTowardTheTop(
+        int selectedIndex,
+        int expectedIndex)
+    {
+        Assert.Equal(
+            expectedIndex,
+            PreviewNavigationRules.FindBoundaryWheelSelectionIndex(
+                itemCount: 8,
+                selectedIndex,
+                wheelDelta: 120,
+                verticalOffset: 0,
+                maximumOffset: 640));
+    }
+
+    [Theory]
+    [InlineData(3, 4)]
+    [InlineData(6, 7)]
+    public void BoundaryWheelStepsOneItemTowardTheBottom(
+        int selectedIndex,
+        int expectedIndex)
+    {
+        Assert.Equal(
+            expectedIndex,
+            PreviewNavigationRules.FindBoundaryWheelSelectionIndex(
+                itemCount: 8,
+                selectedIndex,
+                wheelDelta: -120,
+                verticalOffset: 640,
+                maximumOffset: 640));
+    }
+
+    [Theory]
+    [InlineData(0, 120, 0, 640)]
+    [InlineData(7, -120, 640, 640)]
+    [InlineData(3, 120, 320, 640)]
+    [InlineData(3, -120, 320, 640)]
+    public void BoundaryWheelDoesNotJumpOrReverseDirection(
+        int selectedIndex,
+        int wheelDelta,
+        double verticalOffset,
+        double maximumOffset)
+    {
+        Assert.Null(
+            PreviewNavigationRules.FindBoundaryWheelSelectionIndex(
+                itemCount: 8,
+                selectedIndex,
+                wheelDelta,
+                verticalOffset,
+                maximumOffset));
+    }
+
+    [Fact]
+    public void ScrollSelectionUsesTheVisibleCenterAtTheTopBoundary()
+    {
+        Assert.Equal(
+            1,
+            PreviewNavigationRules.FindScrollSelectionIndex(
+                itemCount: 8,
+                verticalOffset: 0,
+                maximumOffset: 640,
+                visibleItems:
+                [
+                    new(0, 0, 80),
+                    new(1, 0, 80),
+                    new(2, 80, 160),
+                    new(3, 80, 160)
+                ],
+                viewportHeight: 160));
+    }
+
+    [Fact]
+    public void ScrollSelectionUsesTheVisibleCenterAtTheBottomBoundary()
+    {
+        Assert.Equal(
+            5,
+            PreviewNavigationRules.FindScrollSelectionIndex(
+                itemCount: 8,
+                verticalOffset: 640,
+                maximumOffset: 640,
+                visibleItems:
+                [
+                    new(4, 0, 80),
+                    new(5, 0, 80),
+                    new(6, 80, 160),
+                    new(7, 80, 160)
+                ],
+                viewportHeight: 160));
+    }
+
     [Fact]
     public void BoundaryRuleSelectsFirstItemAtTop()
     {

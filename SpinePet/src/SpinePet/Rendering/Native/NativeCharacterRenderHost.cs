@@ -1628,7 +1628,6 @@ public sealed class NativeCharacterRenderHost :
             }
 
             ResetPointerState();
-            CommitComposition();
             return;
         }
 

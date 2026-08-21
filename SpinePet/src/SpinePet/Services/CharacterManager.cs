@@ -65,6 +65,8 @@ public sealed class CharacterManager
 
     public event Action<string, double, double>? CharacterScaleChanged;
 
+    public event Action<string, double, double>? CharacterPositionChanged;
+
     public event Action<string>? CharacterRightClicked;
 
     public ICharacterRenderHost RenderHost => _renderHost;
@@ -637,8 +639,8 @@ public sealed class CharacterManager
 
         character.PositionX = left;
         character.PositionY = top;
-        _configService.Save(_config);
-        CharactersChanged?.Invoke();
+        _ = _configService.SaveAsync(_config);
+        CharacterPositionChanged?.Invoke(characterId, left, top);
     }
 
     private void OnCharacterRightClicked(string characterId)

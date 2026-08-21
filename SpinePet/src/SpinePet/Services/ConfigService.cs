@@ -19,7 +19,10 @@ public sealed class ConfigService
 
     private readonly string _configPath;
     private readonly Rect? _workArea;
+    private readonly object _saveSync = new();
     private bool _protectExistingConfig;
+    private long _saveVersion;
+    private long _lastWrittenSaveVersion;
 
     public ConfigService(string? configPath = null)
         : this(configPath, null)
@@ -263,36 +266,89 @@ public sealed class ConfigService
 
     public void Save(AppConfig config)
     {
+        string? json = PrepareSaveJson(config);
+        if (json == null)
+        {
+            return;
+        }
+
+        long version = Interlocked.Increment(ref _saveVersion);
+        if (WriteSaveJson(json, version))
+        {
+            config.RequiresRewrite = false;
+        }
+    }
+
+    public Task SaveAsync(AppConfig config)
+    {
+        string? json = PrepareSaveJson(config);
+        if (json == null)
+        {
+            return Task.CompletedTask;
+        }
+
+        long version = Interlocked.Increment(ref _saveVersion);
+        return Task.Run(() => WriteSaveJson(json, version));
+    }
+
+    private string? PrepareSaveJson(AppConfig config)
+    {
         if (_protectExistingConfig)
         {
             AppLogger.Write(
                 nameof(ConfigService),
                 "save-skipped reason=corrupt-config-backup-unavailable");
-            return;
+            return null;
         }
 
-        string temporaryPath = $"{_configPath}.tmp";
         try
         {
             NormalizeConfiguration(config);
-            string? directory = Path.GetDirectoryName(_configPath);
-            if (!string.IsNullOrEmpty(directory))
-            {
-                Directory.CreateDirectory(directory);
-            }
-
-            string json = JsonSerializer.Serialize(config, JsonOptions);
-            File.WriteAllText(temporaryPath, json);
-            File.Move(temporaryPath, _configPath, overwrite: true);
-            config.RequiresRewrite = false;
+            return JsonSerializer.Serialize(config, JsonOptions);
         }
         catch (Exception ex)
         {
-            AppLogger.Write(nameof(ConfigService), $"save-failed message={ex.Message}");
+            AppLogger.Write(
+                nameof(ConfigService),
+                $"save-prepare-failed message={ex.Message}");
+            return null;
         }
-        finally
+    }
+
+    private bool WriteSaveJson(string json, long version)
+    {
+        lock (_saveSync)
         {
-            TryDeleteTemporaryFile(temporaryPath);
+            if (version < _lastWrittenSaveVersion)
+            {
+                return true;
+            }
+
+            string temporaryPath = $"{_configPath}.tmp";
+            try
+            {
+                string? directory = Path.GetDirectoryName(_configPath);
+                if (!string.IsNullOrEmpty(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
+                File.WriteAllText(temporaryPath, json);
+                File.Move(temporaryPath, _configPath, overwrite: true);
+                _lastWrittenSaveVersion = version;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                AppLogger.Write(
+                    nameof(ConfigService),
+                    $"save-failed message={ex.Message}");
+                return false;
+            }
+            finally
+            {
+                TryDeleteTemporaryFile(temporaryPath);
+            }
         }
     }
 

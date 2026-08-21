@@ -226,6 +226,8 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             _libraryController.RefreshCharacterList;
         _characterManager.CharacterScaleChanged +=
             _settingsController.HandleCharacterScaleChanged;
+        _characterManager.CharacterPositionChanged +=
+            OnCharacterPositionChanged;
         _characterManager.CharacterRightClicked +=
             OnCharacterRightClicked;
     }
@@ -533,6 +535,8 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         _characterCards.AddHandler(
             ScrollViewer.ScrollChangedEvent,
             new ScrollChangedEventHandler(OnCharacterCardsScrollChanged));
+        _characterCards.PreviewMouseWheel +=
+            OnCharacterCardsPreviewMouseWheel;
         _characterCards.PreviewKeyDown +=
             OnCharacterCardsPreviewKeyDown;
         _characterCards.AddHandler(
@@ -584,6 +588,18 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         _previewNavigation.HandleScrollChanged(
             e,
             _libraryController.IsUpdatingSelection);
+
+    private void OnCharacterCardsPreviewMouseWheel(
+        object sender,
+        MouseWheelEventArgs e)
+    {
+        if (_previewNavigation.HandlePreviewMouseWheel(
+                e.Delta,
+                _libraryController.IsUpdatingSelection))
+        {
+            e.Handled = true;
+        }
+    }
 
     private async void OnCharacterCardsPreviewKeyDown(
         object sender,
@@ -744,6 +760,8 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             _libraryController.RefreshCharacterList;
         _characterManager.CharacterScaleChanged -=
             OnCharacterScaleChanged;
+        _characterManager.CharacterPositionChanged -=
+            OnCharacterPositionChanged;
         _characterManager.CharacterRightClicked -=
             OnCharacterRightClicked;
         Dispose();
@@ -757,6 +775,22 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             characterId,
             maximumScale,
             currentScale);
+
+    private void OnCharacterPositionChanged(
+        string characterId,
+        double left,
+        double top)
+    {
+        CharacterViewModel? character = _characters.FirstOrDefault(
+            item => item.Id == characterId);
+        if (character == null)
+        {
+            return;
+        }
+
+        character.PositionX = (int)left;
+        character.PositionY = (int)top;
+    }
 
     private void SyncSelectedCharacterSettings() =>
         _settingsController?.SyncSelectedCharacterSettings();
