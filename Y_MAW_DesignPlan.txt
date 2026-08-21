@@ -1,0 +1,185 @@
+多 Agent 工作流与并发租约体系
+
+## 总体设计
+
+建立受 Git 管理的 `Y_MultipleAgentWorkflow/`，作为 Codex、Claude、ZCode 共用的唯一权威文档入口，并加入 `WorkingAgent/` 临时租约注册表。
+
+```text
+Y_MultipleAgentWorkflow/
+├─ Router.md
+├─ DeveloperLog.md
+├─ WorkingAgent/
+│  └─ README.md
+├─ Workflow/
+│  ├─ Router.md
+│  ├─ DeveloperLog.md
+│  ├─ Workflow_Guide.md
+│  ├─ Concurrency_Guide.md
+│  ├─ Templates/
+│  │  ├─ BusinessRouter.template.md
+│  │  └─ DeveloperLog.template.md
+│  └─ Scripts/
+│     ├─ WorkingAgent.ps1
+│     └─ Test-WorkingAgent.ps1
+├─ GUI/
+│  ├─ Router.md
+│  ├─ DeveloperLog.md
+│  └─ GUI_Design.md
+└─ Resources/
+   ├─ Router.md
+   ├─ DeveloperLog.md
+   ├─ Load/
+   │  ├─ Router.md
+   │  ├─ DeveloperLog.md
+   │  └─ SpinePet_Resources_Load_Guide.md
+   ├─ MatchClean/
+   │  ├─ Router.md
+   │  ├─ DeveloperLog.md
+   │  └─ SpineResource_Match_Clean_Guide.md
+   └─ StateSupport/
+      ├─ Router.md
+      ├─ DeveloperLog.md
+      └─ Aim_Cover_Proposal.md
+```
+
+ZCode 与 Codex 共用根 `AGENTS.md`；Claude 使用根 `CLAUDE.md`。两者只负责要求读取根 Router，不复制项目操作规则。删除 `SpinePet/AGENTS.md` 与 `SpinePet/CLAUDE.md`。
+
+## WorkingAgent 协议
+
+Agent 可以先进行轻量只读探索以确定任务类型，但在详细工作、创建子 Agent或首次修改前必须取得租约。
+
+标记文件使用用户约定的格式：
+
+```text
+<AgentName>_<Hash>.txt
+```
+
+Hash 取 Agent 名、模型、会话 ID、UTC 启动时间和随机 nonce 的 SHA-256 前 12 位。文件内容采用 JSON：
+
+```json
+{
+  "schemaVersion": 1,
+  "leaseId": "唯一租约ID",
+  "agentName": "Codex",
+  "model": "模型名称",
+  "sessionId": "会话或线程标识",
+  "parentLeaseId": null,
+  "taskType": "GUI",
+  "categories": ["GUI"],
+  "summary": "任务简述",
+  "accessMode": "read|write|exclusive",
+  "resources": ["path:...", "runtime:...", "pipeline:..."],
+  "status": "active|waiting|override",
+  "startedAtUtc": "...",
+  "heartbeatAtUtc": "...",
+  "conflictingLeaseIds": [],
+  "overrideApprovedAtUtc": null
+}
+```
+
+`WorkingAgent.ps1` 提供统一接口：
+
+```powershell
+-Action Acquire
+-Action Heartbeat
+-Action UpdateScope
+-Action Wait
+-Action Release
+-Action Status
+```
+
+所有扫描、登记、更新和删除操作都通过固定注册表锁以独占文件句柄执行，避免两个 Agent 同时扫描到空目录后一起登记成功。Agent 只能更新或删除与自己 `leaseId` 匹配的文件。
+
+只读子 Agent若不能自行登记，由父 Agent代为创建带 `parentLeaseId` 的租约。
+
+## 冲突规则
+
+冲突同时参考业务类别、访问模式和资源声明，不只比较任务名称。
+
+- `read + read` 可并行。
+- 路径相交时，任何包含 `write` 的组合均冲突；父目录与子目录视为相交。
+- `exclusive` 与相同资源上的所有任务冲突。
+- 写任务没有提供足够的资源范围时，同一业务根内默认冲突。
+- Agent 工作中扩大修改范围时，必须先调用 `UpdateScope` 重新检测，不能先改后补登记。
+- Router 与 DeveloperLog 的更新使用短时 `workflow:<业务根>` 独占资源，不把同类任务全程判为冲突。
+- 根路由结构调整使用 `workflow:root` 独占资源。
+
+预定义共享资源至少包括：
+
+```text
+runtime:SpinePet
+pipeline:BuildPublishRun
+config:SpinePetUser
+git:index
+workflow:root
+workflow:GUI
+workflow:Resources.Load
+workflow:Resources.MatchClean
+workflow:Resources.StateSupport
+```
+
+共享工作树允许路径不重叠的写任务并行，但 Build、Publish、Run 是全局独占屏障。执行前必须确认没有其他活动写租约；若仍存在，必须等待或再次向用户确认是否接受把其他 Agent 的未完成修改一起构建和运行。
+
+## 心跳、等待与强制继续
+
+- 活动或等待中的 Agent 每 5 分钟、每次长操作前后以及扩大任务范围时刷新心跳。
+- 15 分钟没有心跳仅标记为“疑似失活”，不得自动删除或接管。
+- 非冲突的疑似失活记录不阻塞任务，但应在状态输出中提示。
+- 活动或疑似失活租约与当前任务冲突时，向用户报告 Agent、任务、资源、最后心跳和并发后果。
+
+用户可以选择：
+
+1. **等待**：当前 Agent 写入 `waiting` 状态，每 60 秒重新检查；冲突解除后原子获取活动租约。等待 30 分钟仍未解除时报告用户并保持等待状态。
+2. **继续**：记录冲突租约和用户确认时间，以 `override` 状态开始；只放行本次声明的冲突范围。
+3. **确认旧 Agent 已停止**：清理指定疑似失活租约后重新原子获取。
+4. **停止当前任务**：释放当前等待租约，不进行修改。
+
+普通并发覆盖许可不自动包含 Build/Publish/Run；构建屏障仍有冲突时必须单独确认。
+
+任务完成、失败或取消后都应在 `finally` 路径释放租约。若 Agent 崩溃导致无法释放，由心跳机制在后续任务中识别。
+
+## 路由、增殖与文档维护
+
+- 根 Router 规定权威顺序：用户最新要求 → 实际代码/资源 → Guide/Design → 业务 Router → Log/Proposal → 模型入口与 Skill。
+- 文档索引记录文档 ID、路径、职责摘要、触发任务、状态、更新时间、核验时间和旧路径。
+- 没有同类业务时，在最近大类下使用模板创建业务根；新增顶级大类或改变工作区规则必须先询问用户。
+- `Y_MultipleAgentWorkflow` 以下最多五层；即将出现第六层时必须合并、提升或精简分类。
+- 未实施设计统一标记为 `Proposal`，不能作为现行能力使用。
+
+每个业务 Router 保存维护计数 `0/5`，DeveloperLog 保存任务证据：
+
+- 完成且实际影响该业务的任务增加一次。
+- 跨业务任务对每个受影响业务分别增加一次。
+- 失败、取消、并发登记和纯文档维护不计数。
+- 第五次完成后复查该周期任务与代码，更新权威文档和路径索引；无需修改时记录 `reviewed-no-change`，然后重置计数。
+
+## 资料迁移与版本管理
+
+- 修正并迁移三份权威文档到新结构。
+- GUI 重构稳定结论并入 `GUI_Design.md`，历史过程进入 GUI 日志。
+- Aim/Cover 内容迁入 `Aim_Cover_Proposal.md`。
+- `.zcode/skills` 保留触发描述，但具体硬规则迁入 Router 和指南，Skill 只负责导航。
+- 更新 `.gitignore`，跟踪根入口、工作流文档、脚本和 `.zcode/skills`。
+- 忽略 `WorkingAgent/*.txt`、注册表锁和临时文件，只跟踪 `WorkingAgent/README.md`。
+- 迁移完成后删除旧指南、零散计划和嵌套入口，不保留双重权威或跳转存根。
+
+## 验证
+
+运行 `Test-WorkingAgent.ps1`，覆盖：
+
+- 两个只读任务并行。
+- 不相交写任务并行。
+- 同路径、父子路径和隐式共享资源冲突。
+- 两个进程同时 Acquire 时只有一个成功。
+- 心跳正常、15 分钟疑似失活和禁止自动删除。
+- 等待后自动取得租约。
+- 用户覆盖继续及冲突记录。
+- 工作中扩大范围后发现新冲突。
+- Router/Log 短时临界区。
+- Build/Publish/Run 全局屏障。
+- Agent 不能释放其他租约。
+- 异常退出留下的标记可被后续识别。
+
+再演练 GUI、资源导入、清理、Aim/Cover、跨业务、未知业务、第五次维护和超过五层等路由场景，并全仓确认旧路径和旧文件名引用已经消失。
+
+由于新增 PowerShell 并发控制脚本属于非文档改动，实施完成后必须终止已有 `SpinePet.exe`，依次执行 `Build.bat`、`Publish.bat`、`Run.bat`，最后确认新进程持续运行。
