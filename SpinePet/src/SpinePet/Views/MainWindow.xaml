@@ -1,5 +1,4 @@
-<Window x:Class="SpinePet.Views.MainWindow"
-        x:Name="RootWindow"
+<Window x:Name="RootWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:views="clr-namespace:SpinePet.Views"
@@ -18,7 +17,6 @@
         ResizeMode="CanResize"
         Topmost="True"
         ShowInTaskbar="False"
-        Loaded="OnWindowLoaded"
         AutomationProperties.Name="SpinePet configuration panel">
     <Window.InputBindings>
         <KeyBinding Key="F"
@@ -34,12 +32,12 @@
         </ResourceDictionary>
     </Window.Resources>
 
-    <Border Background="{StaticResource WindowGradientBrush}"
+    <Border x:Name="WindowChrome"
+            Background="{StaticResource WindowGradientBrush}"
             CornerRadius="8"
             BorderBrush="#FF303030"
             BorderThickness="1"
-            ClipToBounds="True"
-            MouseLeftButtonDown="OnWindowChromeMouseLeftButtonDown">
+            ClipToBounds="True">
         <Grid>
             <Border Height="3"
                     VerticalAlignment="Top"
@@ -55,7 +53,7 @@
                     </Grid.ColumnDefinitions>
 
                     <!-- Left column: character library -->
-                    <Border Grid.Column="0"
+            <Border Grid.Column="0"
                             Style="{StaticResource SectionBorderStyle}"
                             Margin="0,0,6,0">
                         <Grid>
@@ -114,7 +112,7 @@
                                         MinHeight="28"
                                         Margin="0,0,6,0"
                                         Padding="8,0"
-                                        Click="OnAddCharacter"
+                                        x:Name="AddCharacterButton"
                                         ToolTip="Import a Spine character"
                                         AutomationProperties.Name="Add character">
                                     <StackPanel Orientation="Horizontal">
@@ -136,7 +134,7 @@
                                         Height="28"
                                         MinHeight="28"
                                         Padding="8,0"
-                                        Click="OnScanResources"
+                                        x:Name="ScanResourcesButton"
                                         ToolTip="Scan the resource folder"
                                         AutomationProperties.Name="Scan resource folder">
                                     <StackPanel Orientation="Horizontal">
@@ -159,7 +157,7 @@
                                         MinHeight="28"
                                         Margin="6,0,0,0"
                                         Padding="8,0"
-                                        Click="OnOpenResourceFolder"
+                                        x:Name="OpenResourceFolderButton"
                                         ToolTip="Open the resource folder"
                                         AutomationProperties.Name="Open resource folder">
                                     <StackPanel Orientation="Horizontal">
@@ -330,9 +328,7 @@
                                 <ListBox x:Name="CharacterCards"
                                          ItemsSource="{Binding CharacterView}"
                                          SelectedItem="{Binding SelectedCharacter, Mode=TwoWay}"
-                                         SelectionChanged="OnCharacterSelectionChanged"
-                                         ScrollViewer.ScrollChanged="OnCharacterCardsScrollChanged"
-                                         PreviewKeyDown="OnCharacterCardsPreviewKeyDown"
+
                                          Background="Transparent"
                                          BorderThickness="0"
                                          ItemContainerStyle="{StaticResource CharacterCardItemStyle}"
@@ -455,7 +451,6 @@
                                                             Background="#FF2A2A2A"
                                                             BorderBrush="#FF5A5A5A"
                                                             Foreground="#FFDCDCDC"
-                                                            Click="OnToggleCharacter"
                                                             Tag="{Binding}"
                                                             IsTabStop="False"
                                                             AutomationProperties.Name="{Binding VisibilityActionAutomationLabel}">
@@ -479,7 +474,6 @@
                                                             MinHeight="28"
                                                             Margin="0,5,0,0"
                                                             Padding="6,0"
-                                                            Click="OnResetCharacterPosition"
                                                             Tag="{Binding}"
                                                             IsTabStop="False"
                                                             ToolTip="Move this character back to its default position"
@@ -663,7 +657,6 @@
                                 <ComboBox x:Name="AnimationCombo"
                                           ItemsSource="{Binding SelectedAnimationNames}"
                                           SelectedItem="{Binding SelectedAnimation, Mode=TwoWay}"
-                                          SelectionChanged="OnAnimationChanged"
                                           IsEnabled="{Binding HasSelectedCharacter}"
                                           Height="32"
                                           AutomationProperties.Name="Character animation"
@@ -714,9 +707,7 @@
                                         </StackPanel>
                                         <CheckBox Grid.Column="1"
                                                   IsChecked="{Binding AllowRenderDrag, Mode=TwoWay}"
-                                                  Checked="OnDragToggleStateChanged"
-                                                  Unchecked="OnDragToggleStateChanged"
-                                                  Loaded="OnDragToggleLoaded"
+                                                  x:Name="AllowDraggingToggle"
                                                   VerticalAlignment="Center"
                                                   AutomationProperties.Name="Allow dragging in render mode" />
                                     </Grid>
@@ -751,7 +742,7 @@
                                                     MinHeight="24"
                                                     Padding="6,0"
                                                     VerticalAlignment="Center"
-                                                    Click="OnResetScale"
+                                                    x:Name="ResetScaleButton"
                                                     IsEnabled="{Binding HasSelectedCharacter}"
                                                     AutomationProperties.Name="Reset character scale" />
                                         </Grid>
@@ -848,7 +839,7 @@
                                                     MinHeight="24"
                                                     Padding="6,0"
                                                     VerticalAlignment="Center"
-                                                    Click="OnResetSpeed"
+                                                    x:Name="ResetSpeedButton"
                                                     IsEnabled="{Binding HasSelectedCharacter}"
                                                     AutomationProperties.Name="Reset animation speed" />
                                         </Grid>
@@ -862,7 +853,6 @@
                                                     Minimum="10"
                                                     Maximum="200"
                                                     Value="{Binding SelectedSpeed, Mode=TwoWay}"
-                                                    ValueChanged="OnSpeedChanged"
                                                     IsEnabled="{Binding HasSelectedCharacter}"
                                                     AutomationProperties.Name="Animation speed"
                                                     VerticalAlignment="Center" />
@@ -884,7 +874,7 @@
 
                                 <Button Style="{StaticResource DangerButtonStyle}"
                                         Height="30"
-                                        Click="OnDeleteSelectedSkin"
+                                        x:Name="DeleteSkinButton"
                                         IsEnabled="{Binding HasSelectedCharacter}"
                                         ToolTip="Move the selected skin resources to the Recycle Bin"
                                         AutomationProperties.Name="Delete selected skin">
@@ -907,7 +897,7 @@
                                 Margin="0,10,0,0"
                                 Style="{StaticResource PrimaryButtonStyle}"
                                 Height="36"
-                                Click="OnExitConfiguration"
+                                x:Name="FinishConfigurationButton"
                                 Content="Finish Configuration"
                                 AutomationProperties.Name="Finish configuration" />
                     </Grid>

@@ -3,8 +3,13 @@ using System.Text.RegularExpressions;
 
 namespace SpinePet.Services;
 
-internal static partial class CharacterResourceDirectorySafety
+internal static class CharacterResourceDirectorySafety
 {
+    private static readonly Regex CharacterResourceFileNamePattern =
+        new(
+            @"^c(?<character>\d+)_",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     private static readonly EnumerationOptions DirectChildren = new()
     {
         AttributesToSkip = 0,
@@ -51,7 +56,7 @@ internal static partial class CharacterResourceDirectorySafety
                     continue;
                 }
 
-                Match match = CharacterResourceFileNamePattern().Match(
+                Match match = CharacterResourceFileNamePattern.Match(
                     entry.Name);
                 if (match.Success &&
                     !string.Equals(
@@ -68,8 +73,4 @@ internal static partial class CharacterResourceDirectorySafety
         }
     }
 
-    [GeneratedRegex(
-        @"^c(?<character>\d+)_",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex CharacterResourceFileNamePattern();
 }

@@ -7,6 +7,45 @@ internal readonly record struct PreviewItemGeometry(
 
 internal static class PreviewNavigationRules
 {
+    public static int? FindBoundaryItemIndex(
+        int itemCount,
+        double verticalOffset,
+        double maximumOffset,
+        int? preferredIndex = null,
+        double tolerance = 1.0)
+    {
+        if (itemCount <= 0 ||
+            !double.IsFinite(verticalOffset) ||
+            !double.IsFinite(maximumOffset) ||
+            maximumOffset < 0 ||
+            tolerance < 0)
+        {
+            return null;
+        }
+
+        int? preferred = preferredIndex is int index &&
+            index >= 0 &&
+            index < itemCount
+            ? preferredIndex
+            : null;
+        if (maximumOffset <= tolerance)
+        {
+            return preferred ?? 0;
+        }
+
+        if (verticalOffset <= tolerance)
+        {
+            return 0;
+        }
+
+        if (verticalOffset >= maximumOffset - tolerance)
+        {
+            return itemCount - 1;
+        }
+
+        return null;
+    }
+
     public static int? FindCenterItemIndex(
         IEnumerable<PreviewItemGeometry> items,
         double viewportHeight,
@@ -109,28 +148,6 @@ internal sealed class PreviewNavigationCoordinator
         !string.IsNullOrEmpty(_revealTargetId);
 
     public string? RevealTargetId => _revealTargetId;
-
-    public static int? FindCenterItemIndex(
-        IEnumerable<PreviewItemGeometry> items,
-        double viewportHeight)
-    {
-        if (viewportHeight <= 0)
-        {
-            return null;
-        }
-
-        double viewportCenter = viewportHeight / 2;
-        return items
-            .Where(item =>
-                item.Bottom > 0 &&
-                item.Top < viewportHeight &&
-                item.Bottom >= item.Top)
-            .OrderBy(item =>
-                Math.Abs(((item.Top + item.Bottom) / 2) - viewportCenter))
-            .ThenBy(item => item.Index)
-            .Select(item => (int?)item.Index)
-            .FirstOrDefault();
-    }
 
     public void BeginReveal(string characterId)
     {

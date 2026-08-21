@@ -39,11 +39,9 @@ public sealed class CharacterLibraryLayoutTests
         XElement itemsPanel = Assert.Single(
             characterCards.Descendants(presentation + "UniformGrid"));
         Assert.Equal("2", (string?)itemsPanel.Attribute("Columns"));
-        Assert.Equal(
-            1,
-            characterCards.Attributes().Count(attribute =>
-                attribute.Name.LocalName == "ScrollViewer.ScrollChanged" &&
-                attribute.Value == "OnCharacterCardsScrollChanged"));
+        Assert.DoesNotContain(
+            characterCards.Attributes(),
+            attribute => attribute.Name.LocalName == "ScrollViewer.ScrollChanged");
     }
 
     [Fact]
@@ -56,8 +54,9 @@ public sealed class CharacterLibraryLayoutTests
         Assert.Contains(
             document.Descendants(presentation + "Button"),
             element =>
-                (string?)element.Attribute("Click") ==
-                "OnResetCharacterPosition");
+                (string?)element.Attribute(
+                    "AutomationProperties.Name") ==
+                "Reset character position");
         Assert.DoesNotContain(
             document.Descendants(),
             element => element.Attributes().Any(attribute =>
@@ -68,12 +67,16 @@ public sealed class CharacterLibraryLayoutTests
         XElement visibilityButton = Assert.Single(
             document.Descendants(presentation + "Button"),
             element =>
-                (string?)element.Attribute("Click") == "OnToggleCharacter");
+                (string?)element.Attribute(
+                    XNamespace.Get(
+                        "http://schemas.microsoft.com/winfx/2006/xaml") +
+                    "Name") == "VisibilityButton");
         XElement resetButton = Assert.Single(
             document.Descendants(presentation + "Button"),
             element =>
-                (string?)element.Attribute("Click") ==
-                "OnResetCharacterPosition");
+                (string?)element.Attribute(
+                    "AutomationProperties.Name") ==
+                "Reset character position");
         Assert.Same(visibilityButton.Parent, resetButton.Parent);
     }
 
@@ -96,13 +99,13 @@ public sealed class CharacterLibraryLayoutTests
         Assert.Contains(
             document.Descendants(presentation + "Button"),
             element =>
-                (string?)element.Attribute("Click") ==
-                "OnOpenResourceFolder");
+                (string?)element.Attribute("AutomationProperties.Name") ==
+                "Open resource folder");
         Assert.Contains(
             document.Descendants(presentation + "Button"),
             element =>
-                (string?)element.Attribute("Click") ==
-                "OnDeleteSelectedSkin");
+                (string?)element.Attribute("AutomationProperties.Name") ==
+                "Delete selected skin");
 
         XElement skinMenu = Assert.Single(
             styles.Descendants(presentation + "ContextMenu"),
@@ -129,6 +132,46 @@ public sealed class CharacterLibraryLayoutTests
                 attribute.Value.Contains(
                     "SwitchResourceCommand",
                     StringComparison.Ordinal)));
+    }
+
+    [Fact]
+    public void ViewUsesRuntimeEventWiringAndNoPartialWindowFilesRemain()
+    {
+        XDocument document = LoadMainWindowXaml();
+        XNamespace x =
+            "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        Assert.Null(document.Root?.Attribute(x + "Class"));
+        Assert.DoesNotContain(
+            document.Descendants(),
+            element => element.Attributes().Any(attribute =>
+                attribute.Name.LocalName is
+                    "Click" or
+                    "Loaded" or
+                    "Checked" or
+                    "Unchecked" or
+                    "SelectionChanged" or
+                    "PreviewKeyDown" or
+                    "ValueChanged" or
+                    "MouseLeftButtonDown"));
+
+        string viewsPath = Path.Combine(
+            FindRepositoryRoot(),
+            "src",
+            "SpinePet",
+            "Views");
+        Assert.False(File.Exists(
+            Path.Combine(viewsPath, "MainWindow.CharacterLibrary.cs")));
+        Assert.False(File.Exists(
+            Path.Combine(viewsPath, "MainWindow.SelectionSettings.cs")));
+        Assert.DoesNotContain(
+            Directory.EnumerateFiles(
+                viewsPath,
+                "*.cs",
+                SearchOption.TopDirectoryOnly),
+            path => File.ReadAllText(path).Contains(
+                "partial class MainWindow",
+                StringComparison.Ordinal));
     }
 
     [Fact]

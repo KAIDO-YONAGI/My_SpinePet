@@ -8,7 +8,7 @@ using Application = System.Windows.Application;
 
 namespace SpinePet;
 
-public partial class App : Application
+public sealed class App : Application
 {
     private const string SingleInstanceMutexName =
         @"Local\SpinePet.SingleInstance.v1";
@@ -27,8 +27,21 @@ public partial class App : Application
     private int _shutdownRequested;
     private int _emergencyExitRequested;
 
+    static App()
+    {
+        AppLogger.Write(nameof(App), "app-static-constructed");
+    }
+
+    public App()
+    {
+        // App.xaml was removed in favor of this explicit entry point, so the
+        // shutdown mode must be applied here instead of through markup.
+        ShutdownMode = ShutdownMode.OnExplicitShutdown;
+    }
+
     protected override void OnStartup(StartupEventArgs e)
     {
+        AppLogger.Write(nameof(App), "startup-begin");
         base.OnStartup(e);
 
         _singleInstanceMutex = new Mutex(
@@ -89,6 +102,7 @@ public partial class App : Application
         _ = RestoreCharactersAsync();
 
         _mainWindow.Show();
+        AppLogger.Write(nameof(App), "startup-complete");
     }
 
     private void SynchronizeDiscoveredResources(

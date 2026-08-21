@@ -7,8 +7,18 @@ using SpinePet.Models;
 
 namespace SpinePet.Services;
 
-public sealed partial class UnityBundleImportService
+public sealed class UnityBundleImportService
 {
+    private static readonly Regex BundleFileNamePattern =
+        new(
+            @"^c(?<character>\d+)_(?<skin>[^_]+)_" +
+            @"(?<type>standing|icons)(?:_.*)?$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+    private static readonly Regex ReservedDirectoryNamePattern =
+        new(
+            @"^(con|prn|aux|nul|com[1-9]|lpt[1-9])$",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+
     private static readonly byte[] UnityFsHeader = "UnityFS"u8.ToArray();
     private static readonly TimeSpan ProcessTerminationTimeout =
         TimeSpan.FromSeconds(3);
@@ -52,7 +62,7 @@ public sealed partial class UnityBundleImportService
         out CharacterBundleDescriptor? descriptor)
     {
         string fileName = Path.GetFileNameWithoutExtension(filePath);
-        Match match = BundleFileNamePattern().Match(fileName);
+        Match match = BundleFileNamePattern.Match(fileName);
         if (!match.Success)
         {
             descriptor = null;
@@ -694,7 +704,7 @@ public sealed partial class UnityBundleImportService
             normalized is "." or ".." ||
             !string.Equals(value, normalized, StringComparison.Ordinal) ||
             normalized.EndsWith('.') ||
-            ReservedDirectoryNamePattern().IsMatch(
+            ReservedDirectoryNamePattern.IsMatch(
                 Path.GetFileNameWithoutExtension(normalized)) ||
             normalized.Any(invalidCharacters.Contains))
         {
@@ -753,14 +763,4 @@ public sealed partial class UnityBundleImportService
                 "importing."));
     }
 
-    [GeneratedRegex(
-        @"^c(?<character>\d+)_(?<skin>[^_]+)_" +
-        @"(?<type>standing|icons)(?:_.*)?$",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex BundleFileNamePattern();
-
-    [GeneratedRegex(
-        @"^(con|prn|aux|nul|com[1-9]|lpt[1-9])$",
-        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex ReservedDirectoryNamePattern();
 }

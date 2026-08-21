@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
@@ -14,42 +15,55 @@ using SpinePet.Infrastructure;
 using SpinePet.Models;
 using SpinePet.Services;
 using SpinePet.ViewModels;
+using Button = System.Windows.Controls.Button;
+using CheckBox = System.Windows.Controls.CheckBox;
+using ComboBox = System.Windows.Controls.ComboBox;
+using KeyEventArgs = System.Windows.Input.KeyEventArgs;
+using ListBox = System.Windows.Controls.ListBox;
+using Slider = System.Windows.Controls.Slider;
+using TextBlock = System.Windows.Controls.TextBlock;
+using TextBox = System.Windows.Controls.TextBox;
 
 namespace SpinePet.Views;
 
-public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
+public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
+    ICharacterSettingsHost
 {
-    private const double DefaultMaxScale = 2.0;
-    private const double DefaultScale = 0.2;
-    private const double MinimumScale = 0.05;
-    private const double MinimumMaximumScale = 0.2;
-    private const double MinimumScaleBasePercent = 0;
-    private const double MaximumScaleBasePercent = 100;
-    private const double MinimumScaleMultiplier = 1;
-    private const double MaximumScaleMultiplier = 5;
-    // 基础滑条 0–100 只映射 0–20% 的实际缩放。
-    private const double MaximumBaseScale = 0.2;
-
     private readonly CharacterManager _characterManager;
-    private readonly CharacterResourceDiscoveryService _resourceDiscovery;
-    private readonly UnityBundleImportService _bundleImporter;
-    private readonly CharacterIconDownloadService _characterIconDownloader;
-    private readonly CharacterResourceStorageService _resourceStorage = new();
-    private readonly CancellationTokenSource _lifetimeCancellation = new();
     private readonly DispatcherTimer _searchAnnouncementTimer;
-    private Dictionary<string, CharacterResourceFiles> _knownResources =
-        new(StringComparer.OrdinalIgnoreCase);
-    private readonly PreviewNavigationCoordinator _previewNavigation = new();
+    private readonly MainWindowLifecycleController _lifecycle;
+    private readonly CharacterResourceStorageService _resourceStorage = new();
+    private readonly ObservableCollection<CharacterViewModel> _characters = new();
+    private readonly ObservableCollection<string> _selectedAnimationNames = new();
+    private CharacterPreviewNavigationController _previewNavigation = null!;
+    private CharacterLibraryController _libraryController = null!;
+    private CharacterSettingsController _settingsController = null!;
+    private CharacterPanelActivationController _panelActivation = null!;
+    private TextBlock _characterCountText = null!;
+    private TextBox _characterSearchBox = null!;
+    private ListBox _characterCards = null!;
+    private ComboBox _animationCombo = null!;
+    private Slider _speedSlider = null!;
+    private Border _windowChrome = null!;
+    private Button _addCharacterButton = null!;
+    private Button _scanResourcesButton = null!;
+    private Button _openResourceFolderButton = null!;
+    private Button _resetScaleButton = null!;
+    private Button _resetSpeedButton = null!;
+    private Button _deleteSkinButton = null!;
+    private Button _finishConfigurationButton = null!;
+    private CheckBox _allowDraggingToggle = null!;
     private bool _isRefreshingSelection;
-    private bool _isUpdatingCharacterSelection;
-    private bool _isDeletingSkin;
-    private bool _isConfigMode = true;
     private CharacterViewModel? _selectedCharacter;
     private string _selectedAnimation = string.Empty;
-    private double _selectedScale = DefaultScale;
-    private double _selectedScaleMax = DefaultMaxScale;
-    private double _selectedScaleBasePercent = MaximumScaleBasePercent;
-    private double _selectedScaleMultiplier = 1;
+    private double _selectedScale =
+        CharacterSettingsDefaults.DefaultScale;
+    private double _selectedScaleMax =
+        CharacterSettingsDefaults.DefaultMaxScale;
+    private double _selectedScaleBasePercent =
+        CharacterSettingsDefaults.MaximumScaleBasePercent;
+    private double _selectedScaleMultiplier =
+        CharacterSettingsDefaults.MinimumScaleMultiplier;
     private double _selectedSpeed = 100;
     private bool _allowRenderDrag;
     private int _targetFrameRate = GlobalConfig.DefaultTargetFrameRate;
@@ -57,8 +71,6 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
     private int _matchingCharacterCount;
     private string _characterSearchText = string.Empty;
     private string? _selectionBeforeSearchId;
-    private int _allowClose;
-    private int _disposeState;
 
     public static RoutedUICommand SwitchSkinCommand { get; } =
         new(
@@ -94,7 +106,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         UnityBundleImportService bundleImporter,
         CharacterIconDownloadService? characterIconDownloader = null)
     {
-        InitializeComponent();
+        LoadView();
+        _characterManager = characterManager;
+        _lifecycle = new MainWindowLifecycleController(this, characterManager);
         _searchAnnouncementTimer = new DispatcherTimer(
             DispatcherPriority.Background,
             Dispatcher)
@@ -103,10 +117,36 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         };
         _searchAnnouncementTimer.Tick +=
             OnCharacterSearchAnnouncementTick;
-        _characterManager = characterManager;
-        _resourceDiscovery = resourceDiscovery;
-        _bundleImporter = bundleImporter;
-        _characterIconDownloader = characterIconDownloader ?? new();
+
+        _characterCountText =
+            RequireNamedElement<TextBlock>("CharacterCountText");
+        _characterSearchBox =
+            RequireNamedElement<TextBox>("CharacterSearchBox");
+        _characterCards =
+            RequireNamedElement<ListBox>("CharacterCards");
+        _animationCombo =
+            RequireNamedElement<ComboBox>("AnimationCombo");
+        _speedSlider =
+            RequireNamedElement<Slider>("SpeedSlider");
+        _windowChrome =
+            RequireNamedElement<Border>("WindowChrome");
+        _addCharacterButton =
+            RequireNamedElement<Button>("AddCharacterButton");
+        _scanResourcesButton =
+            RequireNamedElement<Button>("ScanResourcesButton");
+        _openResourceFolderButton =
+            RequireNamedElement<Button>("OpenResourceFolderButton");
+        _resetScaleButton =
+            RequireNamedElement<Button>("ResetScaleButton");
+        _resetSpeedButton =
+            RequireNamedElement<Button>("ResetSpeedButton");
+        _deleteSkinButton =
+            RequireNamedElement<Button>("DeleteSkinButton");
+        _finishConfigurationButton =
+            RequireNamedElement<Button>("FinishConfigurationButton");
+        _allowDraggingToggle =
+            RequireNamedElement<CheckBox>("AllowDraggingToggle");
+
         _allowRenderDrag = characterManager.AllowRenderDrag;
         _targetFrameRate = characterManager.TargetFrameRate;
         _thumbnailScalePercent =
@@ -115,6 +155,55 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         CharacterView.Filter = item =>
             item is CharacterViewModel character &&
             CharacterSearchMatcher.Matches(character, CharacterSearchText);
+
+        _previewNavigation = new CharacterPreviewNavigationController(
+            _characterCards,
+            CharacterView,
+            Dispatcher,
+            () => _lifecycle.IsConfigMode,
+            () => IsDisposed,
+            () => IsLoaded,
+            () => SelectedCharacter);
+        _libraryController = new CharacterLibraryController(
+            characterManager,
+            resourceDiscovery,
+            bundleImporter,
+            characterIconDownloader ?? new(),
+            Characters,
+            CharacterView,
+            _characterCards,
+            _previewNavigation,
+            Dispatcher,
+            this,
+            () => SelectedCharacter,
+            value => SelectedCharacter = value,
+            SyncSelectedCharacterSettings,
+            NotifySearchResultsChanged,
+            AnnounceCharacterSearchStatus,
+            () => _lifecycle.IsConfigMode,
+            _lifecycle.LifetimeToken);
+        _settingsController = new CharacterSettingsController(
+            characterManager,
+            _resourceStorage,
+            Characters,
+            this,
+            this,
+            Dispatcher,
+            () => _libraryController.KnownResources,
+            _libraryController.RefreshKnownResources,
+            _libraryController.SynchronizeKnownResources,
+            _libraryController.RefreshCharacterList);
+        _panelActivation = new CharacterPanelActivationController(
+            () => IsDisposed,
+            () => _lifecycle.IsConfigMode,
+            _lifecycle.ExitConfiguration,
+            _libraryController.FindCharacter,
+            CharacterView.Contains,
+            () => CharacterSearchText = string.Empty,
+            _lifecycle.SwitchToConfigMode,
+            _previewNavigation.SelectAndReveal);
+
+        AttachViewEvents();
         CommandBindings.Add(new CommandBinding(
             SwitchSkinCommand,
             OnCharacterSkinExecuted));
@@ -131,20 +220,25 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
             OnCanFocusCharacterResultsExecuted));
         DataContext = this;
 
-        RefreshKnownResources();
-        RefreshCharacterList();
-        _characterManager.CharactersChanged += RefreshCharacterList;
-        _characterManager.CharacterScaleChanged += OnCharacterScaleChanged;
-        _characterManager.CharacterRightClicked += OnCharacterRightClicked;
+        _libraryController.RefreshKnownResources();
+        _libraryController.RefreshCharacterList();
+        _characterManager.CharactersChanged +=
+            _libraryController.RefreshCharacterList;
+        _characterManager.CharacterScaleChanged +=
+            _settingsController.HandleCharacterScaleChanged;
+        _characterManager.CharacterRightClicked +=
+            OnCharacterRightClicked;
     }
 
-    public ObservableCollection<CharacterViewModel> Characters { get; } = new();
+    public ObservableCollection<CharacterViewModel> Characters =>
+        _characters;
 
     public bool HasCharacters => Characters.Count > 0;
 
     public ICollectionView CharacterView { get; }
 
-    public ObservableCollection<string> SelectedAnimationNames { get; } = new();
+    public ObservableCollection<string> SelectedAnimationNames =>
+        _selectedAnimationNames;
 
     public string CharacterSearchText
     {
@@ -180,7 +274,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
             OnPropertyChanged();
             OnPropertyChanged(nameof(HasCharacterSearch));
             OnPropertyChanged(nameof(HasCharacterSearchInput));
-            RefreshCharacterFilter(preferredSelection);
+            _libraryController?.RefreshCharacterFilter(preferredSelection);
         }
     }
 
@@ -258,8 +352,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         {
             double normalized = Math.Clamp(
                 value,
-                MinimumMaximumScale,
-                DefaultMaxScale);
+                CharacterSettingsDefaults.MinimumMaximumScale,
+                CharacterSettingsDefaults.DefaultMaxScale);
             if (NearlyEquals(_selectedScaleMax, normalized))
             {
                 return;
@@ -277,8 +371,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         {
             double normalized = Math.Clamp(
                 value,
-                MinimumScaleBasePercent,
-                MaximumScaleBasePercent);
+                CharacterSettingsDefaults.MinimumScaleBasePercent,
+                CharacterSettingsDefaults.MaximumScaleBasePercent);
             if (NearlyEquals(_selectedScaleBasePercent, normalized))
             {
                 return;
@@ -287,7 +381,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
             _selectedScaleBasePercent = normalized;
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedScaleBasePercentDisplay));
-            CommitSelectedScale();
+            _settingsController?.CommitSelectedScale();
         }
     }
 
@@ -298,8 +392,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         {
             double normalized = Math.Clamp(
                 value,
-                MinimumScaleMultiplier,
-                MaximumScaleMultiplier);
+                CharacterSettingsDefaults.MinimumScaleMultiplier,
+                CharacterSettingsDefaults.MaximumScaleMultiplier);
             if (NearlyEquals(_selectedScaleMultiplier, normalized))
             {
                 return;
@@ -308,7 +402,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
             _selectedScaleMultiplier = normalized;
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedScaleMultiplierDisplay));
-            CommitSelectedScale();
+            _settingsController?.CommitSelectedScale();
         }
     }
 
@@ -316,77 +410,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         $"{SelectedScaleBasePercent:F0}%";
 
     public string SelectedScaleMultiplierDisplay =>
-        $"×{SelectedScaleMultiplier:F1}";
-
-    // 双滑条模型：实际缩放 = 基础百分比(10–20%) × 乘数(1–5)。
-    // 外部给定的 scale 值拆解回这两个分量。
-    private void SetSelectedScaleFromValue(double scale)
-    {
-        double clamped = Math.Clamp(
-            scale,
-            MinimumScale,
-            MaximumBaseScale * MaximumScaleMultiplier);
-        double basePercent;
-        double multiplier;
-        if (clamped <= MaximumBaseScale)
-        {
-            basePercent = Math.Clamp(
-                (clamped / MaximumBaseScale) * 100,
-                MinimumScaleBasePercent,
-                MaximumScaleBasePercent);
-            multiplier = 1;
-        }
-        else
-        {
-            basePercent = MaximumScaleBasePercent;
-            multiplier = Math.Clamp(
-                clamped / MaximumBaseScale,
-                MinimumScaleMultiplier,
-                MaximumScaleMultiplier);
-        }
-
-        _selectedScaleBasePercent = basePercent;
-        _selectedScaleMultiplier = multiplier;
-        _selectedScale = (basePercent / 100.0) * MaximumBaseScale * multiplier;
-        OnPropertyChanged(nameof(SelectedScaleBasePercent));
-        OnPropertyChanged(nameof(SelectedScaleMultiplier));
-        OnPropertyChanged(nameof(SelectedScaleBasePercentDisplay));
-        OnPropertyChanged(nameof(SelectedScaleMultiplierDisplay));
-        OnPropertyChanged(nameof(SelectedScale));
-    }
-
-    private void CommitSelectedScale()
-    {
-        if (_isRefreshingSelection || SelectedCharacter == null)
-        {
-            return;
-        }
-
-        CharacterConfig? character = FindSelectedCharacterConfig();
-        if (character == null)
-        {
-            return;
-        }
-
-        double effectiveMaximumScale =
-            _characterManager.RenderHost.IsCharacterVisible(character.Id)
-                ? _characterManager.RenderHost.GetMaxScale(character.Id)
-                : SelectedScaleMax;
-        SelectedScaleMax = effectiveMaximumScale;
-
-        double scale = Math.Clamp(
-            (SelectedScaleBasePercent / 100.0) *
-                MaximumBaseScale *
-                SelectedScaleMultiplier,
-            MinimumScale,
-            effectiveMaximumScale);
-        SelectedScale = scale;
-        character.Scale = scale;
-        SelectedCharacter.Scale = scale;
-        _characterManager.RenderHost.SetCharacterScale(
-            character.Id,
-            scale);
-    }
+        $"x{SelectedScaleMultiplier:F1}";
 
     public double SelectedSpeed
     {
@@ -405,7 +429,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         }
     }
 
-    public string SelectedSpeedDisplay => $"{SelectedSpeed / 100.0:F2}x";
+    public string SelectedSpeedDisplay =>
+        $"{SelectedSpeed / 100.0:F2}x";
 
     public bool AllowRenderDrag
     {
@@ -469,97 +494,335 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
 
     public string ThumbnailScaleDisplay => $"{ThumbnailScalePercent}%";
 
-    // 只缩放左侧预览列表：对列表整体挂 LayoutTransform，
-    // 条目内图片框/skin 标签/边框/间距全部严格等比，不会互相撑大。
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    internal bool IsDisposed => _lifecycle.IsDisposed;
+
+    bool ICharacterSettingsHost.IsRefreshingSelection
+    {
+        get => _isRefreshingSelection;
+        set => _isRefreshingSelection = value;
+    }
+
+    public void SwitchToConfigMode() =>
+        _lifecycle.SwitchToConfigMode();
+
+    internal void PrepareForShutdown() =>
+        _lifecycle.PrepareForShutdown();
+
+    private void LoadView()
+    {
+        System.Windows.Application.LoadComponent(
+            this,
+            new Uri(
+                "/SpinePet;component/Views/MainWindow.xaml",
+                UriKind.Relative));
+    }
+
+    private void AttachViewEvents()
+    {
+        Loaded += OnWindowLoaded;
+        Closing += OnWindowClosing;
+        Closed += OnWindowClosed;
+        _windowChrome.MouseLeftButtonDown +=
+            OnWindowChromeMouseLeftButtonDown;
+        _addCharacterButton.Click += OnAddCharacter;
+        _scanResourcesButton.Click += OnScanResources;
+        _openResourceFolderButton.Click += OnOpenResourceFolder;
+        _characterCards.SelectionChanged += OnCharacterSelectionChanged;
+        _characterCards.AddHandler(
+            ScrollViewer.ScrollChangedEvent,
+            new ScrollChangedEventHandler(OnCharacterCardsScrollChanged));
+        _characterCards.PreviewKeyDown +=
+            OnCharacterCardsPreviewKeyDown;
+        _characterCards.AddHandler(
+            Button.ClickEvent,
+            new RoutedEventHandler(OnCharacterCardButtonClick));
+        _animationCombo.SelectionChanged += OnAnimationChanged;
+        _speedSlider.ValueChanged += OnSpeedChanged;
+        _allowDraggingToggle.Loaded += OnDragToggleLoaded;
+        _allowDraggingToggle.Checked += OnDragToggleStateChanged;
+        _allowDraggingToggle.Unchecked += OnDragToggleStateChanged;
+        _resetScaleButton.Click += OnResetScale;
+        _resetSpeedButton.Click += OnResetSpeed;
+        _deleteSkinButton.Click += OnDeleteSelectedSkin;
+        _finishConfigurationButton.Click += OnExitConfiguration;
+    }
+
+    private void OnWindowLoaded(object sender, RoutedEventArgs e) =>
+        _lifecycle.HandleLoaded(ApplyThumbnailScale);
+
+    private void OnCharacterSelectionChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (_libraryController.IsUpdatingSelection)
+        {
+            return;
+        }
+
+        SelectedCharacter =
+            _characterCards.SelectedItem as CharacterViewModel;
+        if (HasCharacterSearch)
+        {
+            _selectionBeforeSearchId =
+                SelectedCharacter?.Id;
+        }
+
+        SyncSelectedCharacterSettings();
+        if (_lifecycle.IsConfigMode &&
+            SelectedCharacter != null &&
+            !_previewNavigation.IsApplyingScrollSelection)
+        {
+            _previewNavigation.Reveal(SelectedCharacter);
+        }
+    }
+
+    private void OnCharacterCardsScrollChanged(
+        object sender,
+        ScrollChangedEventArgs e) =>
+        _previewNavigation.HandleScrollChanged(
+            e,
+            _libraryController.IsUpdatingSelection);
+
+    private async void OnCharacterCardsPreviewKeyDown(
+        object sender,
+        KeyEventArgs e)
+    {
+        if (await _libraryController.HandlePreviewKeyDownAsync(e))
+        {
+            e.Handled = true;
+        }
+    }
+
+    private void OnCharacterCardButtonClick(
+        object sender,
+        RoutedEventArgs e)
+    {
+        if (e.OriginalSource is not Button button)
+        {
+            return;
+        }
+
+        string? action =
+            System.Windows.Automation.AutomationProperties.GetName(button);
+        if (string.Equals(
+                action,
+                "Reset character position",
+                StringComparison.Ordinal))
+        {
+            _settingsController.ResetCharacterPosition(button);
+            return;
+        }
+
+        if (button.Tag is CharacterViewModel character)
+        {
+            _ = _libraryController.ToggleCharacterAsync(character);
+        }
+    }
+
+    private void OnFocusCharacterSearchExecuted(
+        object sender,
+        ExecutedRoutedEventArgs e)
+    {
+        _characterSearchBox.Focus();
+        _characterSearchBox.SelectAll();
+        _characterSearchBox.BringIntoView();
+        e.Handled = true;
+    }
+
+    private void OnClearCharacterSearchExecuted(
+        object sender,
+        ExecutedRoutedEventArgs e)
+    {
+        CharacterSearchText = string.Empty;
+        _characterSearchBox.Focus();
+        e.Handled = true;
+    }
+
+    private void OnCanClearCharacterSearchExecuted(
+        object sender,
+        CanExecuteRoutedEventArgs e)
+    {
+        e.CanExecute = HasCharacterSearchInput;
+        e.Handled = true;
+    }
+
+    private void OnFocusCharacterResultsExecuted(
+        object sender,
+        ExecutedRoutedEventArgs e)
+    {
+        _libraryController.FocusCharacterResults();
+        e.Handled = true;
+    }
+
+    private void OnCanFocusCharacterResultsExecuted(
+        object sender,
+        CanExecuteRoutedEventArgs e)
+    {
+        e.CanExecute = MatchingCharacterCount > 0;
+        e.Handled = true;
+    }
+
+    private void OnAddCharacter(object sender, RoutedEventArgs e) =>
+        _ = _libraryController.AddCharacterAsync(
+            sender as Button);
+
+    private void OnScanResources(object sender, RoutedEventArgs e) =>
+        _ = _libraryController.ScanResourcesAsync(
+            sender as Button);
+
+    private void OnOpenResourceFolder(object sender, RoutedEventArgs e) =>
+        _libraryController.OpenResourceFolder();
+
+    private async void OnCharacterSkinExecuted(
+        object sender,
+        ExecutedRoutedEventArgs e) =>
+        await _libraryController.HandleCharacterSkinAsync(
+            e.Parameter as CharacterSkinOptionViewModel);
+
+    private void OnSpeedChanged(
+        object sender,
+        RoutedPropertyChangedEventArgs<double> e) =>
+        _settingsController.HandleSpeedChanged(sender, e);
+
+    private void OnResetScale(object sender, RoutedEventArgs e) =>
+        _settingsController.ResetScale();
+
+    private void OnResetSpeed(object sender, RoutedEventArgs e) =>
+        _settingsController.ResetSpeed();
+
+    private void OnAnimationChanged(
+        object sender,
+        SelectionChangedEventArgs e) =>
+        _settingsController.HandleAnimationChanged(sender, e);
+
+    private async void OnDeleteSelectedSkin(
+        object sender,
+        RoutedEventArgs e) =>
+        await _settingsController.DeleteSelectedSkinAsync();
+
+    private void OnExitConfiguration(object sender, RoutedEventArgs e) =>
+        _lifecycle.ExitConfiguration();
+
+    private void OnCharacterRightClicked(string characterId) =>
+        _panelActivation.HandleRightClick(characterId);
+
+    private void OnWindowChromeMouseLeftButtonDown(
+        object sender,
+        MouseButtonEventArgs e)
+    {
+        if (e.ButtonState != MouseButtonState.Pressed)
+        {
+            return;
+        }
+
+        try
+        {
+            DragMove();
+        }
+        catch (InvalidOperationException)
+        {
+            // The button can be released between the event and DragMove.
+        }
+    }
+
+    private void OnDragToggleLoaded(object sender, RoutedEventArgs e) =>
+        SetDragToggleKnob(sender, animate: false);
+
+    private void OnDragToggleStateChanged(
+        object sender,
+        RoutedEventArgs e) =>
+        SetDragToggleKnob(sender, animate: true);
+
+    private void OnWindowClosing(object? sender, CancelEventArgs e) =>
+        _lifecycle.HandleClosing(e, SavePanelLayout);
+
+    private void OnWindowClosed(object? sender, EventArgs e)
+    {
+        _characterManager.CharactersChanged -=
+            _libraryController.RefreshCharacterList;
+        _characterManager.CharacterScaleChanged -=
+            OnCharacterScaleChanged;
+        _characterManager.CharacterRightClicked -=
+            OnCharacterRightClicked;
+        Dispose();
+    }
+
+    private void OnCharacterScaleChanged(
+        string characterId,
+        double maximumScale,
+        double currentScale) =>
+        _settingsController.HandleCharacterScaleChanged(
+            characterId,
+            maximumScale,
+            currentScale);
+
+    private void SavePanelLayout()
+    {
+        _characterManager.SetConfigPanelSize(
+            ActualWidth,
+            ActualHeight);
+    }
+
+    private void SyncSelectedCharacterSettings() =>
+        _settingsController?.SyncSelectedCharacterSettings();
+
+    private void NotifySearchResultsChanged()
+    {
+        _matchingCharacterCount =
+            CharacterView.Cast<object>().Count();
+        OnPropertyChanged(nameof(MatchingCharacterCount));
+        OnPropertyChanged(nameof(CharacterCountDisplay));
+        OnPropertyChanged(nameof(CharacterSearchStatus));
+        CommandManager.InvalidateRequerySuggested();
+    }
+
+    private void AnnounceCharacterSearchStatus()
+    {
+        if (!IsLoaded || !_characterCountText.IsVisible)
+        {
+            return;
+        }
+
+        _searchAnnouncementTimer.Stop();
+        _searchAnnouncementTimer.Start();
+    }
+
+    private void OnCharacterSearchAnnouncementTick(
+        object? sender,
+        EventArgs e)
+    {
+        _searchAnnouncementTimer.Stop();
+        if (!_characterCountText.IsVisible)
+        {
+            return;
+        }
+
+        AutomationPeer? peer =
+            UIElementAutomationPeer.FromElement(_characterCountText) ??
+            UIElementAutomationPeer.CreatePeerForElement(_characterCountText);
+        peer?.RaiseAutomationEvent(
+            AutomationEvents.LiveRegionChanged);
+    }
+
     private void ApplyThumbnailScale()
     {
-        double scale = _thumbnailScalePercent / 100.0;
-        CharacterCards.LayoutTransform = scale == 1.0
+        double scale = ThumbnailScalePercent / 100.0;
+        _characterCards.LayoutTransform = scale == 1.0
             ? Transform.Identity
             : new ScaleTransform(scale, scale);
 
-        // 列表整体被 LayoutTransform 缩放，滚动条也被一起缩了；
-        // 反方向放大滚动条宽度，使视觉宽度恒定（约 10px）。
         double scrollBarWidth = 10.0 / scale;
         foreach (System.Windows.Controls.Primitives.ScrollBar scrollBar
                  in FindVisualChildren<System.Windows.Controls.Primitives.ScrollBar>(
-                     CharacterCards))
+                     _characterCards))
         {
             scrollBar.Width = scrollBarWidth;
             scrollBar.MinWidth = scrollBarWidth;
         }
     }
 
-    private static IEnumerable<T> FindVisualChildren<T>(
-        DependencyObject parent)
-        where T : DependencyObject
-    {
-        int count = VisualTreeHelper.GetChildrenCount(parent);
-        for (int index = 0; index < count; index++)
-        {
-            DependencyObject child = VisualTreeHelper.GetChild(parent, index);
-            if (child is T typed)
-            {
-                yield return typed;
-            }
-
-            foreach (T descendant in FindVisualChildren<T>(child))
-            {
-                yield return descendant;
-            }
-        }
-    }
-
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-
-    internal bool IsDisposed =>
-        Volatile.Read(ref _disposeState) != 0;
-
-    public void SwitchToConfigMode()
-    {
-        if (IsDisposed ||
-            Volatile.Read(ref _allowClose) != 0 ||
-            Dispatcher.HasShutdownStarted ||
-            Dispatcher.HasShutdownFinished)
-        {
-            return;
-        }
-
-        AppLogger.Write(
-            nameof(MainWindow),
-            "configuration-panel-opened");
-        _isConfigMode = true;
-        ApplyConfigMode();
-        Show();
-        Activate();
-    }
-
-    internal void PrepareForShutdown()
-    {
-        Interlocked.Exchange(ref _allowClose, 1);
-        Dispose();
-    }
-
-    private void OnWindowLoaded(object sender, RoutedEventArgs e)
-    {
-        Rect workArea = SystemParameters.WorkArea;
-        double width = _characterManager.ConfigPanelWidth > 0
-            ? _characterManager.ConfigPanelWidth
-            : 820;
-        double height = _characterManager.ConfigPanelHeight > 0
-            ? _characterManager.ConfigPanelHeight
-            : workArea.Height * 0.6;
-        Width = Math.Clamp(width, MinWidth, workArea.Width);
-        Height = Math.Clamp(height, MinHeight, workArea.Height);
-        Left = workArea.Right - Width;
-        Top = workArea.Top;
-        ApplyThumbnailScale();
-        ApplyConfigMode();
-    }
-
-    // Win 风格无边框缩放：WM_NCHITTEST 把边缘/四角映射为系统
-    // HTLEFT/HTRIGHT/... 命中，由系统接管拖拽与双向光标。
     protected override void OnSourceInitialized(EventArgs e)
     {
         base.OnSourceInitialized(e);
@@ -602,21 +865,21 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
 
         int hit = htClient;
         if (left && top)
-            hit = 13;          // HTTOPLEFT
+            hit = 13;
         else if (right && bottom)
-            hit = 17;          // HTBOTTOMRIGHT
+            hit = 17;
         else if (right && top)
-            hit = 14;          // HTTOPRIGHT
+            hit = 14;
         else if (left && bottom)
-            hit = 16;          // HTBOTTOMLEFT
+            hit = 16;
         else if (left)
-            hit = 10;          // HTLEFT
+            hit = 10;
         else if (right)
-            hit = 11;          // HTRIGHT
+            hit = 11;
         else if (top)
-            hit = 12;          // HTTOP
+            hit = 12;
         else if (bottom)
-            hit = 15;          // HTBOTTOM
+            hit = 15;
 
         if (hit == htClient)
         {
@@ -634,56 +897,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
         IntPtr wParam,
         IntPtr lParam);
 
-    private void OnWindowChromeMouseLeftButtonDown(
+    private static void SetDragToggleKnob(
         object sender,
-        MouseButtonEventArgs e)
+        bool animate)
     {
-        if (e.ButtonState != MouseButtonState.Pressed)
-        {
-            return;
-        }
-
-        try
-        {
-            DragMove();
-        }
-        catch (InvalidOperationException)
-        {
-            // The button can be released between the event and DragMove.
-        }
-    }
-
-    private void ApplyConfigMode()
-    {
-        if (_isConfigMode)
-        {
-            Topmost = true;
-            Show();
-            Activate();
-        }
-        else
-        {
-            Hide();
-        }
-
-        _characterManager.SetConfigMode(_isConfigMode);
-    }
-
-    private void OnDragToggleLoaded(object sender, RoutedEventArgs e)
-    {
-        SetDragToggleKnob(sender, animate: false);
-    }
-
-    private void OnDragToggleStateChanged(
-        object sender,
-        RoutedEventArgs e)
-    {
-        SetDragToggleKnob(sender, animate: true);
-    }
-
-    private static void SetDragToggleKnob(object sender, bool animate)
-    {
-        if (sender is not System.Windows.Controls.CheckBox checkBox ||
+        if (sender is not CheckBox checkBox ||
             checkBox.Template?.FindName(
                 "KnobTranslate",
                 checkBox) is not TranslateTransform transform)
@@ -714,154 +932,47 @@ public partial class MainWindow : Window, INotifyPropertyChanged, IDisposable
             });
     }
 
-    private void OnCharacterRightClicked(string characterId)
+    private static IEnumerable<T> FindVisualChildren<T>(
+        DependencyObject parent)
+        where T : DependencyObject
     {
-        if (IsDisposed)
+        int count = VisualTreeHelper.GetChildrenCount(parent);
+        for (int index = 0; index < count; index++)
         {
-            return;
-        }
-
-        // 面板已打开时再次右键角色 → 关闭面板（保存状态后隐藏）。
-        if (_isConfigMode)
-        {
-            _characterManager.SaveAllState();
-            _isConfigMode = false;
-            ApplyConfigMode();
-            return;
-        }
-
-        CharacterViewModel? viewModel = Characters.FirstOrDefault(
-            item => item.Id == characterId);
-        if (viewModel != null)
-        {
-            if (!CharacterView.Contains(viewModel))
+            DependencyObject child = VisualTreeHelper.GetChild(parent, index);
+            if (child is T typed)
             {
-                CharacterSearchText = string.Empty;
+                yield return typed;
             }
 
-            SelectedCharacter = viewModel;
+            foreach (T descendant in FindVisualChildren<T>(child))
+            {
+                yield return descendant;
+            }
         }
-
-        SwitchToConfigMode();
     }
 
-    private void SyncSelectedCharacterSettings()
-    {
-        _isRefreshingSelection = true;
-        SelectedAnimationNames.Clear();
-
-        if (SelectedCharacter == null)
-        {
-            SelectedAnimation = string.Empty;
-            SelectedScale = DefaultScale;
-            SelectedScaleMax = DefaultMaxScale;
-            SetSelectedScaleFromValue(DefaultScale);
-            SelectedSpeed = 100;
-            _isRefreshingSelection = false;
-            return;
-        }
-
-        foreach (string animation in SelectedCharacter.AnimationNames)
-        {
-            SelectedAnimationNames.Add(animation);
-        }
-
-        SelectedScaleMax = Math.Clamp(
-            SelectedCharacter.MaxScale > 0
-                ? SelectedCharacter.MaxScale
-                : DefaultMaxScale,
-            MinimumMaximumScale,
-            DefaultMaxScale);
-        SetSelectedScaleFromValue(
-            SelectedCharacter.Scale > 0
-                ? SelectedCharacter.Scale
-                : DefaultScale);
-        SelectedAnimation =
-            !string.IsNullOrEmpty(SelectedCharacter.ConfiguredAnimation)
-                ? SelectedCharacter.ConfiguredAnimation
-                : SelectedAnimationNames.FirstOrDefault() ?? string.Empty;
-        SelectedSpeed = Math.Clamp(
-            SelectedCharacter.AnimationSpeed * 100.0,
-            10,
-            200);
-
-        _isRefreshingSelection = false;
-    }
-
-    protected override void OnClosing(CancelEventArgs e)
-    {
-        base.OnClosing(e);
-
-        if (Dispatcher.HasShutdownStarted ||
-            Dispatcher.HasShutdownFinished)
-        {
-            return;
-        }
-
-        // Keep the tray-owned window reusable for Close/Alt+F4. During a
-        // genuine Application.Shutdown WPF ignores cancellation and still
-        // continues through OnClosed, so the cleanup below remains reachable.
-        AppLogger.Write(
-            nameof(MainWindow),
-            "configuration-panel-close-intercepted");
-        e.Cancel = true;
-        SavePanelLayout();
-        _characterManager.SaveAllState();
-        _isConfigMode = false;
-        ApplyConfigMode();
-    }
-
-    private void SavePanelLayout()
-    {
-        _characterManager.SetConfigPanelSize(
-            ActualWidth,
-            ActualHeight);
-    }
-
-    protected override void OnClosed(EventArgs e)
-    {
-        Dispose();
-        _characterManager.CharactersChanged -= RefreshCharacterList;
-        _characterManager.CharacterScaleChanged -= OnCharacterScaleChanged;
-        _characterManager.CharacterRightClicked -= OnCharacterRightClicked;
-
-        base.OnClosed(e);
-    }
-
-    public void Dispose()
-    {
-        if (Interlocked.Exchange(ref _disposeState, 1) != 0)
-        {
-            return;
-        }
-
-        _searchAnnouncementTimer.Stop();
-        _searchAnnouncementTimer.Tick -=
-            OnCharacterSearchAnnouncementTick;
-        try
-        {
-            _lifetimeCancellation.Cancel();
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Write(
-                nameof(MainWindow),
-                $"lifetime-cancellation-failed message={exception.Message}");
-        }
-        finally
-        {
-            _lifetimeCancellation.Dispose();
-        }
-
-        GC.SuppressFinalize(this);
-    }
+    private T RequireNamedElement<T>(string name)
+        where T : FrameworkElement =>
+        FindName(name) as T ??
+        throw new InvalidOperationException(
+            $"MainWindow.xaml did not define named element '{name}'.");
 
     private static bool NearlyEquals(double left, double right) =>
         Math.Abs(left - right) < 0.0001;
 
     private void OnPropertyChanged(
-        [CallerMemberName] string? propertyName = null)
+        [CallerMemberName] string? propertyName = null) =>
+        PropertyChanged?.Invoke(
+            this,
+            new PropertyChangedEventArgs(propertyName));
+
+    public void Dispose()
     {
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        _searchAnnouncementTimer.Stop();
+        _searchAnnouncementTimer.Tick -=
+            OnCharacterSearchAnnouncementTick;
+        _lifecycle.Dispose();
+        GC.SuppressFinalize(this);
     }
 }

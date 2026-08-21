@@ -5,6 +5,50 @@ namespace SpinePet.Tests;
 public sealed class PreviewNavigationCoordinatorTests
 {
     [Fact]
+    public void BoundaryRuleSelectsFirstItemAtTop()
+    {
+        Assert.Equal(
+            0,
+            PreviewNavigationRules.FindBoundaryItemIndex(
+                itemCount: 8,
+                verticalOffset: 0,
+                maximumOffset: 640));
+    }
+
+    [Fact]
+    public void BoundaryRuleSelectsLastItemAtBottom()
+    {
+        Assert.Equal(
+            7,
+            PreviewNavigationRules.FindBoundaryItemIndex(
+                itemCount: 8,
+                verticalOffset: 639.5,
+                maximumOffset: 640));
+    }
+
+    [Fact]
+    public void BoundaryRuleKeepsPreferredItemWhenContentDoesNotScroll()
+    {
+        Assert.Equal(
+            3,
+            PreviewNavigationRules.FindBoundaryItemIndex(
+                itemCount: 8,
+                verticalOffset: 0,
+                maximumOffset: 0,
+                preferredIndex: 3));
+    }
+
+    [Fact]
+    public void BoundaryRuleReturnsNoSelectionAwayFromEdges()
+    {
+        Assert.Null(
+            PreviewNavigationRules.FindBoundaryItemIndex(
+                itemCount: 8,
+                verticalOffset: 120,
+                maximumOffset: 640));
+    }
+
+    [Fact]
     public void FindCenterItemConsidersEveryVisibleRowMajorItem()
     {
         PreviewItemGeometry[] items =
