@@ -24,6 +24,8 @@ internal sealed class NativeCharacterState : IDisposable
         { get; } = new();
     public bool IsVisible { get; set; }
     public bool IsLoading { get; set; }
+    public string ResourceKey { get; set; } = string.Empty;
+    public Task? LoadTask { get; set; }
     public double CurrentScale { get; set; } = 0.2;
     public double MaxScale { get; set; } = 2;
     public int LoadVersion { get; set; }

@@ -69,10 +69,11 @@ public sealed class NativeCharacterAnimationTests
     }
 
     [Fact]
-    public void TemporaryAnimationRestoresPreviousPlaybackState()
+    public void TemporaryAnimationRestartsConfiguredDefaultState()
     {
         AnimationFixture fixture = CreateAnimationFixture(
             ("custom", 2),
+            ("idle", 2),
             ("action", 1));
         AnimationState animationState = fixture.AnimationState;
         TrackEntry persistent =
@@ -80,22 +81,22 @@ public sealed class NativeCharacterAnimationTests
         persistent.TrackTime = 0.75f;
         NativeTemporaryAnimationPlayback playback = new();
 
-        playback.Play(animationState, "action");
+        playback.Play(animationState, "action", "idle");
 
         TrackEntry temporary = Assert.IsType<TrackEntry>(
             animationState.GetCurrent(0));
         Assert.Equal("action", temporary.Animation.Name);
         Assert.False(temporary.Loop);
         TrackEntry restore = Assert.IsType<TrackEntry>(temporary.Next);
-        Assert.Equal("custom", restore.Animation.Name);
+        Assert.Equal("idle", restore.Animation.Name);
         Assert.True(restore.Loop);
-        Assert.Equal(0.75f, restore.TrackTime);
+        Assert.Equal(0, restore.TrackTime);
 
         AdvancePastCurrentAnimation(fixture, 1.1f);
 
         TrackEntry restored = Assert.IsType<TrackEntry>(
             animationState.GetCurrent(0));
-        Assert.Equal("custom", restored.Animation.Name);
+        Assert.Equal("idle", restored.Animation.Name);
         Assert.True(restored.Loop);
         Assert.False(playback.IsActive);
     }
@@ -110,8 +111,8 @@ public sealed class NativeCharacterAnimationTests
         animationState.SetAnimation(0, "custom", true);
         NativeTemporaryAnimationPlayback playback = new();
 
-        playback.Play(animationState, "action");
-        playback.Play(animationState, "action");
+        playback.Play(animationState, "action", "custom");
+        playback.Play(animationState, "action", "custom");
 
         TrackEntry temporary = Assert.IsType<TrackEntry>(
             animationState.GetCurrent(0));
@@ -136,7 +137,7 @@ public sealed class NativeCharacterAnimationTests
         AnimationState animationState = fixture.AnimationState;
         animationState.SetAnimation(0, "idle", true);
         NativeTemporaryAnimationPlayback playback = new();
-        playback.Play(animationState, "action");
+        playback.Play(animationState, "action", "idle");
 
         playback.SetPersistent(
             animationState,

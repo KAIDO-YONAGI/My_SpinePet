@@ -137,6 +137,11 @@ public sealed class NativeCharacterRenderHost :
 
     public Task InitializeAsync()
     {
+        if (_closed)
+        {
+            return Task.CompletedTask;
+        }
+
         _initializationTask ??= _dispatcher.CheckAccess()
             ? InitializeOnDispatcher()
             : _dispatcher.InvokeAsync(InitializeOnDispatcher).Task.Unwrap();
@@ -148,17 +153,68 @@ public sealed class NativeCharacterRenderHost :
         bool configMode,
         double speed)
     {
+        if (_closed)
+        {
+            return;
+        }
+
         await InitializeAsync();
-        _configMode = configMode;
+        if (_closed)
+        {
+            return;
+        }
+
+        SetConfigMode(configMode);
 
         NativeCharacterState state = GetOrCreateState(character);
-        state.Config = character;
-        state.CurrentScale = Math.Clamp(
+        string resourceKey = GetResourceKey(character);
+        if (state.IsLoading &&
+            state.LoadTask != null &&
+            string.Equals(
+                state.ResourceKey,
+                resourceKey,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            state.IsVisible = true;
+            state.Config.Visible = true;
+            await state.LoadTask;
+            return;
+        }
+
+        double normalizedScale = Math.Clamp(
             character.Scale > 0 ? character.Scale : DefaultScale,
             MinimumScale,
             state.MaxScale);
+        double normalizedSpeed = Math.Clamp(speed, 0.1, 2);
+        bool sameResource = state.Resource != null &&
+            string.Equals(
+                state.ResourceKey,
+                resourceKey,
+                StringComparison.OrdinalIgnoreCase);
+        if (sameResource &&
+            state.IsVisible &&
+            state.Surface != null &&
+            state.CurrentScale == normalizedScale &&
+            state.Config.AnimationSpeed == normalizedSpeed)
+        {
+            character.Visible = true;
+            return;
+        }
+
+        if ((state.Resource != null || state.IsLoading) &&
+            !string.Equals(
+                state.ResourceKey,
+                resourceKey,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            ReleaseCharacterResources(state);
+        }
+
+        state.Config = character;
+        state.ResourceKey = resourceKey;
+        state.CurrentScale = normalizedScale;
         state.Config.Scale = state.CurrentScale;
-        state.Config.AnimationSpeed = Math.Clamp(speed, 0.1, 2);
+        state.Config.AnimationSpeed = normalizedSpeed;
         state.IsVisible = true;
         state.Config.Visible = true;
 
@@ -175,14 +231,33 @@ public sealed class NativeCharacterRenderHost :
             return;
         }
 
+        Task loadTask = LoadCharacterAsync(character, state);
+        state.LoadTask = loadTask;
+        try
+        {
+            await loadTask;
+        }
+        finally
+        {
+            if (ReferenceEquals(state.LoadTask, loadTask))
+            {
+                state.LoadTask = null;
+            }
+        }
+    }
+
+    private async Task LoadCharacterAsync(
+        CharacterConfig character,
+        NativeCharacterState state)
+    {
         state.IsLoading = true;
         int loadVersion = ++state.LoadVersion;
         CharactersStateChanged?.Invoke();
 
         try
         {
-            // 加载包含完整纹理解码：Show All 的几十路并发曾把内存峰值
-            // 推到系统 commit 耗尽直接杀进程，用信号量限制同时解码数。
+            // Loading includes full texture decoding. Keep concurrent decode
+            // bounded so Show All cannot exhaust system commit.
             await _loadGate.WaitAsync(_lifetimeCancellation.Token);
             (NativeSpineResource resource, NativeSpineBounds Setup, NativeSpineBounds Envelope) loaded;
             try
@@ -305,6 +380,14 @@ public sealed class NativeCharacterRenderHost :
             return;
         }
 
+        if (!state.IsVisible &&
+            !state.IsLoading &&
+            state.Resource == null &&
+            state.Surface == null)
+        {
+            return;
+        }
+
         CancelPointerIfCharacter(characterId);
         state.IsVisible = false;
         state.Config.Visible = false;
@@ -392,8 +475,18 @@ public sealed class NativeCharacterRenderHost :
 
     public void SetConfigMode(bool configMode)
     {
+        if (_closed || _configMode == configMode)
+        {
+            return;
+        }
+
         _configMode = configMode;
         CancelPointerInteraction(commitPosition: false);
+        foreach (NativeCharacterState state in _states.Values.Where(state =>
+                     state.IsVisible && state.Resource != null))
+        {
+            SelectModeAnimation(state);
+        }
     }
 
     public void SetRenderDragEnabled(bool enabled)
@@ -469,6 +562,16 @@ public sealed class NativeCharacterRenderHost :
 
     public void HideAll()
     {
+        if (_closed ||
+            !_states.Values.Any(state =>
+                state.IsVisible ||
+                state.IsLoading ||
+                state.Resource != null ||
+                state.Surface != null))
+        {
+            return;
+        }
+
         CancelPointerInteraction(commitPosition: false);
         foreach (NativeCharacterState state in _states.Values)
         {
@@ -505,6 +608,7 @@ public sealed class NativeCharacterRenderHost :
         state.Surface = null;
         state.Resource?.Dispose();
         state.Resource = null;
+        state.ResourceKey = string.Empty;
         state.TemporaryAnimationPlayback.Clear();
         PurgeUnusedTextures();
         CollectIfIdleAfterUnload();
@@ -608,6 +712,16 @@ public sealed class NativeCharacterRenderHost :
             $"dpi={_window.DpiScale:F2}");
         return Task.CompletedTask;
     }
+
+    private static string GetResourceKey(CharacterConfig character) =>
+        string.Join(
+            "\n",
+            new[]
+            {
+                character.SkeletonPath,
+                character.AtlasPath,
+                character.TexturePath
+            }.Concat(character.AdditionalTexturePaths));
 
     private void UpdateFrameTimerState()
     {
@@ -930,12 +1044,17 @@ public sealed class NativeCharacterRenderHost :
 
         string? clickAnimation =
             SelectClickAnimationName(resource.AnimationNames);
-        if (clickAnimation == null)
+        string? defaultAnimation =
+            SelectConfiguredOrIdleAnimationName(
+                state.Config.ConfiguredAnimation,
+                resource.AnimationNames);
+        if (clickAnimation == null || defaultAnimation == null)
             return;
 
         state.TemporaryAnimationPlayback.Play(
             resource.AnimationState,
-            clickAnimation);
+            clickAnimation,
+            defaultAnimation);
     }
 
     internal static string? SelectClickAnimationName(

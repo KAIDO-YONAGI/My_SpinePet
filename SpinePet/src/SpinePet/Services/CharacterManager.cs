@@ -18,10 +18,15 @@ public sealed class CharacterManager
         "CA1859:Use concrete types when possible for improved performance",
         Justification = "The renderer backend is intentionally isolated behind this contract.")]
     private readonly ICharacterRenderHost _renderHost;
+    private readonly CharacterResourceCoordinator _resourceCoordinator;
     private readonly Rect? _workArea;
     private readonly AppConfig _config;
+    private readonly object _showSync = new();
+    private readonly Dictionary<string, ShowFlight> _showFlights =
+        new(StringComparer.Ordinal);
     private bool _isConfigMode;
     private int _configModeVersion;
+    private bool _closed;
 
     public CharacterManager(
         ConfigService configService,
@@ -39,6 +44,8 @@ public sealed class CharacterManager
     {
         _configService = configService;
         _identityService = identityService ?? new CharacterIdentityService();
+        _resourceCoordinator = new CharacterResourceCoordinator(
+            _identityService);
         _workArea = workArea;
         _config = configService.Load();
         _renderHost = renderHost ?? new NativeCharacterRenderHost();
@@ -73,6 +80,11 @@ public sealed class CharacterManager
 
     public void SetConfigMode(bool configMode)
     {
+        if (_closed || _isConfigMode == configMode)
+        {
+            return;
+        }
+
         _isConfigMode = configMode;
         _configModeVersion++;
         _renderHost.SetConfigMode(configMode);
@@ -125,13 +137,15 @@ public sealed class CharacterManager
                 character.SkeletonPath,
                 resources.SkeletonPath,
                 StringComparison.OrdinalIgnoreCase));
-        character ??= FindPreferredCharacter(resources);
+        character ??= _resourceCoordinator.FindPreferredCharacter(
+            _config.Characters,
+            resources);
 
         if (character != null)
         {
             CharacterIdentity currentIdentity = GetCharacterIdentity(character);
             bool shouldUpdatePaths =
-                !CharacterResourcesExist(character) ||
+                !CharacterResourceCoordinator.ResourcesExist(character) ||
                 IsSameSkin(
                     currentIdentity,
                     resources.Identity);
@@ -174,13 +188,28 @@ public sealed class CharacterManager
         return CharacterIconService.GetThumbnailPath(character, identity);
     }
 
-    public async Task ShowCharacterAsync(CharacterConfig character)
+    public Task ShowCharacterAsync(CharacterConfig character)
     {
-        try
+        ArgumentNullException.ThrowIfNull(character);
+        if (_closed ||
+            (character.Visible &&
+             _renderHost.IsCharacterVisible(character.Id) &&
+             !_renderHost.IsCharacterLoading(character.Id)))
         {
-            await ShowCharacterCoreAsync(character);
+            return Task.CompletedTask;
         }
-        finally
+
+        (Task<bool> task, bool ownsSideEffects) =
+            GetOrStartShowFlight(character);
+        return CompleteShowAsync(task, ownsSideEffects);
+    }
+
+    private async Task CompleteShowAsync(
+        Task<bool> task,
+        bool ownsSideEffects)
+    {
+        bool changed = await task;
+        if (ownsSideEffects && changed && !_closed)
         {
             _configService.Save(_config);
             CharactersChanged?.Invoke();
@@ -196,15 +225,17 @@ public sealed class CharacterManager
             resources.SkeletonPath);
 
         if (!string.Equals(
-            GetCharacterGroupKey(character),
-            GetCharacterGroupKey(resources),
+            _resourceCoordinator.GetGroupKey(character),
+            _resourceCoordinator.GetGroupKey(resources),
             StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException(
                 "The selected resources belong to a different character.");
         }
 
-        if (CharacterResourcesMatch(character, resources))
+        if (CharacterResourceCoordinator.ResourcesMatch(
+                character,
+                resources))
         {
             if (SetIfDifferent(
                     character.Name,
@@ -240,7 +271,7 @@ public sealed class CharacterManager
         {
             if (wasVisible)
             {
-                await ShowCharacterCoreAsync(character);
+                await EnsureCharacterShownAsync(character);
             }
         }
         catch
@@ -261,7 +292,7 @@ public sealed class CharacterManager
             {
                 try
                 {
-                    await ShowCharacterCoreAsync(character);
+                    await EnsureCharacterShownAsync(character);
                 }
                 catch (Exception rollbackException)
                 {
@@ -289,174 +320,46 @@ public sealed class CharacterManager
         ArgumentNullException.ThrowIfNull(resources);
         ArgumentException.ThrowIfNullOrWhiteSpace(managedRoot);
 
-        string fullManagedRoot = Path.TrimEndingDirectorySeparator(
-            Path.GetFullPath(managedRoot));
-        CharacterResourceFiles[] supportedResources = resources
-            .Where(resource =>
-                resource != null &&
-                string.Equals(
-                    resource.ResourceType,
-                    CharacterResourceTypes.Standing,
-                    StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        Dictionary<string, List<CharacterResourceFiles>> catalog =
-            supportedResources
-                .GroupBy(
-                    GetCharacterGroupKey,
-                    StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(
-                    group => group.Key,
-                    group => group.ToList(),
-                    StringComparer.OrdinalIgnoreCase);
-
-        var existingGroups = _config.Characters
-            .Select((character, index) => new
-            {
-                Character = character,
-                Index = index,
-                Key = GetCharacterGroupKey(character)
-            })
-            .GroupBy(
-                item => item.Key,
-                StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-        HashSet<string> existingKeys = existingGroups
-            .Select(group => group.Key)
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
+        CharacterResourceSynchronizationPlan plan =
+            _resourceCoordinator.CalculateSynchronization(
+                _config.Characters,
+                resources,
+                managedRoot);
         int addedCount = 0;
         int updatedCount = 0;
         int removedCount = 0;
         int mergedCount = 0;
-        bool wasEmptyConfiguration = _config.Characters.Count == 0;
 
-        foreach (var group in existingGroups)
+        foreach (CharacterRemovalPlan removal in plan.Removals)
         {
-            CharacterConfig[] existing = group
-                .OrderBy(item => item.Index)
-                .Select(item => item.Character)
-                .ToArray();
-            CharacterResourceFiles[] standingResources = catalog
-                .GetValueOrDefault(group.Key, [])
-                .Where(resource => string.Equals(
-                    resource.ResourceType,
-                    CharacterResourceTypes.Standing,
-                    StringComparison.OrdinalIgnoreCase))
-                .ToArray();
-
-            if (standingResources.Length == 0)
+            RemoveCharacterFromConfiguration(removal.Character);
+            if (removal.IsMerge)
             {
-                CharacterConfig[] staleCharacters = existing
-                    .Where(character =>
-                        IsPathWithinRoot(
-                            character.SkeletonPath,
-                            fullManagedRoot) ||
-                        character.RequiresStandingMigration ||
-                        !CharacterResourcesExist(character))
-                    .ToArray();
-                foreach (CharacterConfig staleCharacter in staleCharacters)
-                {
-                    RemoveCharacterFromConfiguration(staleCharacter);
-                    removedCount++;
-                }
-
-                CharacterConfig[] externalCharacters = existing
-                    .Except(staleCharacters)
-                    .ToArray();
-                if (externalCharacters.Length > 1)
-                {
-                    CharacterConfig retained =
-                        SelectPreferredCharacter(externalCharacters);
-                    foreach (CharacterConfig duplicate in
-                             externalCharacters.Where(character =>
-                                 !ReferenceEquals(character, retained)))
-                    {
-                        RemoveCharacterFromConfiguration(duplicate);
-                        mergedCount++;
-                    }
-                }
-
-                continue;
-            }
-
-            CharacterConfig retainedCharacter =
-                SelectPreferredCharacter(existing);
-            foreach (CharacterConfig duplicate in existing.Where(character =>
-                         !ReferenceEquals(character, retainedCharacter)))
-            {
-                RemoveCharacterFromConfiguration(duplicate);
                 mergedCount++;
             }
-
-            CharacterIdentity currentIdentity =
-                GetCharacterIdentity(retainedCharacter);
-            CharacterResourceFiles selectedResources = SelectResources(
-                retainedCharacter,
-                currentIdentity,
-                catalog[group.Key]);
-            bool selectionChanged =
-                !CharacterResourcesMatch(
-                    retainedCharacter,
-                    selectedResources);
-            bool updated = UpdateCharacterResources(
-                retainedCharacter,
-                selectedResources);
-            if (selectionChanged &&
-                !string.IsNullOrEmpty(retainedCharacter.ConfiguredAnimation))
+            else
             {
-                retainedCharacter.ConfiguredAnimation = string.Empty;
-                updated = true;
-            }
-            if (retainedCharacter.RequiresStandingMigration)
-            {
-                retainedCharacter.RequiresStandingMigration = false;
-                updated = true;
-            }
-
-            if (updated)
-            {
-                updatedCount++;
+                removedCount++;
             }
         }
 
-        foreach ((string key, List<CharacterResourceFiles> variants) in catalog
-                     .OrderBy(
-                         item => item.Key,
-                         StringComparer.OrdinalIgnoreCase))
+        foreach (CharacterUpdatePlan update in plan.Updates)
         {
-            if (existingKeys.Contains(key))
+            UpdateCharacterResources(update.Character, update.Resources);
+            if (update.ClearConfiguredAnimation)
             {
-                continue;
+                update.Character.ConfiguredAnimation = string.Empty;
             }
+            updatedCount++;
+        }
 
-            CharacterResourceFiles? standingResources = variants
-                .Where(resource => string.Equals(
-                    resource.ResourceType,
-                    CharacterResourceTypes.Standing,
-                    StringComparison.OrdinalIgnoreCase))
-                .OrderBy(
-                    resource => resource.Identity.SkinCode,
-                    StringComparer.OrdinalIgnoreCase)
-                .ThenBy(
-                    resource => resource.Identity.ResourceName,
-                    StringComparer.OrdinalIgnoreCase)
-                .ThenBy(
-                    resource => resource.SkeletonPath,
-                    StringComparer.OrdinalIgnoreCase)
-                .FirstOrDefault();
-            if (standingResources == null)
-            {
-                continue;
-            }
-
-            _config.Characters.Add(CreateCharacter(standingResources));
+        foreach (CharacterResourceFiles addition in plan.Additions)
+        {
+            _config.Characters.Add(CreateCharacter(addition));
             addedCount++;
         }
 
-        // A freshly seeded configuration (e.g. the shipped portable package)
-        // starts with exactly one visible character instead of showing every
-        // discovered resource at once.
-        if (wasEmptyConfiguration && _config.Characters.Count > 0)
+        if (plan.SeedFirstCharacterVisible)
         {
             for (int index = 0; index < _config.Characters.Count; index++)
             {
@@ -482,8 +385,64 @@ public sealed class CharacterManager
         return result;
     }
 
-    private async Task ShowCharacterCoreAsync(CharacterConfig character)
+    private (Task<bool> Task, bool Owner) GetOrStartShowFlight(
+        CharacterConfig character)
     {
+        string resourceKey = GetResourceKey(character);
+        lock (_showSync)
+        {
+            if (_showFlights.TryGetValue(
+                    character.Id,
+                    out ShowFlight? existing) &&
+                string.Equals(
+                    existing.ResourceKey,
+                    resourceKey,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return (existing.Task, false);
+            }
+
+            Task<bool> task = existing == null
+                ? EnsureCharacterShownAsync(character)
+                : ShowAfterAsync(existing.Task, character);
+            _showFlights[character.Id] = new ShowFlight(resourceKey, task);
+            _ = task.ContinueWith(
+                _ => RemoveShowFlight(character.Id, task),
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+            return (task, true);
+        }
+    }
+
+    private async Task<bool> ShowAfterAsync(
+        Task<bool> previous,
+        CharacterConfig character)
+    {
+        try
+        {
+            await previous;
+        }
+        catch
+        {
+            // A newer resource request is independent of the previous load.
+        }
+
+        return await EnsureCharacterShownAsync(character);
+    }
+
+    private async Task<bool> EnsureCharacterShownAsync(
+        CharacterConfig character)
+    {
+        if (_closed ||
+            (character.Visible &&
+             _renderHost.IsCharacterVisible(character.Id) &&
+             !_renderHost.IsCharacterLoading(character.Id)))
+        {
+            return false;
+        }
+
+        bool wasVisible = character.Visible;
         character.Visible = true;
         try
         {
@@ -491,17 +450,67 @@ public sealed class CharacterManager
                 character,
                 _isConfigMode,
                 character.AnimationSpeed);
+            if (_closed)
+            {
+                return false;
+            }
+
+            if (!_config.Characters.Contains(character))
+            {
+                _renderHost.RemoveCharacter(character.Id);
+                return false;
+            }
+
+            if (!character.Visible)
+            {
+                if (_renderHost.IsCharacterVisible(character.Id) ||
+                    _renderHost.IsCharacterLoading(character.Id))
+                {
+                    _renderHost.HideCharacter(character.Id);
+                }
+
+                return false;
+            }
+
+            return true;
         }
         catch
         {
-            character.Visible = false;
-            _renderHost.HideCharacter(character.Id);
+            if (!_closed && character.Visible)
+            {
+                character.Visible = wasVisible;
+                _renderHost.HideCharacter(character.Id);
+            }
+
             throw;
+        }
+    }
+
+    private void RemoveShowFlight(string characterId, Task<bool> task)
+    {
+        lock (_showSync)
+        {
+            if (_showFlights.TryGetValue(
+                    characterId,
+                    out ShowFlight? current) &&
+                ReferenceEquals(current.Task, task))
+            {
+                _showFlights.Remove(characterId);
+            }
         }
     }
 
     public void HideCharacter(CharacterConfig character)
     {
+        ArgumentNullException.ThrowIfNull(character);
+        if (_closed ||
+            (!character.Visible &&
+             !_renderHost.IsCharacterVisible(character.Id) &&
+             !_renderHost.IsCharacterLoading(character.Id)))
+        {
+            return;
+        }
+
         character.Visible = false;
         _renderHost.HideCharacter(character.Id);
         _configService.Save(_config);
@@ -511,11 +520,22 @@ public sealed class CharacterManager
     public void UnloadCharacter(CharacterConfig character)
     {
         ArgumentNullException.ThrowIfNull(character);
+        if (_closed)
+        {
+            return;
+        }
         _renderHost.RemoveCharacter(character.Id);
     }
 
     public void RemoveCharacter(CharacterConfig character)
     {
+        ArgumentNullException.ThrowIfNull(character);
+        if (_closed || !_config.Characters.Contains(character))
+        {
+            return;
+        }
+
+        character.Visible = false;
         _renderHost.RemoveCharacter(character.Id);
         _config.Characters.Remove(character);
         _configService.Save(_config);
@@ -524,6 +544,15 @@ public sealed class CharacterManager
 
     public void HideAll()
     {
+        if (_closed ||
+            !_config.Characters.Any(character =>
+                character.Visible ||
+                _renderHost.IsCharacterVisible(character.Id) ||
+                _renderHost.IsCharacterLoading(character.Id)))
+        {
+            return;
+        }
+
         foreach (CharacterConfig character in _config.Characters)
         {
             character.Visible = false;
@@ -536,12 +565,36 @@ public sealed class CharacterManager
 
     public async Task ShowAllAsync()
     {
-        try
+        if (_closed)
         {
-            await Task.WhenAll(
-                _config.Characters.Select(ShowCharacterCoreAsync));
+            return;
         }
-        finally
+
+        List<Task<bool>> tasks = [];
+        foreach (CharacterConfig character in _config.Characters)
+        {
+            if (character.Visible &&
+                _renderHost.IsCharacterVisible(character.Id) &&
+                !_renderHost.IsCharacterLoading(character.Id))
+            {
+                continue;
+            }
+
+            (Task<bool> task, bool ownsSideEffects) =
+                GetOrStartShowFlight(character);
+            if (ownsSideEffects)
+            {
+                tasks.Add(task);
+            }
+        }
+
+        if (tasks.Count == 0)
+        {
+            return;
+        }
+
+        bool[] changes = await Task.WhenAll(tasks);
+        if (changes.Any(changed => changed) && !_closed)
         {
             _configService.Save(_config);
             CharactersChanged?.Invoke();
@@ -618,6 +671,18 @@ public sealed class CharacterManager
 
     public void Close()
     {
+        if (_closed)
+        {
+            return;
+        }
+
+        _closed = true;
+        _renderHost.CharacterScaleChanged -= OnCharacterScaleChanged;
+        _renderHost.CharacterAnimationsLoaded -= OnCharacterAnimationsLoaded;
+        _renderHost.CharacterLoadFailed -= OnCharacterLoadFailed;
+        _renderHost.CharactersStateChanged -= OnCharactersStateChanged;
+        _renderHost.CharacterPositionCommitted -= OnCharacterPositionCommitted;
+        _renderHost.CharacterRightClicked -= OnCharacterRightClicked;
         _renderHost.Close();
     }
 
@@ -626,6 +691,11 @@ public sealed class CharacterManager
         double maximumScale,
         double currentScale)
     {
+        if (_closed)
+        {
+            return;
+        }
+
         CharacterConfig? character =
             _config.Characters.FirstOrDefault(item => item.Id == characterId);
         if (character != null)
@@ -640,6 +710,11 @@ public sealed class CharacterManager
         string characterId,
         IReadOnlyList<string> animations)
     {
+        if (_closed)
+        {
+            return;
+        }
+
         CharacterConfig? character =
             _config.Characters.FirstOrDefault(item => item.Id == characterId);
         if (character != null &&
@@ -656,6 +731,11 @@ public sealed class CharacterManager
 
     private void OnCharacterLoadFailed(string characterId)
     {
+        if (_closed)
+        {
+            return;
+        }
+
         CharacterConfig? character =
             _config.Characters.FirstOrDefault(item => item.Id == characterId);
         if (character != null)
@@ -668,6 +748,11 @@ public sealed class CharacterManager
 
     private void OnCharactersStateChanged()
     {
+        if (_closed)
+        {
+            return;
+        }
+
         CharactersChanged?.Invoke();
     }
 
@@ -676,6 +761,11 @@ public sealed class CharacterManager
         double left,
         double top)
     {
+        if (_closed)
+        {
+            return;
+        }
+
         CharacterConfig? character =
             _config.Characters.FirstOrDefault(item => item.Id == characterId);
         if (character == null)
@@ -691,102 +781,12 @@ public sealed class CharacterManager
 
     private void OnCharacterRightClicked(string characterId)
     {
+        if (_closed)
+        {
+            return;
+        }
+
         CharacterRightClicked?.Invoke(characterId);
-    }
-
-    private CharacterConfig? FindPreferredCharacter(
-        CharacterResourceFiles resources)
-    {
-        string characterKey = GetCharacterGroupKey(resources);
-        CharacterConfig[] matches = _config.Characters
-            .Where(character => string.Equals(
-                GetCharacterGroupKey(character),
-                characterKey,
-                StringComparison.OrdinalIgnoreCase))
-            .ToArray();
-        return matches.Length == 0
-            ? null
-            : SelectPreferredCharacter(matches);
-    }
-
-    private string GetCharacterGroupKey(CharacterConfig character)
-    {
-        return GetCharacterGroupKey(
-            GetCharacterIdentity(character),
-            character.SkeletonPath);
-    }
-
-    private static string GetCharacterGroupKey(
-        CharacterResourceFiles resources)
-    {
-        return GetCharacterGroupKey(
-            resources.Identity,
-            resources.SkeletonPath);
-    }
-
-    private static string GetCharacterGroupKey(
-        CharacterIdentity identity,
-        string fallbackPath)
-    {
-        if (!string.IsNullOrWhiteSpace(identity.CharacterCode))
-        {
-            return $"code:{identity.CharacterCode.Trim()}";
-        }
-
-        if (!string.IsNullOrWhiteSpace(identity.ResourceName))
-        {
-            return $"resource:{identity.ResourceName.Trim()}";
-        }
-
-        return $"path:{fallbackPath}";
-    }
-
-    private static CharacterConfig SelectPreferredCharacter(
-        CharacterConfig[] characters)
-    {
-        return characters.FirstOrDefault(character => character.Visible) ??
-            characters[0];
-    }
-
-    private static CharacterResourceFiles SelectResources(
-        CharacterConfig character,
-        CharacterIdentity currentIdentity,
-        IReadOnlyList<CharacterResourceFiles> resources)
-    {
-        CharacterResourceFiles? selected = OrderResources(
-                resources.Where(resource => IsSameSkin(
-                    currentIdentity,
-                    resource.Identity)),
-                character.SkeletonPath)
-            .FirstOrDefault();
-        selected ??= OrderResources(
-                resources.Where(resource => string.Equals(
-                    resource.ResourceType,
-                    CharacterResourceTypes.Standing,
-                    StringComparison.OrdinalIgnoreCase)),
-                character.SkeletonPath)
-            .First();
-        return selected;
-    }
-
-    private static IOrderedEnumerable<CharacterResourceFiles> OrderResources(
-        IEnumerable<CharacterResourceFiles> resources,
-        string preferredSkeletonPath)
-    {
-        return resources
-            .OrderBy(resource => !string.Equals(
-                resource.SkeletonPath,
-                preferredSkeletonPath,
-                StringComparison.OrdinalIgnoreCase))
-            .ThenBy(
-                resource => resource.Identity.SkinCode,
-                StringComparer.OrdinalIgnoreCase)
-            .ThenBy(
-                resource => resource.Identity.ResourceName,
-                StringComparer.OrdinalIgnoreCase)
-            .ThenBy(
-                resource => resource.SkeletonPath,
-                StringComparer.OrdinalIgnoreCase);
     }
 
     private void RemoveCharacterFromConfiguration(CharacterConfig character)
@@ -819,68 +819,6 @@ public sealed class CharacterManager
             leftIdentity.SkinCode,
             rightIdentity.SkinCode,
             StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static bool CharacterResourcesExist(CharacterConfig character)
-    {
-        return File.Exists(character.SkeletonPath) &&
-            File.Exists(character.AtlasPath) &&
-            File.Exists(character.TexturePath) &&
-            character.AdditionalTexturePaths.All(File.Exists);
-    }
-
-    private static bool CharacterResourcesMatch(
-        CharacterConfig character,
-        CharacterResourceFiles resources)
-    {
-        return string.Equals(
-                character.SkeletonPath,
-                resources.SkeletonPath,
-                StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(
-                character.AtlasPath,
-                resources.AtlasPath,
-                StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(
-                character.TexturePath,
-                resources.PrimaryTexturePath,
-                StringComparison.OrdinalIgnoreCase) &&
-            character.AdditionalTexturePaths.SequenceEqual(
-                resources.AdditionalTexturePaths,
-                StringComparer.OrdinalIgnoreCase);
-    }
-
-    private static bool IsPathWithinRoot(string path, string root)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-        {
-            return false;
-        }
-
-        try
-        {
-            string relativePath = Path.GetRelativePath(
-                root,
-                Path.GetFullPath(path));
-            return !Path.IsPathRooted(relativePath) &&
-                !string.Equals(
-                    relativePath,
-                    "..",
-                    StringComparison.Ordinal) &&
-                !relativePath.StartsWith(
-                    $"..{Path.DirectorySeparatorChar}",
-                    StringComparison.Ordinal) &&
-                !relativePath.StartsWith(
-                    $"..{Path.AltDirectorySeparatorChar}",
-                    StringComparison.Ordinal);
-        }
-        catch (Exception exception) when (
-            exception is ArgumentException or
-                NotSupportedException or
-                PathTooLongException)
-        {
-            return false;
-        }
     }
 
     private static bool UpdateCharacterResources(
@@ -952,4 +890,16 @@ public sealed class CharacterManager
         setter(newValue);
         return true;
     }
+
+    private static string GetResourceKey(CharacterConfig character) =>
+        string.Join(
+            "\n",
+            new[]
+            {
+                character.SkeletonPath,
+                character.AtlasPath,
+                character.TexturePath
+            }.Concat(character.AdditionalTexturePaths));
+
+    private sealed record ShowFlight(string ResourceKey, Task<bool> Task);
 }

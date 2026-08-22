@@ -276,6 +276,79 @@ public sealed class ConfigServiceTests : IDisposable
         Assert.Equal(654, character.PositionY);
     }
 
+    [Fact]
+    public void NormalizeIsStableWhenRunTwice()
+    {
+        AppConfig config = new()
+        {
+            Version = "1.0",
+            Characters =
+            [
+                new CharacterConfig
+                {
+                    Id = string.Empty,
+                    AdditionalTexturePaths =
+                        ["page.png", "PAGE.png", ""],
+                    PositionX = double.NaN,
+                    PositionY = double.PositiveInfinity
+                }
+            ]
+        };
+
+        ConfigService.Normalize(config, TestWorkArea);
+        string first = JsonSerializer.Serialize(config);
+        string firstId = Assert.Single(config.Characters).Id;
+        ConfigService.Normalize(config, TestWorkArea);
+        string second = JsonSerializer.Serialize(config);
+
+        Assert.Equal(first, second);
+        Assert.Equal(firstId, Assert.Single(config.Characters).Id);
+    }
+
+    [Fact]
+    public async Task SyncAndAsyncSavesShareCommitAndClearRewriteState()
+    {
+        string configPath = Path.Combine(
+            _temporaryDirectory,
+            "sync-async.json");
+        ConfigService service = new(configPath, TestWorkArea);
+        AppConfig config = new()
+        {
+            Version = "1.4",
+            Characters = [new CharacterConfig { Id = "one" }]
+        };
+
+        service.Save(config);
+        Assert.False(config.RequiresRewrite);
+        int replacementsAfterSync = service.DiskReplacementCount;
+
+        config.RequiresRewrite = true;
+        await service.SaveAsync(config);
+
+        Assert.False(config.RequiresRewrite);
+        Assert.Equal(
+            replacementsAfterSync,
+            service.DiskReplacementCount);
+        Assert.Empty(Directory.EnumerateFiles(
+            _temporaryDirectory,
+            "sync-async.json.tmp.*"));
+    }
+
+    [Fact]
+    public void OlderCommitCannotOverwriteNewerContent()
+    {
+        string configPath = Path.Combine(
+            _temporaryDirectory,
+            "ordered.json");
+        ConfigFileCommitter committer = new(configPath);
+
+        Assert.True(committer.Commit("new", version: 2));
+        Assert.True(committer.Commit("old", version: 1));
+
+        Assert.Equal("new", File.ReadAllText(configPath));
+        Assert.Equal(1, committer.ReplacementCount);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_temporaryDirectory))

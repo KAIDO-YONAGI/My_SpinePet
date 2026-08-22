@@ -29,12 +29,28 @@ public sealed class UnityBundleImportService
     private readonly CharacterResourceDiscoveryService _resourceDiscovery;
     private readonly string _extractorScriptPath;
     private readonly string _pythonCommand;
+    private readonly Action<string>? _beforeCommitFile;
 
     public UnityBundleImportService(
         CharacterIdentityService? identityService = null,
         CharacterResourceDiscoveryService? resourceDiscovery = null,
         string? extractorScriptPath = null,
         string pythonCommand = "python")
+        : this(
+            identityService,
+            resourceDiscovery,
+            extractorScriptPath,
+            pythonCommand,
+            beforeCommitFile: null)
+    {
+    }
+
+    internal UnityBundleImportService(
+        CharacterIdentityService? identityService,
+        CharacterResourceDiscoveryService? resourceDiscovery,
+        string? extractorScriptPath,
+        string pythonCommand,
+        Action<string>? beforeCommitFile)
     {
         _identityService = identityService ?? new CharacterIdentityService();
         _resourceDiscovery = resourceDiscovery ??
@@ -42,6 +58,7 @@ public sealed class UnityBundleImportService
         _extractorScriptPath =
             extractorScriptPath ?? AppPaths.BundleExtractorScript;
         _pythonCommand = pythonCommand;
+        _beforeCommitFile = beforeCommitFile;
     }
 
     public static bool HasUnityFsHeader(string filePath)
@@ -131,7 +148,6 @@ public sealed class UnityBundleImportService
             skinDirectory,
             resourceDirectory,
             identity.CharacterCode);
-        Directory.CreateDirectory(resourceDirectory);
         string destinationDirectory = Path.Combine(
             skinDirectory,
             descriptor.ResourceType);
@@ -139,7 +155,14 @@ public sealed class UnityBundleImportService
             resourceDirectory,
             $".SpinePet-Import-{Guid.NewGuid():N}");
 
-        Directory.CreateDirectory(workingDirectory);
+        using IDisposable targetLock =
+            await CharacterImportTargetLock.AcquireAsync(
+                destinationDirectory,
+                cancellationToken)
+            .ConfigureAwait(false);
+        using CharacterImportTransaction transaction =
+            new(resourceDirectory);
+        transaction.CreateDirectory(workingDirectory);
         try
         {
             await RunExtractorAsync(
@@ -186,20 +209,29 @@ public sealed class UnityBundleImportService
             }
 
             cancellationToken.ThrowIfCancellationRequested();
-            EnsureSkinDirectories(skinDirectory);
+            string[] sourceFiles = Directory
+                .EnumerateFiles(workingDirectory)
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            (string Source, string Destination)[] moves =
+                CreateCommitPlan(sourceFiles, destinationDirectory);
+            EnsureNoConflicts(moves.Select(move => move.Destination));
+            EnsureSkinDirectories(skinDirectory, transaction);
             cancellationToken.ThrowIfCancellationRequested();
-            MoveExtractedFiles(workingDirectory, destinationDirectory);
+            CommitMoves(moves, transaction, cancellationToken);
 
             if (stagedResources == null)
             {
                 string importedIconPath = Path.Combine(
                     destinationDirectory,
                     Path.GetFileName(extractedIconPath!));
-                return new CharacterBundleImportResult(
+                CharacterBundleImportResult result = new(
                     identity,
                     descriptor.ResourceType,
                     destinationDirectory,
                     IconPath: importedIconPath);
+                transaction.Complete();
+                return result;
             }
 
             string destinationSkeletonPath = Path.Combine(
@@ -214,11 +246,13 @@ public sealed class UnityBundleImportService
                 throw new InvalidDataException(
                     "The extracted character files could not be discovered.");
             }
-            return new CharacterBundleImportResult(
+            CharacterBundleImportResult importedResult = new(
                 importedResources.Identity,
                 importedResources.ResourceType,
                 destinationDirectory,
                 Resources: importedResources);
+            transaction.Complete();
+            return importedResult;
         }
         finally
         {
@@ -304,18 +338,22 @@ public sealed class UnityBundleImportService
             identity.CharacterCode);
         SpineSkeletonCompatibility.EnsureSupported(
             sourceResources.SkeletonPath);
-        Directory.CreateDirectory(resourceDirectory);
         string destinationDirectory = Path.Combine(
             skinDirectory,
             CharacterResourceTypes.Standing);
 
-        cancellationToken.ThrowIfCancellationRequested();
-        EnsureSkinDirectories(skinDirectory);
-        cancellationToken.ThrowIfCancellationRequested();
-        CopyResourceFiles(
-            sourceResources,
+        using IDisposable targetLock = CharacterImportTargetLock.Acquire(
             destinationDirectory,
             cancellationToken);
+        (string Source, string Destination)[] copies =
+            CreateResourceCopyPlan(
+                sourceResources,
+                destinationDirectory);
+        EnsureNoConflicts(copies.Select(copy => copy.Destination));
+        using CharacterImportTransaction transaction =
+            new(resourceDirectory);
+        EnsureSkinDirectories(skinDirectory, transaction);
+        CommitCopies(copies, transaction, cancellationToken);
 
         string destinationSkeletonPath = Path.Combine(
             destinationDirectory,
@@ -330,11 +368,13 @@ public sealed class UnityBundleImportService
                 "The copied character files could not be discovered.");
         }
 
-        return new CharacterBundleImportResult(
+        CharacterBundleImportResult result = new(
             importedResources.Identity,
             importedResources.ResourceType,
             destinationDirectory,
             Resources: importedResources);
+        transaction.Complete();
+        return result;
     }
 
     private async Task RunExtractorAsync(
@@ -525,60 +565,45 @@ public sealed class UnityBundleImportService
         }
     }
 
-    private static void MoveExtractedFiles(
-        string workingDirectory,
+    private static (string Source, string Destination)[] CreateCommitPlan(
+        string[] sourceFiles,
         string destinationDirectory)
     {
-        string[] sourceFiles = Directory
-            .EnumerateFiles(workingDirectory)
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
         if (sourceFiles.Length == 0)
         {
             throw new InvalidDataException(
                 "The UnityPy extractor produced no files.");
         }
 
-        Directory.CreateDirectory(destinationDirectory);
-        string[] destinationPaths = sourceFiles
+        return sourceFiles
             .Select(sourcePath => Path.Combine(
                 destinationDirectory,
                 Path.GetFileName(sourcePath)))
+            .Select((destination, index) => (
+                Source: sourceFiles[index],
+                Destination: destination))
             .ToArray();
-        string? conflict = destinationPaths.FirstOrDefault(File.Exists);
-        if (conflict != null)
-        {
-            throw new IOException(
-                $"A character resource already exists: {conflict}");
-        }
+    }
 
-        List<string> movedFiles = [];
-        try
+    private void CommitMoves(
+        IEnumerable<(string Source, string Destination)> moves,
+        CharacterImportTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        foreach ((string source, string destination) in moves)
         {
-            for (int index = 0; index < sourceFiles.Length; index++)
-            {
-                File.Move(sourceFiles[index], destinationPaths[index]);
-                movedFiles.Add(destinationPaths[index]);
-            }
-        }
-        catch
-        {
-            foreach (string movedFile in movedFiles)
-            {
-                if (File.Exists(movedFile))
-                {
-                    File.Delete(movedFile);
-                }
-            }
-
-            throw;
+            _beforeCommitFile?.Invoke(destination);
+            transaction.MoveFile(
+                source,
+                destination,
+                cancellationToken);
         }
     }
 
-    private static void CopyResourceFiles(
+    private static (string Source, string Destination)[]
+        CreateResourceCopyPlan(
         CharacterResourceFiles resources,
-        string destinationDirectory,
-        CancellationToken cancellationToken)
+        string destinationDirectory)
     {
         string[] sourceFiles = new[]
             {
@@ -589,60 +614,50 @@ public sealed class UnityBundleImportService
             .Concat(resources.AdditionalTexturePaths)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
-        Directory.CreateDirectory(destinationDirectory);
-        (string Source, string Destination)[] copies = sourceFiles
+        return sourceFiles
             .Select(sourcePath => (
                 Source: sourcePath,
                 Destination: Path.Combine(
                     destinationDirectory,
                     Path.GetFileName(sourcePath))))
-            .Where(copy => !PathsEqual(copy.Source, copy.Destination))
             .ToArray();
+    }
 
-        string? conflict = copies
-            .Select(copy => copy.Destination)
-            .FirstOrDefault(File.Exists);
+    private static void EnsureNoConflicts(
+        IEnumerable<string> destinationPaths)
+    {
+        string? conflict = destinationPaths.FirstOrDefault(path =>
+            File.Exists(path) || Directory.Exists(path));
         if (conflict != null)
         {
             throw new IOException(
                 $"A character resource already exists: {conflict}");
         }
 
-        List<string> copiedFiles = [];
-        try
-        {
-            foreach ((string source, string destination) in copies)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                File.Copy(source, destination, overwrite: false);
-                copiedFiles.Add(destination);
-            }
-        }
-        catch
-        {
-            foreach (string copiedFile in copiedFiles)
-            {
-                if (File.Exists(copiedFile))
-                {
-                    File.Delete(copiedFile);
-                }
-            }
+    }
 
-            throw;
+    private void CommitCopies(
+        IEnumerable<(string Source, string Destination)> copies,
+        CharacterImportTransaction transaction,
+        CancellationToken cancellationToken)
+    {
+        foreach ((string source, string destination) in copies)
+        {
+            _beforeCommitFile?.Invoke(destination);
+            transaction.CopyFile(
+                source,
+                destination,
+                cancellationToken);
         }
     }
 
-    private static bool PathsEqual(string firstPath, string secondPath) =>
-        string.Equals(
-            Path.GetFullPath(firstPath),
-            Path.GetFullPath(secondPath),
-            StringComparison.OrdinalIgnoreCase);
-
-    private static void EnsureSkinDirectories(string skinDirectory)
+    private static void EnsureSkinDirectories(
+        string skinDirectory,
+        CharacterImportTransaction transaction)
     {
         foreach (string resourceType in CharacterResourceTypes.All)
         {
-            Directory.CreateDirectory(
+            transaction.CreateDirectory(
                 Path.Combine(skinDirectory, resourceType));
         }
     }

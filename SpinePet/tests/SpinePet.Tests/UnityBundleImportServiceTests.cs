@@ -224,7 +224,7 @@ public sealed class UnityBundleImportServiceTests : IDisposable
     }
 
     [Fact]
-    public void ImportSkeletonCopiesCompleteSetAndAcceptsAlreadyArchivedSource()
+    public void ImportSkeletonCopiesCompleteSetAndRejectsExistingTarget()
     {
         string sourceDirectory = Path.Combine(_temporaryDirectory, "incoming");
         Directory.CreateDirectory(sourceDirectory);
@@ -267,14 +267,13 @@ public sealed class UnityBundleImportServiceTests : IDisposable
                 Path.Combine(skinDirectory, resourceType)));
         }
 
-        CharacterBundleImportResult repeated = service.ImportSkeleton(
-            result.Resources.SkeletonPath,
-            resourceDirectory,
-            CharacterResourceTypes.Standing);
+        IOException exception = Assert.Throws<IOException>(() =>
+            service.ImportSkeleton(
+                result.Resources.SkeletonPath,
+                resourceDirectory,
+                CharacterResourceTypes.Standing));
 
-        Assert.Equal(
-            result.Resources.SkeletonPath,
-            repeated.Resources?.SkeletonPath);
+        Assert.Contains("already exists", exception.Message);
     }
 
     [Theory]
@@ -699,10 +698,12 @@ public sealed class UnityBundleImportServiceTests : IDisposable
                     processExitTimeout.Token));
             Assert.False(IsProcessRunning(parentProcessId.Value));
             Assert.False(IsProcessRunning(childProcessId.Value));
-            Assert.Empty(
-                Directory.EnumerateDirectories(
-                    resourceDirectory,
-                    ".SpinePet-Import-*"));
+            Assert.True(
+                !Directory.Exists(resourceDirectory) ||
+                !Directory.EnumerateDirectories(
+                        resourceDirectory,
+                        ".SpinePet-Import-*")
+                    .Any());
         }
         finally
         {
@@ -714,6 +715,171 @@ public sealed class UnityBundleImportServiceTests : IDisposable
                 await ObserveImportTaskAsync(importTask);
             }
         }
+    }
+
+    [Fact]
+    public async Task ImportAsyncRollsBackPartialCommitAndTemporaryDirectory()
+    {
+        string extractorPath =
+            Path.Combine(_temporaryDirectory, "failing_commit_extractor.py");
+        await File.WriteAllTextAsync(
+            extractorPath,
+            """
+            import argparse
+            from pathlib import Path
+
+            parser = argparse.ArgumentParser()
+            parser.add_argument("--bundle")
+            parser.add_argument("--resource-id", required=True)
+            parser.add_argument("--resource-type", required=True)
+            parser.add_argument("--output-directory", required=True, type=Path)
+            args = parser.parse_args()
+            args.output_directory.mkdir(parents=True, exist_ok=True)
+            (args.output_directory / f"{args.resource_id}.skel").write_bytes(
+                b"\0" * 8 + bytes([7]) + b"4.1.24"
+            )
+            (args.output_directory / f"{args.resource_id}.atlas").write_text(
+                f"{args.resource_id}.png\nsize:1,1\n",
+                encoding="utf-8",
+            )
+            (args.output_directory / f"{args.resource_id}.png").write_bytes(b"png")
+            """);
+        string bundlePath = Path.Combine(
+            _temporaryDirectory,
+            "c233_07_standing_partial");
+        await File.WriteAllBytesAsync(
+            bundlePath,
+            [0x55, 0x6E, 0x69, 0x74, 0x79, 0x46, 0x53, 0x00]);
+        string resourceDirectory =
+            Path.Combine(_temporaryDirectory, "res-partial-bundle");
+        int commitCount = 0;
+        UnityBundleImportService service = new(
+            identityService: null,
+            resourceDiscovery: null,
+            extractorScriptPath: extractorPath,
+            pythonCommand: "python",
+            beforeCommitFile: _ =>
+            {
+                if (Interlocked.Increment(ref commitCount) == 2)
+                {
+                    throw new IOException("Injected commit failure.");
+                }
+            });
+
+        IOException exception = await Assert.ThrowsAsync<IOException>(
+            () => service.ImportAsync(bundlePath, resourceDirectory));
+
+        Assert.Contains("Injected commit failure", exception.Message);
+        Assert.True(File.Exists(bundlePath));
+        Assert.False(Directory.Exists(resourceDirectory));
+    }
+
+    [Fact]
+    public void ImportSkeletonCancellationRollsBackFilesAndDirectories()
+    {
+        string sourceDirectory = CreateSkeletonResourceSet(
+            "cancel-incoming",
+            "c233_08");
+        string skeletonPath = Path.Combine(
+            sourceDirectory,
+            "c233_08.skel");
+        string resourceDirectory =
+            Path.Combine(_temporaryDirectory, "res-canceled-skeleton");
+        using CancellationTokenSource cancellationSource = new();
+        int commitCount = 0;
+        UnityBundleImportService service = new(
+            identityService: null,
+            resourceDiscovery: null,
+            extractorScriptPath: null,
+            pythonCommand: "python",
+            beforeCommitFile: _ =>
+            {
+                if (Interlocked.Increment(ref commitCount) == 2)
+                {
+                    cancellationSource.Cancel();
+                }
+            });
+
+        Assert.ThrowsAny<OperationCanceledException>(() =>
+            service.ImportSkeleton(
+                skeletonPath,
+                resourceDirectory,
+                cancellationToken: cancellationSource.Token));
+
+        Assert.True(File.Exists(skeletonPath));
+        Assert.False(Directory.Exists(resourceDirectory));
+    }
+
+    [Fact]
+    public async Task ConcurrentSkeletonImportsSerializeSameTarget()
+    {
+        string firstSource = CreateSkeletonResourceSet(
+            "concurrent-one",
+            "c233_09");
+        string secondSource = CreateSkeletonResourceSet(
+            "concurrent-two",
+            "c233_09");
+        string resourceDirectory =
+            Path.Combine(_temporaryDirectory, "res-concurrent-skeleton");
+        UnityBundleImportService service = new();
+
+        Task<CharacterBundleImportResult> first = Task.Run(() =>
+            service.ImportSkeleton(
+                Path.Combine(firstSource, "c233_09.skel"),
+                resourceDirectory));
+        Task<CharacterBundleImportResult> second = Task.Run(() =>
+            service.ImportSkeleton(
+                Path.Combine(secondSource, "c233_09.skel"),
+                resourceDirectory));
+
+        await Task.WhenAll(
+            first.ContinueWith(_ => { }, TaskScheduler.Default),
+            second.ContinueWith(_ => { }, TaskScheduler.Default));
+
+        Task<CharacterBundleImportResult>[] importTasks = [first, second];
+        Task<CharacterBundleImportResult>[] succeeded = importTasks
+            .Where(task => task.IsCompletedSuccessfully)
+            .ToArray();
+        Task<CharacterBundleImportResult>[] failed = importTasks
+            .Where(task => task.IsFaulted)
+            .ToArray();
+        Task<CharacterBundleImportResult> succeededImport =
+            Assert.Single(succeeded);
+        Task<CharacterBundleImportResult> failedImport =
+            Assert.Single(failed);
+        Assert.IsType<IOException>(
+            failedImport.Exception!.InnerException);
+        CharacterBundleImportResult result = await succeededImport;
+        Assert.NotNull(result.Resources);
+        Assert.True(File.Exists(result.Resources.SkeletonPath));
+        Assert.True(File.Exists(result.Resources.AtlasPath));
+        Assert.True(File.Exists(result.Resources.PrimaryTexturePath));
+        Assert.True(File.Exists(Path.Combine(firstSource, "c233_09.skel")));
+        Assert.True(File.Exists(Path.Combine(secondSource, "c233_09.skel")));
+        Assert.Empty(
+            Directory.EnumerateDirectories(
+                resourceDirectory,
+                ".SpinePet-Import-*"));
+    }
+
+    private string CreateSkeletonResourceSet(
+        string directoryName,
+        string resourceName)
+    {
+        string sourceDirectory = Path.Combine(
+            _temporaryDirectory,
+            directoryName);
+        Directory.CreateDirectory(sourceDirectory);
+        WriteSkeletonHeader(
+            Path.Combine(sourceDirectory, $"{resourceName}.skel"),
+            "4.1.24");
+        File.WriteAllText(
+            Path.Combine(sourceDirectory, $"{resourceName}.atlas"),
+            $"{resourceName}.png\nsize: 1,1\n");
+        File.WriteAllBytes(
+            Path.Combine(sourceDirectory, $"{resourceName}.png"),
+            [1]);
+        return sourceDirectory;
     }
 
     private static async Task<int> WaitForProcessIdAsync(

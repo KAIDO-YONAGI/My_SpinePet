@@ -109,7 +109,7 @@ workflow:Resources.StateSupport
 | 业务根 | 计数 | Router |
 |---|---:|---|
 | Workflow | `0/5` | `Workflow\Router.md` |
-| GUI | `0/5` | `GUI\Router.md` |
-| Resources.Load | `0/5` | `Resources\Load\Router.md` |
+| GUI | `1/5` | `GUI\Router.md` |
+| Resources.Load | `1/5` | `Resources\Load\Router.md` |
 | Resources.MatchClean | `0/5` | `Resources\MatchClean\Router.md` |
 | Resources.StateSupport | `0/5` | `Resources\StateSupport\Router.md` |

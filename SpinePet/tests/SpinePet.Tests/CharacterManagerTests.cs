@@ -637,6 +637,283 @@ public sealed class CharacterManagerTests : IDisposable
         Assert.True(File.Exists(texturePath));
     }
 
+    [Fact]
+    public void RepeatedConfigModeChangeHasNoAdditionalRendererCall()
+    {
+        FakeCharacterRenderHost renderHost = new();
+        CharacterManager manager = CreateManager(
+            new ConfigService(Path.Combine(
+                _temporaryDirectory,
+                "config-mode.json")),
+            renderHost);
+
+        manager.SetConfigMode(true);
+        manager.SetConfigMode(true);
+        manager.SetConfigMode(false);
+        manager.SetConfigMode(false);
+
+        Assert.Equal(2, renderHost.ConfigModeSetCount);
+        Assert.False(renderHost.ConfigMode);
+    }
+
+    [Fact]
+    public async Task RepeatedShowPersistsAndNotifiesOnlyOnce()
+    {
+        CharacterResourceFiles resources = CreateResources(
+            "show-idempotent",
+            "Rapi",
+            "010",
+            "00",
+            CharacterResourceTypes.Standing);
+        string configPath = Path.Combine(
+            _temporaryDirectory,
+            "show-idempotent.json");
+        ConfigService configService = new(configPath);
+        FakeCharacterRenderHost renderHost = new();
+        CharacterManager manager = CreateManager(configService, renderHost);
+        manager.AddCharacter(resources);
+        CharacterConfig character = Assert.Single(manager.Characters);
+        int initialSaves = configService.SaveRequestCount;
+        int notifications = 0;
+        manager.CharactersChanged += () => notifications++;
+
+        await manager.ShowCharacterAsync(character);
+        await manager.ShowCharacterAsync(character);
+
+        Assert.Single(renderHost.ShownSkeletonPaths);
+        Assert.Equal(initialSaves + 1, configService.SaveRequestCount);
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
+    public async Task ConcurrentShowUsesSingleFlightAndAllowsRetryAfterFailure()
+    {
+        CharacterResourceFiles resources = CreateResources(
+            "show-single-flight",
+            "Rapi",
+            "010",
+            "00",
+            CharacterResourceTypes.Standing);
+        TaskCompletionSource firstLoadStarted =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseFirstLoad =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int attempts = 0;
+        FakeCharacterRenderHost renderHost = new()
+        {
+            ShowCharacterHandler = async _ =>
+            {
+                int attempt = Interlocked.Increment(ref attempts);
+                if (attempt == 1)
+                {
+                    firstLoadStarted.SetResult();
+                    await releaseFirstLoad.Task;
+                    throw new InvalidDataException("first load failed");
+                }
+            }
+        };
+        CharacterManager manager = CreateManager(
+            new ConfigService(Path.Combine(
+                _temporaryDirectory,
+                "show-single-flight.json")),
+            renderHost);
+        manager.AddCharacter(resources);
+        CharacterConfig character = Assert.Single(manager.Characters);
+
+        Task first = manager.ShowCharacterAsync(character);
+        await firstLoadStarted.Task;
+        Task duplicate = manager.ShowCharacterAsync(character);
+        releaseFirstLoad.SetResult();
+
+        await Assert.ThrowsAsync<InvalidDataException>(() => first);
+        await Assert.ThrowsAsync<InvalidDataException>(() => duplicate);
+        Assert.Equal(1, attempts);
+
+        await manager.ShowCharacterAsync(character);
+
+        Assert.Equal(2, attempts);
+        Assert.True(character.Visible);
+        Assert.True(renderHost.IsCharacterVisible(character.Id));
+    }
+
+    [Fact]
+    public async Task ShowAllReusesExistingFlightWithoutDuplicateSideEffects()
+    {
+        CharacterResourceFiles resources = CreateResources(
+            "show-all-single-flight",
+            "Rapi",
+            "010",
+            "00",
+            CharacterResourceTypes.Standing);
+        ConfigService configService = new(Path.Combine(
+            _temporaryDirectory,
+            "show-all-single-flight.json"));
+        FakeCharacterRenderHost renderHost = new();
+        TaskCompletionSource loadStarted =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseLoad =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        renderHost.ShowCharacterHandler = async _ =>
+        {
+            loadStarted.SetResult();
+            await releaseLoad.Task;
+        };
+        CharacterManager manager = CreateManager(
+            configService,
+            renderHost: renderHost);
+        manager.AddCharacter(resources);
+        CharacterConfig character = Assert.Single(manager.Characters);
+        character.Visible = false;
+        int notifications = 0;
+        manager.CharactersChanged += () => notifications++;
+        int savesBeforeShow = configService.SaveRequestCount;
+
+        Task showTask = manager.ShowCharacterAsync(character);
+        await loadStarted.Task;
+        Task showAllTask = manager.ShowAllAsync();
+        releaseLoad.SetResult();
+        await Task.WhenAll(showTask, showAllTask);
+
+        Assert.Single(renderHost.ShownSkeletonPaths);
+        Assert.Equal(savesBeforeShow + 1, configService.SaveRequestCount);
+        Assert.Equal(1, notifications);
+    }
+
+    [Fact]
+    public async Task HideDuringLoadWinsOverCompletingShow()
+    {
+        CharacterResourceFiles resources = CreateResources(
+            "hide-during-load",
+            "Rapi",
+            "010",
+            "00",
+            CharacterResourceTypes.Standing);
+        ConfigService configService = new(Path.Combine(
+            _temporaryDirectory,
+            "hide-during-load.json"));
+        FakeCharacterRenderHost renderHost = new();
+        TaskCompletionSource loadStarted =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource releaseLoad =
+            new(TaskCreationOptions.RunContinuationsAsynchronously);
+        renderHost.ShowCharacterHandler = async _ =>
+        {
+            loadStarted.SetResult();
+            await releaseLoad.Task;
+        };
+        CharacterManager manager = CreateManager(
+            configService,
+            renderHost: renderHost);
+        manager.AddCharacter(resources);
+        CharacterConfig character = Assert.Single(manager.Characters);
+        character.Visible = false;
+        int savesBeforeShow = configService.SaveRequestCount;
+
+        Task showTask = manager.ShowCharacterAsync(character);
+        await loadStarted.Task;
+        manager.HideCharacter(character);
+        releaseLoad.SetResult();
+        await showTask;
+
+        Assert.False(character.Visible);
+        Assert.False(renderHost.IsCharacterVisible(character.Id));
+        Assert.Equal(savesBeforeShow + 1, configService.SaveRequestCount);
+    }
+
+    [Fact]
+    public async Task RepeatedHideShowAllRemoveAndCloseHaveNoExtraSideEffects()
+    {
+        CharacterResourceFiles rapi = CreateResources(
+            "bulk-idempotent",
+            "Rapi",
+            "010",
+            "00",
+            CharacterResourceTypes.Standing);
+        CharacterResourceFiles neon = CreateResources(
+            "bulk-idempotent",
+            "Neon",
+            "007",
+            "00",
+            CharacterResourceTypes.Standing);
+        ConfigService configService = new(Path.Combine(
+            _temporaryDirectory,
+            "bulk-idempotent.json"));
+        FakeCharacterRenderHost renderHost = new();
+        CharacterManager manager = CreateManager(configService, renderHost);
+        manager.AddCharacter(rapi);
+        manager.AddCharacter(neon);
+        CharacterConfig[] characters = manager.Characters.ToArray();
+
+        await manager.ShowAllAsync();
+        int savesAfterShow = configService.SaveRequestCount;
+        int shownAfterShow = renderHost.ShownSkeletonPaths.Count;
+        await manager.ShowAllAsync();
+        Assert.Equal(shownAfterShow, renderHost.ShownSkeletonPaths.Count);
+        Assert.Equal(savesAfterShow, configService.SaveRequestCount);
+
+        manager.HideAll();
+        int savesAfterHide = configService.SaveRequestCount;
+        manager.HideAll();
+        Assert.Equal(1, renderHost.HideAllCount);
+        Assert.Equal(savesAfterHide, configService.SaveRequestCount);
+
+        manager.RemoveCharacter(characters[0]);
+        int savesAfterRemove = configService.SaveRequestCount;
+        int removesAfterRemove = renderHost.RemovedCharacterIds.Count;
+        manager.RemoveCharacter(characters[0]);
+        Assert.Equal(removesAfterRemove, renderHost.RemovedCharacterIds.Count);
+        Assert.Equal(savesAfterRemove, configService.SaveRequestCount);
+
+        Assert.Equal(6, renderHost.EventSubscriptionCount);
+        int notifications = 0;
+        manager.CharactersChanged += () => notifications++;
+        manager.Close();
+        manager.Close();
+        renderHost.RaiseStateChanged();
+        renderHost.RaiseLoadFailed(characters[1].Id);
+        Assert.Equal(1, renderHost.CloseCount);
+        Assert.Equal(0, renderHost.EventSubscriptionCount);
+        Assert.Equal(0, notifications);
+    }
+
+    [Fact]
+    public void RepeatedSynchronizationHasNoSecondPassSideEffects()
+    {
+        CharacterResourceFiles resources = CreateResources(
+            "sync-idempotent",
+            "Rapi",
+            "010",
+            "00",
+            CharacterResourceTypes.Standing);
+        ConfigService configService = new(Path.Combine(
+            _temporaryDirectory,
+            "sync-idempotent.json"));
+        FakeCharacterRenderHost renderHost = new();
+        CharacterManager manager = CreateManager(configService, renderHost);
+        int notifications = 0;
+        manager.CharactersChanged += () => notifications++;
+
+        CharacterResourceSynchronizationResult first =
+            manager.SynchronizeResources(
+                [resources],
+                Path.Combine(_temporaryDirectory, "sync-idempotent"));
+        int savesAfterFirst = configService.SaveRequestCount;
+        int notificationsAfterFirst = notifications;
+        int removalsAfterFirst = renderHost.RemovedCharacterIds.Count;
+        CharacterResourceSynchronizationResult second =
+            manager.SynchronizeResources(
+                [resources],
+                Path.Combine(_temporaryDirectory, "sync-idempotent"));
+
+        Assert.True(first.HasChanges);
+        Assert.False(second.HasChanges);
+        Assert.Equal(savesAfterFirst, configService.SaveRequestCount);
+        Assert.Equal(notificationsAfterFirst, notifications);
+        Assert.Equal(
+            removalsAfterFirst,
+            renderHost.RemovedCharacterIds.Count);
+    }
+
     private CharacterManager CreateManager(string configFileName)
     {
         return CreateManager(
