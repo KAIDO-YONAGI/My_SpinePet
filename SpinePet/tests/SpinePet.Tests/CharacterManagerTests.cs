@@ -71,6 +71,60 @@ public sealed class CharacterManagerTests : IDisposable
     }
 
     [Fact]
+    public void ResetAllSettingsRestoresAnimationScaleSpeedAndPosition()
+    {
+        CharacterConfig character = new()
+        {
+            Id = "reset-all",
+            Name = "Reset me",
+            PositionX = 12,
+            PositionY = 34,
+            Scale = 1.4,
+            ScaleBasePercent = 55,
+            ScaleMultiplier = 3,
+            ConfiguredAnimation = "custom",
+            AnimationSpeed = 1.8,
+            Visible = false
+        };
+        ConfigService configService = SaveConfig(
+            "reset-all.json",
+            character);
+        CharacterManager manager = CreateManager(
+            configService,
+            new FakeCharacterRenderHost());
+        int changedCount = 0;
+        manager.CharactersChanged += () => changedCount++;
+
+        manager.ResetAllSettings();
+
+        CharacterConfig reset = Assert.Single(manager.Characters);
+        Assert.Equal(CharacterConfig.DefaultScale, reset.Scale);
+        Assert.Equal(
+            CharacterConfig.DefaultScaleBasePercent,
+            reset.ScaleBasePercent);
+        Assert.Equal(
+            CharacterConfig.DefaultScaleMultiplier,
+            reset.ScaleMultiplier);
+        Assert.Equal(
+            CharacterConfig.DefaultAnimationSpeed,
+            reset.AnimationSpeed);
+        Assert.Empty(reset.ConfiguredAnimation);
+        Assert.Equal(960, reset.PositionX);
+        Assert.Equal(1056, reset.PositionY);
+        Assert.False(reset.Visible);
+        Assert.Equal(1, changedCount);
+
+        CharacterConfig persisted = Assert.Single(
+            configService.Load().Characters);
+        Assert.Equal(CharacterConfig.DefaultScale, persisted.Scale);
+        Assert.Equal(
+            CharacterConfig.DefaultAnimationSpeed,
+            persisted.AnimationSpeed);
+        Assert.Equal(960, persisted.PositionX);
+        Assert.Equal(1056, persisted.PositionY);
+    }
+
+    [Fact]
     public void AddCharacterKeepsCurrentSkinWhenNewSkinIsImported()
     {
         CharacterResourceFiles skin00 = CreateResources(

@@ -892,26 +892,15 @@ public sealed class NativeCharacterRenderHost :
         _compositionDirty = false;
     }
 
-    private void SelectModeAnimation(NativeCharacterState state)
+    private static void SelectModeAnimation(NativeCharacterState state)
     {
         NativeSpineResource? resource = state.Resource;
         if (resource == null)
             return;
 
-        if (_configMode)
-        {
-            resource.SetAnimationIfNeeded(
-                state.Config.ConfiguredAnimation,
-                true);
-            return;
-        }
-
-        string? configured = state.Config.ConfiguredAnimation;
-        string? animation =
-            !string.IsNullOrEmpty(configured) &&
-            resource.SkeletonData.FindAnimation(configured) != null
-                ? configured
-                : SelectIdleAnimationName(resource.AnimationNames);
+        string? animation = SelectConfiguredOrIdleAnimationName(
+            state.Config.ConfiguredAnimation,
+            resource.AnimationNames);
         resource.SetAnimationIfNeeded(animation, true);
     }
 
@@ -986,6 +975,17 @@ public sealed class NativeCharacterRenderHost :
                        "idle",
                        StringComparison.OrdinalIgnoreCase)) ??
                (animationNames.Count > 0 ? animationNames[0] : null);
+    }
+
+    internal static string? SelectConfiguredOrIdleAnimationName(
+        string? configuredAnimation,
+        IReadOnlyList<string> animationNames)
+    {
+        string? configured = animationNames.FirstOrDefault(name =>
+            name.Equals(
+                configuredAnimation,
+                StringComparison.OrdinalIgnoreCase));
+        return configured ?? SelectIdleAnimationName(animationNames);
     }
 
     private void UpdateWindowRegions()

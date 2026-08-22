@@ -18,6 +18,8 @@ SkeletonData data = Path.GetExtension(skeletonPath)
 Console.WriteLine(
     $"version={data.Version} skins={data.Skins.Count} " +
     $"slots={data.Slots.Count} animations={data.Animations.Count}");
+foreach (Animation animation in data.Animations)
+    Console.WriteLine($"animation\t{animation.Name}");
 Console.WriteLine(
     "skin\tslot\tplaceholder\ttype\tattachment\tpath\tregion");
 

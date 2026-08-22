@@ -64,13 +64,11 @@
                             </Grid.RowDefinitions>
 
                             <Grid Grid.Row="0" Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
+                                 <Grid.ColumnDefinitions>
+                                     <ColumnDefinition Width="Auto" />
+                                     <ColumnDefinition Width="*" />
+                                     <ColumnDefinition Width="Auto" />
+                                 </Grid.ColumnDefinitions>
 
                                 <Border Grid.Column="0"
                                         Width="26"
@@ -105,73 +103,90 @@
                                     </Border>
                                 </StackPanel>
 
-                                <Button Grid.Column="2"
-                                        Style="{StaticResource SoftAccentButtonStyle}"
-                                        MinWidth="58"
-                                        Height="28"
-                                        MinHeight="28"
-                                        Margin="0,0,6,0"
-                                        Padding="8,0"
-                                        x:Name="AddCharacterButton"
-                                        ToolTip="Import a Spine character"
-                                        AutomationProperties.Name="Add character">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Path Width="10"
-                                              Height="10"
-                                              Margin="0,0,6,0"
-                                              Stretch="Uniform"
-                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                              StrokeThickness="2"
-                                              StrokeStartLineCap="Round"
-                                              Data="M6,1 L6,11 M1,6 L11,6" />
-                                        <TextBlock Text="Add" />
-                                    </StackPanel>
-                                </Button>
+                                 <StackPanel Grid.Column="2"
+                                             Orientation="Horizontal"
+                                             Margin="16,0,0,0"
+                                             HorizontalAlignment="Right"
+                                             VerticalAlignment="Center">
+                                     <Button Style="{StaticResource SoftAccentButtonStyle}"
+                                             MinWidth="46"
+                                             Height="24"
+                                             MinHeight="24"
+                                             Padding="6,0"
+                                             x:Name="AddCharacterButton"
+                                             ToolTip="Import a Spine character"
+                                             AutomationProperties.Name="Add character">
+                                         <StackPanel Orientation="Horizontal">
+                                             <Path Width="9"
+                                                   Height="9"
+                                                   Margin="0,0,4,0"
+                                                   Stretch="Uniform"
+                                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                   StrokeThickness="2"
+                                                   StrokeStartLineCap="Round"
+                                                   Data="M6,1 L6,11 M1,6 L11,6" />
+                                             <TextBlock Text="Add" />
+                                         </StackPanel>
+                                     </Button>
 
-                                <Button Grid.Column="3"
-                                        Style="{StaticResource QuietButtonStyle}"
-                                        MinWidth="58"
-                                        Height="28"
-                                        MinHeight="28"
-                                        Padding="8,0"
-                                        x:Name="ScanResourcesButton"
-                                        ToolTip="Scan the resource folder"
-                                        AutomationProperties.Name="Scan resource folder">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Path Width="11"
-                                              Height="11"
-                                              Margin="0,0,6,0"
-                                              Stretch="Uniform"
-                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                              StrokeThickness="1.7"
-                                              StrokeStartLineCap="Round"
-                                              Data="M11,5 A5,5 0 1 0 10,9 M11,5 L11,1 M11,5 L7,5" />
-                                        <TextBlock Text="Scan" />
-                                    </StackPanel>
-                                </Button>
+                                     <Button Style="{StaticResource QuietButtonStyle}"
+                                             MinWidth="48"
+                                             Height="24"
+                                             MinHeight="24"
+                                             Margin="4,0,0,0"
+                                             Padding="6,0"
+                                             x:Name="ScanResourcesButton"
+                                             ToolTip="Scan the resource folder"
+                                             AutomationProperties.Name="Scan resource folder">
+                                         <StackPanel Orientation="Horizontal">
+                                             <Path Width="10"
+                                                   Height="10"
+                                                   Margin="0,0,4,0"
+                                                   Stretch="Uniform"
+                                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                   StrokeThickness="1.7"
+                                                   StrokeStartLineCap="Round"
+                                                   Data="M11,5 A5,5 0 1 0 10,9 M11,5 L11,1 M11,5 L7,5" />
+                                             <TextBlock Text="Scan" />
+                                         </StackPanel>
+                                     </Button>
 
-                                <Button Grid.Column="4"
-                                        Style="{StaticResource QuietButtonStyle}"
-                                        MinWidth="64"
-                                        Height="28"
-                                        MinHeight="28"
-                                        Margin="6,0,0,0"
-                                        Padding="8,0"
-                                        x:Name="OpenResourceFolderButton"
-                                        ToolTip="Open the resource folder"
-                                        AutomationProperties.Name="Open resource folder">
-                                    <StackPanel Orientation="Horizontal">
-                                        <Path Width="12"
-                                              Height="10"
-                                              Margin="0,0,6,0"
-                                              Stretch="Uniform"
-                                              Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
-                                              StrokeThickness="1.6"
-                                              StrokeLineJoin="Round"
-                                              Data="M1,3 L1,11 L13,11 L13,4 L7,4 L6,2 L1,2 Z" />
-                                        <TextBlock Text="Folder" />
-                                    </StackPanel>
-                                </Button>
+                                     <Button Style="{StaticResource QuietButtonStyle}"
+                                             MinWidth="54"
+                                             Height="24"
+                                             MinHeight="24"
+                                             Margin="4,0,0,0"
+                                             Padding="6,0"
+                                             x:Name="OpenResourceFolderButton"
+                                             ToolTip="Open the resource folder"
+                                             AutomationProperties.Name="Open resource folder">
+                                         <StackPanel Orientation="Horizontal">
+                                             <Path Width="11"
+                                                   Height="9"
+                                                   Margin="0,0,4,0"
+                                                   Stretch="Uniform"
+                                                   Stroke="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}"
+                                                   StrokeThickness="1.6"
+                                                   StrokeLineJoin="Round"
+                                                   Data="M1,3 L1,11 L13,11 L13,4 L7,4 L6,2 L1,2 Z" />
+                                             <TextBlock Text="Folder" />
+                                         </StackPanel>
+                                     </Button>
+
+                                      <ComboBox Width="116"
+                                                Height="32"
+                                                Margin="8,0,0,0"
+                                                x:Name="BatchProcessingCombo"
+                                                ToolTip="Batch processing actions"
+                                                AutomationProperties.Name="Batch processing">
+                                          <ComboBoxItem Content="Batch Processing"
+                                                        IsEnabled="False"
+                                                        IsSelected="True" />
+                                          <ComboBoxItem Content="Hide All" />
+                                          <ComboBoxItem Content="Show All" />
+                                          <ComboBoxItem Content="Reset All Settings" />
+                                      </ComboBox>
+                                  </StackPanel>
                             </Grid>
 
                             <!-- Search + thumbnail size slider -->
@@ -591,10 +606,11 @@
                                 Padding="12">
                         <StackPanel>
                                 <Grid Margin="0,0,0,6">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
+                                     <Grid.ColumnDefinitions>
+                                         <ColumnDefinition Width="Auto" />
+                                         <ColumnDefinition Width="*" />
+                                         <ColumnDefinition Width="Auto" />
+                                     </Grid.ColumnDefinitions>
 
                                     <Border Grid.Column="0"
                                             Width="26"
@@ -624,16 +640,29 @@
                                                    TextTrimming="CharacterEllipsis"
                                                    ToolTip="{Binding SelectedCharacter.Name}" />
                                         <WrapPanel Margin="0,3,10,0">
-                                            <TextBlock Text="{Binding SelectedCharacter.SkinLabel}"
+                                         <TextBlock Text="{Binding SelectedCharacter.SkinLabel}"
                                                        FontSize="11"
                                                        FontWeight="SemiBold"
                                                        Foreground="{StaticResource MutedBrush}"
                                                        MaxWidth="260"
                                                        TextTrimming="CharacterEllipsis"
-                                                       ToolTip="{Binding SelectedCharacter.SkinLabel}" />
-                                        </WrapPanel>
-                                    </StackPanel>
-                                </Grid>
+                                            ToolTip="{Binding SelectedCharacter.SkinLabel}" />
+                                     </WrapPanel>
+                                 </StackPanel>
+
+                                 <Button Grid.Column="2"
+                                         Width="44"
+                                         Height="24"
+                                         MinHeight="24"
+                                         Margin="8,0,0,0"
+                                         Padding="4,0"
+                                         Content="Exit"
+                                         Style="{StaticResource QuietButtonStyle}"
+                                         VerticalAlignment="Center"
+                                         x:Name="ExitButton"
+                                         ToolTip="Exit SpinePet completely"
+                                         AutomationProperties.Name="Exit application" />
+                             </Grid>
 
                                 <Border Style="{StaticResource ControlGroupStyle}"
                                         Margin="0,0,0,6">

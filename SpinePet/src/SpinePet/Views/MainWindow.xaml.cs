@@ -48,10 +48,12 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
     private Button _addCharacterButton = null!;
     private Button _scanResourcesButton = null!;
     private Button _openResourceFolderButton = null!;
+    private ComboBox _batchProcessingCombo = null!;
     private Button _resetScaleButton = null!;
     private Button _resetSpeedButton = null!;
     private Button _deleteSkinButton = null!;
     private Button _finishConfigurationButton = null!;
+    private Button _exitButton = null!;
     private CheckBox _allowDraggingToggle = null!;
     private bool _isRefreshingSelection;
     private CharacterViewModel? _selectedCharacter;
@@ -136,6 +138,8 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             RequireNamedElement<Button>("ScanResourcesButton");
         _openResourceFolderButton =
             RequireNamedElement<Button>("OpenResourceFolderButton");
+        _batchProcessingCombo =
+            RequireNamedElement<ComboBox>("BatchProcessingCombo");
         _resetScaleButton =
             RequireNamedElement<Button>("ResetScaleButton");
         _resetSpeedButton =
@@ -144,6 +148,8 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             RequireNamedElement<Button>("DeleteSkinButton");
         _finishConfigurationButton =
             RequireNamedElement<Button>("FinishConfigurationButton");
+        _exitButton =
+            RequireNamedElement<Button>("ExitButton");
         _allowDraggingToggle =
             RequireNamedElement<CheckBox>("AllowDraggingToggle");
 
@@ -531,6 +537,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         _addCharacterButton.Click += OnAddCharacter;
         _scanResourcesButton.Click += OnScanResources;
         _openResourceFolderButton.Click += OnOpenResourceFolder;
+        _batchProcessingCombo.SelectionChanged += OnBatchProcessingChanged;
         _characterCards.SelectionChanged += OnCharacterSelectionChanged;
         _characterCards.AddHandler(
             ScrollViewer.ScrollChangedEvent,
@@ -551,6 +558,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         _resetSpeedButton.Click += OnResetSpeed;
         _deleteSkinButton.Click += OnDeleteSelectedSkin;
         _finishConfigurationButton.Click += OnExitConfiguration;
+        _exitButton.Click += OnExitApplication;
     }
 
     private void OnWindowLoaded(object sender, RoutedEventArgs e) =>
@@ -697,6 +705,55 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
     private void OnOpenResourceFolder(object sender, RoutedEventArgs e) =>
         _libraryController.OpenResourceFolder();
 
+    private void OnBatchProcessingChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (_batchProcessingCombo.SelectedIndex <= 0)
+        {
+            return;
+        }
+
+        switch (_batchProcessingCombo.SelectedIndex)
+        {
+            case 1:
+                OnHideAll(sender, e);
+                break;
+            case 2:
+                OnShowAll(sender, e);
+                break;
+            case 3:
+                OnResetAllSettings(sender, e);
+                break;
+        }
+
+        _batchProcessingCombo.SelectedIndex = 0;
+    }
+
+    private void OnHideAll(object sender, RoutedEventArgs e) =>
+        _characterManager.HideAll();
+
+    private async void OnShowAll(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            await _characterManager.ShowAllAsync();
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Write(
+                nameof(MainWindow),
+                $"batch-show-all-failed message={exception.Message}");
+        }
+    }
+
+    private void OnResetAllSettings(object sender, RoutedEventArgs e)
+    {
+        _characterManager.ResetAllSettings();
+        _libraryController.RefreshCharacterList();
+        SyncSelectedCharacterSettings();
+    }
+
     private async void OnCharacterSkinExecuted(
         object sender,
         ExecutedRoutedEventArgs e) =>
@@ -726,6 +783,9 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
 
     private void OnExitConfiguration(object sender, RoutedEventArgs e) =>
         _lifecycle.ExitConfiguration();
+
+    private void OnExitApplication(object sender, RoutedEventArgs e) =>
+        System.Windows.Application.Current?.Shutdown();
 
     private void OnCharacterRightClicked(string characterId) =>
         _panelActivation.HandleRightClick(characterId);

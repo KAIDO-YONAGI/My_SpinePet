@@ -18,6 +18,9 @@ internal sealed class NativeSpineResource : IDisposable
         SkeletonData = skeletonData;
         ExcludedAttachmentCount = excludedAttachmentCount;
         Skeleton = new Skeleton(skeletonData);
+        IncludedSkinCount = NativeSpineSkinIncludes.Apply(
+            skeletonData,
+            Skeleton);
         AnimationStateData = new AnimationStateData(skeletonData)
         {
             // Input-driven state changes must start from the selected state.
@@ -36,6 +39,7 @@ internal sealed class NativeSpineResource : IDisposable
     public NativeAtlasTextureLoader TextureLoader { get; }
     public SkeletonData SkeletonData { get; }
     public int ExcludedAttachmentCount { get; }
+    public int IncludedSkinCount { get; }
     public Skeleton Skeleton { get; }
     public AnimationStateData AnimationStateData { get; }
     public AnimationState AnimationState { get; }

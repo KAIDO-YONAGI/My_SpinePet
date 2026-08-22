@@ -548,6 +548,52 @@ public sealed class CharacterManager
         }
     }
 
+    public void ResetAllSettings()
+    {
+        Rect workArea = _workArea ?? SystemParameters.WorkArea;
+        double defaultPositionX = workArea.Left + workArea.Width / 2;
+        double defaultPositionY = workArea.Bottom - 24;
+
+        foreach (CharacterConfig character in _config.Characters)
+        {
+            IReadOnlyList<string> animationNames =
+                _renderHost.GetAnimationNames(character.Id);
+            string? idleAnimation =
+                NativeCharacterRenderHost.SelectIdleAnimationName(
+                    animationNames);
+
+            character.Scale = CharacterConfig.DefaultScale;
+            character.ScaleBasePercent =
+                CharacterConfig.DefaultScaleBasePercent;
+            character.ScaleMultiplier =
+                CharacterConfig.DefaultScaleMultiplier;
+            character.AnimationSpeed =
+                CharacterConfig.DefaultAnimationSpeed;
+            character.ConfiguredAnimation = idleAnimation ?? string.Empty;
+            character.PositionX = defaultPositionX;
+            character.PositionY = defaultPositionY;
+
+            _renderHost.SetCharacterScale(
+                character.Id,
+                CharacterConfig.DefaultScale);
+            _renderHost.SetCharacterSpeed(
+                character.Id,
+                CharacterConfig.DefaultAnimationSpeed);
+            if (idleAnimation != null)
+            {
+                _renderHost.PlayCharacterAnimation(
+                    character.Id,
+                    idleAnimation,
+                    repeat: true);
+            }
+
+            _renderHost.ResetCharacterPosition(character.Id);
+        }
+
+        _configService.Save(_config);
+        CharactersChanged?.Invoke();
+    }
+
     public void SaveAllState()
     {
         _configService.Save(_config);

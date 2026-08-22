@@ -5,6 +5,7 @@ using System.Windows.Input;
 using System.Windows.Threading;
 using SpinePet.Infrastructure;
 using SpinePet.Models;
+using SpinePet.Rendering.Native;
 using SpinePet.Services;
 using SpinePet.ViewModels;
 using ComboBox = System.Windows.Controls.ComboBox;
@@ -419,11 +420,10 @@ internal sealed class CharacterSettingsController
                 }
             }
             _host.SelectedAnimation =
-                !string.IsNullOrEmpty(
-                    _host.SelectedCharacter.ConfiguredAnimation)
-                    ? _host.SelectedCharacter.ConfiguredAnimation
-                    : _host.SelectedAnimationNames.FirstOrDefault() ??
-                      string.Empty;
+                NativeCharacterRenderHost.SelectConfiguredOrIdleAnimationName(
+                    _host.SelectedCharacter.ConfiguredAnimation,
+                    _host.SelectedAnimationNames) ??
+                string.Empty;
             _host.SelectedSpeed = Math.Clamp(
                 _host.SelectedCharacter.AnimationSpeed * 100.0,
                 10,

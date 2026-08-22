@@ -4,6 +4,11 @@ namespace SpinePet.Models;
 
 public sealed class CharacterConfig
 {
+    public const double DefaultScale = 0.2;
+    public const double DefaultAnimationSpeed = 1.0;
+    public const double DefaultScaleBasePercent = 100;
+    public const double DefaultScaleMultiplier = 1;
+
     public string Id { get; set; } = Guid.NewGuid().ToString("D");
     public string Name { get; set; } = string.Empty;
     [JsonPropertyName("SkelPath")]
@@ -36,6 +41,6 @@ public sealed class CharacterConfig
     [JsonPropertyName("CurrentAnimation")]
     public string ConfiguredAnimation { get; set; } = string.Empty;
 
-    public double AnimationSpeed { get; set; } = 1.0;
+    public double AnimationSpeed { get; set; } = DefaultAnimationSpeed;
     public bool Visible { get; set; } = true;
 }

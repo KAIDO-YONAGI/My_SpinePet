@@ -2,7 +2,7 @@
 
 > 文档 ID：`RES-MATCH-CLEAN-GUIDE`  
 > 状态：`Active`  
-> 最后核验：`2026-08-21`
+> 最后核验：`2026-08-22`
 
 本文是**清理规范**：在导入 SpinePet 之前或之后，移除资源中的非角色
 元素（背景、海面、特效、UI）并排查点击/动画问题。与
@@ -14,6 +14,8 @@
 ## 0. 定位与前提
 
 1. **清理是可选步骤，默认不做。** 只有使用方明确要求时才清理。
+   非 Burst standing 资源中的背景、飘带等场景组件默认属于完整角色表现，
+   不因名称包含 `bg`、`background` 等关键词而自动成为清理目标。
 2. 清理发生在 `resources\` 下的**暂存副本**上，验证通过后才把成果
    放进 `SpinePet\res\`；不在 `resources\Characters\` 源备份上直接改，
    更不碰 `resources\nikkedb\`。
@@ -74,6 +76,8 @@ effect  fx  glow  light  foreground
 
 这些词也可能出现在角色高光、头发、衣服或身体遮罩里；
 `*_eyebg` 是眼白，**永远不删**。
+对非 Burst standing 资源，关键词命中只用于定位组件；除非使用方明确要求
+移除该资源的背景，否则必须保留。
 
 ### 2.3 核对清单
 
@@ -161,6 +165,19 @@ foreach (Skin skin in skeletonData.Skins)
 
 在边界计算前移除，可以同时解决：背景仍被绘制、透明附件撑大边界、
 角色被夹在屏幕边缘、点击空白区命中角色、拖动锚点与视觉不一致。
+
+### 3.4 立绘默认保留全部 Skin 组件
+
+部分 standing 资源会把背景、饰品、飘带等完整表现组件放在 `bg`、`acc`
+等独立 Skin，而 Spine 默认只挂载 `default` Skin。运行时创建 Skeleton
+后会自动把全部非默认 Skin 与 `default` 合并，并恢复 setup pose；不需要
+为 Arcana、Ocean's Lament 等角色逐个添加白名单文件，也不修改原始
+`.skel`、`.atlas` 或贴图。
+
+自动合并用于“显示原资源组件”，不等同于附件排除。若资源旁明确存在
+`.attachments.exclude`，先从 SkeletonData 应用排除规则，再创建
+Skeleton 和合并剩余 Skin。因此立绘默认完整显示，Burst 等资源已经显式
+声明的清理规则仍然生效。
 
 ## 4. 流程三：验证
 

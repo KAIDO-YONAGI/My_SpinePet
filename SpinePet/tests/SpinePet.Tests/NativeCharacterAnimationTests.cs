@@ -33,4 +33,37 @@ public sealed class NativeCharacterAnimationTests
 
         Assert.Equal("idle2", animation);
     }
+
+    [Fact]
+    public void ConfiguredAnimationIsKeptWhenItExists()
+    {
+        string? animation =
+            NativeCharacterRenderHost.SelectConfiguredOrIdleAnimationName(
+                "action",
+                ["idle", "action"]);
+
+        Assert.Equal("action", animation);
+    }
+
+    [Fact]
+    public void MissingConfiguredAnimationFallsBackToIdle()
+    {
+        string? animation =
+            NativeCharacterRenderHost.SelectConfiguredOrIdleAnimationName(
+                string.Empty,
+                ["action", "idle"]);
+
+        Assert.Equal("idle", animation);
+    }
+
+    [Fact]
+    public void InvalidConfiguredAnimationFallsBackToIdleVariant()
+    {
+        string? animation =
+            NativeCharacterRenderHost.SelectConfiguredOrIdleAnimationName(
+                "missing",
+                ["action", "idle_loop"]);
+
+        Assert.Equal("idle_loop", animation);
+    }
 }

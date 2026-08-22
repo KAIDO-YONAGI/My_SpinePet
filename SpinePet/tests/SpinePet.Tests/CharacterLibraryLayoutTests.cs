@@ -175,6 +175,56 @@ public sealed class CharacterLibraryLayoutTests
     }
 
     [Fact]
+    public void CharacterLibraryExposesCompactBatchProcessingActions()
+    {
+        XDocument document = LoadMainWindowXaml();
+        XNamespace presentation =
+            "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace x =
+            "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        XElement addButton = Assert.Single(
+            document.Descendants(presentation + "Button"),
+            element => (string?)element.Attribute(x + "Name") ==
+                "AddCharacterButton");
+        XElement scanButton = Assert.Single(
+            document.Descendants(presentation + "Button"),
+            element => (string?)element.Attribute(x + "Name") ==
+                "ScanResourcesButton");
+        XElement folderButton = Assert.Single(
+            document.Descendants(presentation + "Button"),
+            element => (string?)element.Attribute(x + "Name") ==
+                "OpenResourceFolderButton");
+        XElement batchCombo = Assert.Single(
+            document.Descendants(presentation + "ComboBox"),
+            element => (string?)element.Attribute(x + "Name") ==
+                "BatchProcessingCombo");
+
+        Assert.Equal("24", (string?)addButton.Attribute("Height"));
+        Assert.Equal("24", (string?)scanButton.Attribute("Height"));
+        Assert.Equal("24", (string?)folderButton.Attribute("Height"));
+        Assert.Equal("32", (string?)batchCombo.Attribute("Height"));
+        Assert.Contains(
+            batchCombo.Descendants(presentation + "ComboBoxItem"),
+            element => (string?)element.Attribute("Content") == "Hide All");
+        Assert.Contains(
+            batchCombo.Descendants(presentation + "ComboBoxItem"),
+            element => (string?)element.Attribute("Content") == "Show All");
+        Assert.Contains(
+            batchCombo.Descendants(presentation + "ComboBoxItem"),
+            element => (string?)element.Attribute("Content") ==
+                "Reset All Settings");
+
+        Assert.Contains(
+            document.Descendants(presentation + "Button"),
+            element => (string?)element.Attribute(x + "Name") ==
+                "ExitButton" &&
+                (string?)element.Attribute(
+                    "AutomationProperties.Name") ==
+                    "Exit application");
+    }
+
+    [Fact]
     public void ViewUsesRuntimeEventWiringAndNoPartialWindowFilesRemain()
     {
         XDocument document = LoadMainWindowXaml();

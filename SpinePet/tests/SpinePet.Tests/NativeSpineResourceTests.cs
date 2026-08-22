@@ -9,6 +9,24 @@ namespace SpinePet.Tests;
 
 public sealed class NativeSpineResourceTests
 {
+    private static readonly string[] OceanLamentComponentSlots =
+    [
+        "BG1",
+        "BG2",
+        "bg_ribbon1",
+        "bg_ribbon2",
+        "bg_ribbon3",
+        "bg_ribbon4"
+    ];
+
+    private static readonly string[] ArcanaComponentSlots =
+    [
+        "BG_chair",
+        "BG_desk",
+        "BG_dream_catcher_1",
+        "BG_bag_tarot_cards_1"
+    ];
+
     [Fact]
     public void AttachmentExclusionRulesSupportPrefixesAndExactNames()
     {
@@ -41,6 +59,28 @@ public sealed class NativeSpineResourceTests
                 Assert.True(rule.Matches("o_TEX"));
                 Assert.False(rule.Matches("O_tex_extra"));
             });
+    }
+
+    [Fact]
+    public void StandingResourcesIncludeAllComponentSkins()
+    {
+        string repositoryRoot = FindRepositoryRoot();
+        AssertComponentSkinIsVisible(
+            repositoryRoot,
+            Path.Combine(
+                "Asuka WILLE - Ocean's Lament",
+                "02",
+                "standing"),
+            "c83502_02",
+            OceanLamentComponentSlots);
+        AssertComponentSkinIsVisible(
+            repositoryRoot,
+            Path.Combine(
+                "Arcana Fortune Mate",
+                "00",
+                "standing"),
+            "c583_00",
+            ArcanaComponentSlots);
     }
 
     [Fact]
@@ -263,5 +303,44 @@ public sealed class NativeSpineResourceTests
 
         return directory?.FullName ??
                throw new DirectoryNotFoundException("Repository root not found.");
+    }
+
+    private static void AssertComponentSkinIsVisible(
+        string repositoryRoot,
+        string relativeStandingDirectory,
+        string resourceName,
+        IReadOnlyList<string> componentSlots)
+    {
+        string standingDirectory = Path.Combine(
+            repositoryRoot,
+            "res",
+            relativeStandingDirectory);
+        string skeletonPath = Path.Combine(
+            standingDirectory,
+            resourceName + ".skel");
+        if (!File.Exists(skeletonPath))
+            return;
+
+        CharacterConfig config = new()
+        {
+            AtlasPath = Path.Combine(
+                standingDirectory,
+                resourceName + ".atlas"),
+            SkeletonPath = skeletonPath
+        };
+
+        using NativeSpineResource resource = NativeSpineResource.Load(config);
+        resource.SetAnimation("idle", true);
+        resource.Update(1f / 60f);
+
+        Assert.Equal(1, resource.IncludedSkinCount);
+        Assert.All(
+            componentSlots,
+            slotName =>
+            {
+                Slot? slot = resource.Skeleton.FindSlot(slotName);
+                Assert.NotNull(slot);
+                Assert.NotNull(slot.Attachment);
+            });
     }
 }
