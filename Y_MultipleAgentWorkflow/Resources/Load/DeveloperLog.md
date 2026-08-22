@@ -1,5 +1,11 @@
 # Resources Load Developer Log
 
+## 2026-08-22：导入工具路径去硬编码
+
+- `Import-ResourceZip.ps1` 默认从脚本位置推导项目根、资源目录和角色名称表。
+- 指南与 nikkedb 入口统一使用项目相对路径，项目迁移后无需人工改盘符。
+- 本次实际影响资源导入工具，维护计数：`0/5 -> 1/5`。
+
 ## 2026-08-21：导入指南迁移
 
 - 将旧中文文件名迁为 `SpinePet_Resources_Load_Guide.md`。

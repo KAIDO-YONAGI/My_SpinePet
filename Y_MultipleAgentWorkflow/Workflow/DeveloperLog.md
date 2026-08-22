@@ -1,8 +1,30 @@
 # Workflow Developer Log
 
+## 2026-08-22：项目根目录迁移与路径去硬编码
+
+- 将项目根目录从旧位置迁移到
+  `D:\My_Docs\Programmes\My_SpinePet`，保留 Git 历史、远端和未提交修改。
+- 模型入口、项目 Skill、工作流指南和资源索引改用项目相对路径。
+- PowerShell 与 Python 工具从脚本自身位置推导项目根，不再依赖固定盘符。
+- 工作流配置校验 `58 pass / 0 warning / 0 error`，WorkingAgent 回归
+  `12/12`；新路径下 Build 为 `0` 警告、`0` 错误，Publish 与 Run 成功。
+- 旧根目录的数据与空目录树已全部迁出；当前 Codex 工作区仍持有
+  `D:\SpineTools` 根目录句柄，因此只残留一个零文件、零子目录的空壳，
+  重新打开新工作区后即可移除。
+- 本次实际提升工作流跨路径复用能力，维护计数：`3/5 -> 4/5`。
+
+## 2026-08-22：分发仓库本地路径迁移
+
+- 将通用 Skill 与分发仓库整体迁移到
+  `D:\My_Docs\Programmes\Y_MultipleAgentWorkflow`，Git 历史和远端保持不变。
+- 重建 Codex、Claude、ZCode 三个 Junction，并同步更新 MAW 安装记录和目录
+  快捷方式。
+- 更新 SpineTools 路由、配置指南、设计记录和学习文档中的操作路径。
+- 本次仅调整本地存放位置和导航，不改变工作流能力，维护计数保持 `3/5`。
+
 ## 2026-08-21：独立分发仓库与三客户端发布
 
-- 建立独立源仓库 `D:\My_Tools\Y_MultipleAgentWorkflow`，通用 Skill 源码只在
+- 建立独立源仓库（现位于 `D:\My_Docs\Programmes\Y_MultipleAgentWorkflow`），通用 Skill 源码只在
   `src\skills\multiple-agent-workflow-config` 维护。
 - 生成 Codex、Claude、ZCode 插件布局、离线包、SHA-256 清单及显式安装、
   更新、卸载和项目实例升级接口；不提供后台联网检查。

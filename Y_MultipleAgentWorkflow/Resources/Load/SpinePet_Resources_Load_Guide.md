@@ -8,8 +8,8 @@
 **入库 → 判定 → 导入 → 验证** 四个阶段推进，每个阶段写明执行顺序和
 硬性要求。
 
-**本文所有相对路径均以 `D:\SpineTools` 为根**，例如
-`resources\Characters\` 指 `D:\SpineTools\resources\Characters\`。
+**本文所有相对路径均以项目根目录为根**，例如
+`resources\Characters\` 指项目根目录下的 `resources\Characters\`。
 背景清理等进阶操作见
 `..\MatchClean\SpineResource_Match_Clean_Guide.md`。
 

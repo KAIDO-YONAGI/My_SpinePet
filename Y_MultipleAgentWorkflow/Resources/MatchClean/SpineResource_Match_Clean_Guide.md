@@ -9,7 +9,7 @@
 `..\Load\SpinePet_Resources_Load_Guide.md` 配套使用——导入规范管"进 res"，
 本文管"清什么、怎么清、清到什么程度"。
 
-**所有相对路径以 `D:\SpineTools` 为根。**
+**所有相对路径以项目根目录为根。**
 
 ## 0. 定位与前提
 

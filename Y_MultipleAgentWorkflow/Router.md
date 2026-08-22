@@ -1,9 +1,9 @@
-# SpineTools 多 Agent 工作流总路由
+# My_SpinePet 多 Agent 工作流总路由
 
 文档 ID：`ROOT-ROUTER`  
 状态：`Active`  
-最后更新：`2026-08-21`  
-最后核验：`2026-08-21`
+最后更新：`2026-08-22`
+最后核验：`2026-08-22`
 
 本目录是 Codex、Claude、ZCode 共用的唯一权威文档入口。Agent 可以先做
 轻量只读探索以识别任务，但在详细分析、创建子 Agent 或首次修改前，必须
@@ -40,7 +40,7 @@
 | 多 Agent、并发、租约、路由、模板、文档维护 | `Workflow\Router.md` | Workflow Guide / Concurrency Guide |
 | 为当前或其他项目配置多 Agent 工作流 | `Workflow_Configuration_Guide.md` | 分类、接入、初始化与验证方法 |
 | 安装、分发、升级通用 Skill 或项目托管文件 | `Workflow\Router.md` | 外部分发仓库与 WorkflowInstance |
-| SpineTools 构建、发布、运行验证 | `Workflow\Project_Validation_Guide.md` | 本项目已确认的验证流程 |
+| My_SpinePet 构建、发布、运行验证 | `Workflow\Project_Validation_Guide.md` | 本项目已确认的验证流程 |
 | WPF 界面、交互、窗口、托盘、桌面角色 GUI | `GUI\Router.md` | `GUI_Design.md` |
 | 资源领域分类、跨资源业务判断 | `Resources\Router.md` | 资源业务下级导航 |
 | zip/文件夹入库、角色 ID、图标、导入 `res` | `Resources\Load\Router.md` | Resources Load Guide |
@@ -93,7 +93,7 @@ workflow:Resources.StateSupport
 | `WF-PROJECT-VALIDATION` | `Workflow\Project_Validation_Guide.md` | SpineTools 已确认的构建、发布和运行验证 | 代码类改动收尾 | Active | 2026-08-21 | 2026-08-21 | 无 |
 | `WF-CONFIG-METHOD` | `Workflow_Configuration_Guide.md` | 跨项目分类、接入、初始化与验证方法 | 配置或迁移多 Agent 工作流 | Active | 2026-08-21 | 2026-08-21 | 无 |
 | `WF-INSTANCE` | `Workflow\WorkflowInstance.json` | 分发版本、初始化选项和托管文件哈希 | 项目工作流升级 | Active Metadata | 2026-08-21 | 2026-08-21 | 无 |
-| `WF-DISTRIBUTION` | `D:\My_Tools\Y_MultipleAgentWorkflow` | 通用 Skill 源码、三客户端适配与发布工具 | 安装、分发、显式升级 | External | 2026-08-21 | 2026-08-21 | 原全局 `.agents` 实体 |
+| `WF-DISTRIBUTION` | `D:\My_Docs\Programmes\Y_MultipleAgentWorkflow` | 通用 Skill 源码、三客户端适配与发布工具 | 安装、分发、显式升级 | External | 2026-08-22 | 2026-08-22 | 原 `My_Tools` 位置与全局 `.agents` 实体 |
 | `WF-DESIGN-BASELINE` | `..\Y_MAW_DesignPlan.md` | 已落地架构与验证设计记录 | 审视工作流设计来源 | Reference | 2026-08-21 | 2026-08-21 | 用户重命名前路径 |
 | `GUI-DESIGN` | `GUI\GUI_Design.md` | 已实现 GUI 权威设计 | GUI | Active | 2026-08-21 | 2026-08-21 | `GUI_Design.md` |
 | `RES-LOAD-GUIDE` | `Resources\Load\SpinePet_Resources_Load_Guide.md` | 资源入库与导入流程 | 资源导入 | Active | 2026-08-21 | 2026-08-21 | `SpinePet-通用资源导入指南.md` |
@@ -108,8 +108,8 @@ workflow:Resources.StateSupport
 
 | 业务根 | 计数 | Router |
 |---|---:|---|
-| Workflow | `3/5` | `Workflow\Router.md` |
+| Workflow | `4/5` | `Workflow\Router.md` |
 | GUI | `0/5` | `GUI\Router.md` |
-| Resources.Load | `0/5` | `Resources\Load\Router.md` |
+| Resources.Load | `1/5` | `Resources\Load\Router.md` |
 | Resources.MatchClean | `0/5` | `Resources\MatchClean\Router.md` |
 | Resources.StateSupport | `0/5` | `Resources\StateSupport\Router.md` |

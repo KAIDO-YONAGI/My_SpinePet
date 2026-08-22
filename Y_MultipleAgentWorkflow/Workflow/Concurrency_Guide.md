@@ -12,7 +12,7 @@ UTC 启动时间和随机 nonce 的 SHA-256 前 12 位。文件是 schemaVersion
 ## 2. 基本命令
 
 ```powershell
-$script = 'D:\SpineTools\Y_MultipleAgentWorkflow\Workflow\Scripts\WorkingAgent.ps1'
+$script = Join-Path (Get-Location) 'Y_MultipleAgentWorkflow\Workflow\Scripts\WorkingAgent.ps1'
 
 pwsh -NoProfile -File $script -Action Status
 

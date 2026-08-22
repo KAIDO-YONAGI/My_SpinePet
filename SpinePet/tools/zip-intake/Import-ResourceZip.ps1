@@ -3,8 +3,8 @@
 #
 # 做三件事：
 #   1. 解压到临时目录，整理为规范的目录名；
-#   2. 备份解压后的文件到 D:\SpineTools\resources\Characters\<外层名>\<内层名>\；
-#   3. 把 zip 剪切到 D:\SpineTools\resources\zips\。
+#   2. 备份解压后的文件到 resources\Characters\<外层名>\<内层名>\；
+#   3. 把 zip 剪切到 resources\zips\。
 #
 # 命名规范：
 #   zip 文件名去掉 "PC _ Computer - Goddess of Victory_ Nikke - " 前缀，
@@ -18,11 +18,18 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$Zip,
 
-    [string]$CharactersDir = 'D:\SpineTools\resources\Characters',
-    [string]$ZipsDir = 'D:\SpineTools\resources\zips'
+    [string]$CharactersDir,
+    [string]$ZipsDir
 )
 
 $ErrorActionPreference = 'Stop'
+$projectRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..\..')).Path
+if ([string]::IsNullOrWhiteSpace($CharactersDir)) {
+    $CharactersDir = Join-Path $projectRoot 'resources\Characters'
+}
+if ([string]::IsNullOrWhiteSpace($ZipsDir)) {
+    $ZipsDir = Join-Path $projectRoot 'resources\zips'
+}
 
 if (-not (Test-Path -LiteralPath $Zip)) {
     throw "zip 不存在：$Zip"
@@ -77,7 +84,7 @@ foreach ($s in $sets) {
     Write-Host ("{0}  角色 {1}  atlas:{2}" -f $rel, $charId, $(if ($hasAtlas) { 'OK' } else { '缺失' }))
 }
 $charIds = $sets | ForEach-Object { if ($_.Name -match '^c(\d+)_') { $Matches[1] } } | Sort-Object -Unique
-$namesPath = 'D:\SpineTools\SpinePet\src\SpinePet\Data\CharacterNames.json'
+$namesPath = Join-Path $projectRoot 'SpinePet\src\SpinePet\Data\CharacterNames.json'
 $json = Get-Content -LiteralPath $namesPath -Raw | ConvertFrom-Json
 foreach ($id in $charIds) {
     if (-not $json.PSObject.Properties[$id]) {

@@ -202,7 +202,7 @@ $env:WINDIR = $env:SystemRoot
 
 通用 Skill 名称为 `multiple-agent-workflow-config`。唯一源码实体位于：
 
-`D:\My_Tools\Y_MultipleAgentWorkflow\src\skills\multiple-agent-workflow-config`
+`D:\My_Docs\Programmes\Y_MultipleAgentWorkflow\src\skills\multiple-agent-workflow-config`
 
 Codex、Claude 与 ZCode 的用户级入口通过目录 Junction 共用该实体。独立
 私有仓库从同一源码生成三个客户端插件包和统一离线包，并以 `SHA256SUMS`

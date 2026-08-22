@@ -192,7 +192,7 @@ SetCharacterState(characterId, state)
 原始 `aim` 和 `cover` 文件继续保留在：
 
 ```text
-D:\SpineTools\resources\Anis PaidSkin
+resources\Anis PaidSkin
 ```
 
 在正式实现状态支持前，它们作为原始资源归档，不会影响当前应用扫描

@@ -187,7 +187,7 @@ PowerShell 内调用数组参数时，优先直接调用脚本并传递数组：
 示例：
 
 ```powershell
-$skill = 'D:\My_Tools\Y_MultipleAgentWorkflow\src\skills\multiple-agent-workflow-config'
+$skill = 'D:\My_Docs\Programmes\Y_MultipleAgentWorkflow\src\skills\multiple-agent-workflow-config'
 
 & "$skill\scripts\Initialize-Workflow.ps1" `
   -ProjectRoot 'D:\ExampleProject' `
@@ -204,7 +204,7 @@ $skill = 'D:\My_Tools\Y_MultipleAgentWorkflow\src\skills\multiple-agent-workflow
 
 ## 8. 分发与升级
 
-通用分发仓库位于 `D:\My_Tools\Y_MultipleAgentWorkflow`。其中 `src` 是唯一
+通用分发仓库位于 `D:\My_Docs\Programmes\Y_MultipleAgentWorkflow`。其中 `src` 是唯一
 源码，`release-layout` 是由构建脚本生成并提交的客户端适配快照，项目中的
 `Y_MultipleAgentWorkflow` 仍是复制初始化的项目实例，不使用 Junction 或
 Submodule。
