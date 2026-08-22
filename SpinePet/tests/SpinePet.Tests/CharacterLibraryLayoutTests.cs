@@ -332,6 +332,50 @@ public sealed class CharacterLibraryLayoutTests
             element => (string?)element.Attribute("Text") == "Global Setting");
     }
 
+    [Fact]
+    public void SelectedCharacterHeaderKeepsTwoFixedTextRows()
+    {
+        XDocument document = LoadMainWindowXaml();
+        XNamespace presentation =
+            "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+
+        XElement eyebrow = Assert.Single(
+            document.Descendants(presentation + "TextBlock"),
+            element => (string?)element.Attribute("Text") ==
+                "SELECTED CHARACTER");
+        XElement textStack = Assert.IsType<XElement>(eyebrow.Parent);
+        XElement header = Assert.IsType<XElement>(textStack.Parent);
+        XElement fixedRows = Assert.Single(
+            textStack.Elements(presentation + "Grid"));
+
+        Assert.Equal("58", (string?)header.Attribute("Height"));
+        Assert.Equal("38", (string?)fixedRows.Attribute("Height"));
+        XElement rowDefinitions = Assert.IsType<XElement>(
+            fixedRows.Element(presentation + "Grid.RowDefinitions"));
+        Assert.Equal(
+            ["22", "16"],
+            rowDefinitions
+                .Elements(presentation + "RowDefinition")
+                .Select(row => row.Attribute("Height")?.Value ?? string.Empty)
+                .ToArray());
+
+        XElement[] textBoxes = fixedRows
+            .Elements(presentation + "Viewbox")
+            .ToArray();
+        Assert.Equal(2, textBoxes.Length);
+        Assert.All(
+            textBoxes,
+            viewbox => Assert.Equal(
+                "DownOnly",
+                (string?)viewbox.Attribute("StretchDirection")));
+        Assert.All(
+            textBoxes.SelectMany(viewbox =>
+                viewbox.Descendants(presentation + "TextBlock")),
+            text => Assert.Equal(
+                "NoWrap",
+                (string?)text.Attribute("TextWrapping")));
+    }
+
     private static XDocument LoadMainWindowXaml()
     {
         string xamlPath = Path.Combine(

@@ -605,7 +605,8 @@
                                 Margin="0,0,0,0"
                                 Padding="12">
                         <StackPanel>
-                                <Grid Margin="0,0,0,6">
+                                <Grid Height="58"
+                                      Margin="0,0,0,6">
                                      <Grid.ColumnDefinitions>
                                          <ColumnDefinition Width="Auto" />
                                          <ColumnDefinition Width="*" />
@@ -630,25 +631,39 @@
                                                 VerticalAlignment="Center">
                                         <TextBlock Text="SELECTED CHARACTER"
                                                    Style="{StaticResource EyebrowTextStyle}" />
-                                        <TextBlock Text="{Binding SelectedCharacter.Name, TargetNullValue='No character selected'}"
-                                                   FontSize="16"
-                                                   FontWeight="SemiBold"
-                                                   Foreground="{StaticResource InfoBrush}"
-                                                   TextWrapping="Wrap"
-                                                   TextAlignment="Left"
-                                                   MaxWidth="260"
-                                                   TextTrimming="CharacterEllipsis"
-                                                   ToolTip="{Binding SelectedCharacter.Name}" />
-                                        <WrapPanel Margin="0,3,10,0">
-                                         <TextBlock Text="{Binding SelectedCharacter.SkinLabel}"
-                                                       FontSize="11"
-                                                       FontWeight="SemiBold"
-                                                       Foreground="{StaticResource MutedBrush}"
-                                                       MaxWidth="260"
-                                                       TextTrimming="CharacterEllipsis"
-                                            ToolTip="{Binding SelectedCharacter.SkinLabel}" />
-                                     </WrapPanel>
-                                 </StackPanel>
+                                        <Grid Height="38"
+                                              Margin="0,3,10,0">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="22" />
+                                                <RowDefinition Height="16" />
+                                            </Grid.RowDefinitions>
+                                            <Viewbox Grid.Row="0"
+                                                     Stretch="Uniform"
+                                                     StretchDirection="DownOnly"
+                                                     HorizontalAlignment="Left"
+                                                     VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding SelectedCharacter.Name, TargetNullValue='No character selected'}"
+                                                           FontSize="16"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource InfoBrush}"
+                                                           TextWrapping="NoWrap"
+                                                           TextAlignment="Left"
+                                                           ToolTip="{Binding SelectedCharacter.Name}" />
+                                            </Viewbox>
+                                            <Viewbox Grid.Row="1"
+                                                     Stretch="Uniform"
+                                                     StretchDirection="DownOnly"
+                                                     HorizontalAlignment="Left"
+                                                     VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding SelectedCharacter.SkinLabel}"
+                                                           FontSize="11"
+                                                           FontWeight="SemiBold"
+                                                           Foreground="{StaticResource MutedBrush}"
+                                                           TextWrapping="NoWrap"
+                                                           ToolTip="{Binding SelectedCharacter.SkinLabel}" />
+                                            </Viewbox>
+                                        </Grid>
+                                    </StackPanel>
 
                                  <Button Grid.Column="2"
                                          Width="44"
