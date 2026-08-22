@@ -2,7 +2,6 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Windows;
 using System.Windows.Threading;
-using Spine;
 using SpinePet.Infrastructure;
 using SpinePet.Models;
 using SpinePet.Rendering;
@@ -13,77 +12,48 @@ public sealed class NativeCharacterRenderHost :
     ICharacterRenderHost,
     IDisposable
 {
-    internal const int SilhouetteCellSize = 8;
-    internal const int SilhouetteFallbackMargin = 12;
-    internal const int MaxSilhouetteRunsPerCharacter = 400;
-    private const int MaxSilhouetteCells = 16384;
-    private const int MaxSilhouetteCellSize = 128;
     private const double DefaultScale = 0.2;
     private const double MaximumScale = 2.0;
     private const double MinimumScale = 0.05;
     private const double CharacterBottomMargin = 24;
-    private const int WmMouseMove = 0x0200;
-    private const int WmLeftButtonDown = 0x0201;
-    private const int WmLeftButtonUp = 0x0202;
-    private const int WmRightButtonDown = 0x0204;
-    private const int WmCaptureChanged = 0x0215;
-    private const double PerformanceWindowSeconds = 2;
-    private static readonly TimeSpan WorkingAreaRefreshInterval =
-        TimeSpan.FromSeconds(1);
-    private static readonly TimeSpan SilhouetteRefreshInterval =
-        TimeSpan.FromMilliseconds(100);
-    private const float SilhouetteAnchorEpsilonPixels = 2f;
-    private const int MaxConcurrentCharacterLoads = 2;
 
-    private readonly Dictionary<string, NativeCharacterState> _states =
-        new(StringComparer.Ordinal);
-    private readonly List<PendingFrame> _pendingFrames = [];
-    private readonly List<Rectangle> _inputRegions = [];
-    private readonly List<Rectangle> _workingAreas = [];
-    private readonly NativeCharacterZOrder _zOrder = new();
+    private readonly object _initializationSync = new();
+    private readonly NativeCharacterScene _scene = new();
+    private readonly NativeRenderSession _session = new();
+    private readonly NativeInputRegionCoordinator _inputRegions = new();
+    private readonly NativeFrameRenderer _frameRenderer;
+    private readonly NativePointerController _pointer;
     private readonly Dispatcher _dispatcher;
     private readonly NativeFrameScheduler _frameScheduler;
     private readonly DispatcherTimer _scaleSettleTimer;
     private readonly Stopwatch _frameClock = new();
     private readonly CancellationTokenSource _lifetimeCancellation = new();
-    private readonly SemaphoreSlim _loadGate = new(
-        MaxConcurrentCharacterLoads,
-        MaxConcurrentCharacterLoads);
-    private readonly bool _performanceTelemetryEnabled = string.Equals(
-        Environment.GetEnvironmentVariable("SPINEPET_PERF_LOG"),
-        "1",
-        StringComparison.Ordinal);
     private readonly HashSet<string> _scaleShrinkPending =
         new(StringComparer.Ordinal);
-    private NativeCompositionWindow? _window;
-    private NativeInputWindow? _inputWindow;
-    private NativeGraphicsDevice? _graphics;
     private Task? _initializationTask;
     private bool _configMode;
     private bool _renderDragEnabled = true;
-    private bool _renderingFrame;
-    private bool _compositionDirty;
     private bool _closed;
-    private string? _pointerCharacterId;
-    private NativePoint _pointerStart;
-    private NativePoint _pointerLatest;
-    private double _pointerStartX;
-    private double _pointerStartY;
-    private bool _pointerDragging;
-    private bool _pointerMovePending;
     private int _explicitMoveDepth;
     private int _targetFrameRate = GlobalConfig.DefaultTargetFrameRate;
-    private long _workingAreasRefreshTimestamp;
-    private long _performanceWindowStartTimestamp;
-    private long _performanceFrameTicks;
-    private long _performanceMaximumFrameTicks;
-    private long _performanceAllocatedBytes;
-    private int _performanceFrameCount;
 
     public NativeCharacterRenderHost()
     {
         _dispatcher = System.Windows.Application.Current?.Dispatcher ??
             Dispatcher.CurrentDispatcher;
+        _frameRenderer = new NativeFrameRenderer(
+            _scene,
+            _session,
+            _inputRegions);
+        _pointer = new NativePointerController(
+            _scene,
+            () => _session.Window,
+            MoveCharacter,
+            BeginCharacterMove,
+            EndCharacterMove,
+            NativeAnimationController.PlayClickAnimation,
+            QueueCharacterPositionCommitted,
+            QueueRightClick);
         _frameScheduler = new NativeFrameScheduler(
             _dispatcher,
             OnFrame,
@@ -107,25 +77,30 @@ public sealed class NativeCharacterRenderHost :
     public event Action<string>? CharacterRightClicked;
 
     public bool IsCharacterLoading(string characterId) =>
-        _states.TryGetValue(characterId, out NativeCharacterState? state) &&
+        !_closed &&
+        _scene.TryGet(characterId, out NativeCharacterState? state) &&
         state.IsLoading;
 
     public bool IsCharacterVisible(string characterId) =>
-        _states.TryGetValue(characterId, out NativeCharacterState? state) &&
+        !_closed &&
+        _scene.TryGet(characterId, out NativeCharacterState? state) &&
         state.IsVisible;
 
     public IReadOnlyList<string> GetAnimationNames(string characterId) =>
-        _states.TryGetValue(characterId, out NativeCharacterState? state)
+        !_closed &&
+        _scene.TryGet(characterId, out NativeCharacterState? state)
             ? state.Resource?.AnimationNames ?? state.CachedAnimationNames
             : Array.Empty<string>();
 
     public double GetMaxScale(string characterId) =>
-        _states.TryGetValue(characterId, out NativeCharacterState? state)
+        !_closed &&
+        _scene.TryGet(characterId, out NativeCharacterState? state)
             ? state.MaxScale
             : MaximumScale;
 
     public double GetCurrentScale(string characterId) =>
-        _states.TryGetValue(characterId, out NativeCharacterState? state)
+        !_closed &&
+        _scene.TryGet(characterId, out NativeCharacterState? state)
             ? state.CurrentScale
             : DefaultScale;
 
@@ -137,15 +112,17 @@ public sealed class NativeCharacterRenderHost :
 
     public Task InitializeAsync()
     {
-        if (_closed)
+        lock (_initializationSync)
         {
-            return Task.CompletedTask;
-        }
+            if (_closed)
+                return Task.CompletedTask;
 
-        _initializationTask ??= _dispatcher.CheckAccess()
-            ? InitializeOnDispatcher()
-            : _dispatcher.InvokeAsync(InitializeOnDispatcher).Task.Unwrap();
-        return _initializationTask;
+            _initializationTask ??= _dispatcher.CheckAccess()
+                ? InitializeOnDispatcher()
+                : _dispatcher.InvokeAsync(
+                    InitializeOnDispatcher).Task.Unwrap();
+            return _initializationTask;
+        }
     }
 
     public async Task ShowCharacterAsync(
@@ -154,66 +131,70 @@ public sealed class NativeCharacterRenderHost :
         double speed)
     {
         if (_closed)
-        {
             return;
-        }
 
         await InitializeAsync();
         if (_closed)
-        {
             return;
-        }
 
         SetConfigMode(configMode);
 
         NativeCharacterState state = GetOrCreateState(character);
         string resourceKey = GetResourceKey(character);
+        double normalizedScale = Math.Clamp(
+            character.Scale > 0 ? character.Scale : DefaultScale,
+            MinimumScale,
+            state.MaxScale);
+        double normalizedSpeed = Math.Clamp(speed, 0.1, 2);
+        bool sameResourceKey = string.Equals(
+            state.ResourceKey,
+            resourceKey,
+            StringComparison.OrdinalIgnoreCase);
+        bool scaleChanged = state.CurrentScale != normalizedScale;
+        bool speedChanged =
+            state.Config.AnimationSpeed != normalizedSpeed;
+
+        if ((state.Resource != null || state.IsLoading) &&
+            !sameResourceKey)
+        {
+            _pointer.CancelIfCharacter(character.Id);
+            ReleaseCharacterResources(state);
+            RefreshInputRegions();
+            sameResourceKey = false;
+        }
+
         if (state.IsLoading &&
             state.LoadTask != null &&
-            string.Equals(
-                state.ResourceKey,
-                resourceKey,
-                StringComparison.OrdinalIgnoreCase))
+            sameResourceKey)
         {
+            state.Config = character;
+            state.CurrentScale = normalizedScale;
+            state.Config.Scale = normalizedScale;
+            state.Config.AnimationSpeed = normalizedSpeed;
             state.IsVisible = true;
             state.Config.Visible = true;
             await state.LoadTask;
             return;
         }
 
-        double normalizedScale = Math.Clamp(
-            character.Scale > 0 ? character.Scale : DefaultScale,
-            MinimumScale,
-            state.MaxScale);
-        double normalizedSpeed = Math.Clamp(speed, 0.1, 2);
-        bool sameResource = state.Resource != null &&
-            string.Equals(
-                state.ResourceKey,
-                resourceKey,
-                StringComparison.OrdinalIgnoreCase);
-        if (sameResource &&
+        bool sameLoadedState =
+            state.Resource != null &&
+            sameResourceKey &&
             state.IsVisible &&
             state.Surface != null &&
             state.CurrentScale == normalizedScale &&
-            state.Config.AnimationSpeed == normalizedSpeed)
+            state.Config.AnimationSpeed == normalizedSpeed;
+        if (sameLoadedState)
         {
             character.Visible = true;
             return;
         }
 
-        if ((state.Resource != null || state.IsLoading) &&
-            !string.Equals(
-                state.ResourceKey,
-                resourceKey,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            ReleaseCharacterResources(state);
-        }
-
+        bool wasVisible = state.IsVisible;
         state.Config = character;
         state.ResourceKey = resourceKey;
         state.CurrentScale = normalizedScale;
-        state.Config.Scale = state.CurrentScale;
+        state.Config.Scale = normalizedScale;
         state.Config.AnimationSpeed = normalizedSpeed;
         state.IsVisible = true;
         state.Config.Visible = true;
@@ -221,13 +202,15 @@ public sealed class NativeCharacterRenderHost :
         if (state.Resource != null)
         {
             if (state.Surface?.SetVisible(true) == true)
-                _zOrder.MoveToTop(state.Config.Id);
-            SelectModeAnimation(state);
-            UpdateSurfacePosition(state);
-            _compositionDirty = true;
+                _scene.MoveToTop(state.Config.Id);
+
+            NativeAnimationController.SelectModeAnimation(state);
+            _frameRenderer.UpdateSurfacePosition(state);
+            _frameRenderer.MarkCompositionDirty();
             RenderFrame(0);
             UpdateFrameTimerState();
-            CharactersStateChanged?.Invoke();
+            if (!wasVisible || scaleChanged || speedChanged)
+                CharactersStateChanged?.Invoke();
             return;
         }
 
@@ -240,195 +223,80 @@ public sealed class NativeCharacterRenderHost :
         finally
         {
             if (ReferenceEquals(state.LoadTask, loadTask))
-            {
                 state.LoadTask = null;
-            }
-        }
-    }
-
-    private async Task LoadCharacterAsync(
-        CharacterConfig character,
-        NativeCharacterState state)
-    {
-        state.IsLoading = true;
-        int loadVersion = ++state.LoadVersion;
-        CharactersStateChanged?.Invoke();
-
-        try
-        {
-            // Loading includes full texture decoding. Keep concurrent decode
-            // bounded so Show All cannot exhaust system commit.
-            await _loadGate.WaitAsync(_lifetimeCancellation.Token);
-            (NativeSpineResource resource, NativeSpineBounds Setup, NativeSpineBounds Envelope) loaded;
-            try
-            {
-                loaded = await Task.Run(() =>
-                {
-                    _lifetimeCancellation.Token.ThrowIfCancellationRequested();
-                    NativeSpineResource resource =
-                        NativeSpineResource.Load(character);
-                    try
-                    {
-                        _lifetimeCancellation.Token.ThrowIfCancellationRequested();
-                        var bounds =
-                            NativeSpineEnvelopeCalculator.Calculate(
-                                resource.SkeletonData);
-                        _lifetimeCancellation.Token.ThrowIfCancellationRequested();
-                        return (resource, bounds.Setup, bounds.Envelope);
-                    }
-                    catch
-                    {
-                        resource.Dispose();
-                        throw;
-                    }
-                }, _lifetimeCancellation.Token);
-            }
-            finally
-            {
-                _loadGate.Release();
-            }
-
-            await _dispatcher.InvokeAsync(() =>
-            {
-                if (!_states.TryGetValue(
-                        character.Id,
-                        out NativeCharacterState? current) ||
-                    !ReferenceEquals(current, state) ||
-                    current.LoadVersion != loadVersion ||
-                    _closed)
-                {
-                    loaded.resource.Dispose();
-                    return;
-                }
-
-                current.Resource = loaded.resource;
-                current.CachedAnimationNames =
-                    loaded.resource.AnimationNames;
-                current.SetupBounds = loaded.Setup;
-                current.Envelope = loaded.Envelope;
-                current.Surface = _graphics!.CreateSurface();
-                if (current.Surface.SetVisible(current.IsVisible) &&
-                    current.IsVisible)
-                {
-                    _zOrder.MoveToTop(current.Config.Id);
-                }
-                current.IsLoading = false;
-                SelectModeAnimation(current);
-                UpdateSurfacePosition(current);
-                _compositionDirty = true;
-                RenderFrame(0);
-                UpdateFrameTimerState();
-
-                if (string.IsNullOrWhiteSpace(
-                        current.Config.ConfiguredAnimation) &&
-                    current.Resource.AnimationNames.Count > 0)
-                {
-                    current.Config.ConfiguredAnimation =
-                        SelectIdleAnimationName(
-                            current.Resource.AnimationNames) ??
-                        current.Resource.AnimationNames[0];
-                }
-
-                CharacterAnimationsLoaded?.Invoke(
-                    character.Id,
-                    current.Resource.AnimationNames);
-                CharacterScaleChanged?.Invoke(
-                    character.Id,
-                    current.MaxScale,
-                    current.CurrentScale);
-                CharactersStateChanged?.Invoke();
-            });
-        }
-        catch (OperationCanceledException)
-            when (_lifetimeCancellation.IsCancellationRequested)
-        {
-            // Closing the render host intentionally abandons in-flight loads.
-        }
-        catch (Exception exception)
-        {
-            await _dispatcher.InvokeAsync(() =>
-            {
-                if (!_states.TryGetValue(
-                        character.Id,
-                        out NativeCharacterState? current) ||
-                    !ReferenceEquals(current, state) ||
-                    current.LoadVersion != loadVersion)
-                {
-                    return;
-                }
-
-                current.IsLoading = false;
-                current.IsVisible = false;
-                current.Config.Visible = false;
-                UpdateFrameTimerState();
-                AppLogger.Write(
-                    nameof(NativeCharacterRenderHost),
-                    $"character-load-failed id={character.Id} message={exception.Message}");
-                CharacterLoadFailed?.Invoke(character.Id);
-                CharactersStateChanged?.Invoke();
-            });
-            throw;
         }
     }
 
     public void HideCharacter(string characterId)
     {
-        if (!_states.TryGetValue(
+        if (_closed ||
+            !_scene.TryGet(
                 characterId,
-                out NativeCharacterState? state))
+                out NativeCharacterState? state) ||
+            (!state.IsVisible &&
+             !state.IsLoading &&
+             state.Resource == null &&
+             state.Surface == null))
         {
             return;
         }
 
-        if (!state.IsVisible &&
-            !state.IsLoading &&
-            state.Resource == null &&
-            state.Surface == null)
-        {
-            return;
-        }
-
-        CancelPointerIfCharacter(characterId);
+        _pointer.CancelIfCharacter(characterId);
         state.IsVisible = false;
         state.Config.Visible = false;
         ReleaseCharacterResources(state);
+        RefreshInputRegions();
         UpdateFrameTimerState();
-        CommitComposition();
+        _frameRenderer.Commit();
         CharactersStateChanged?.Invoke();
     }
 
     public void RemoveCharacter(string characterId)
     {
-        if (!_states.Remove(
+        if (_closed ||
+            !_scene.TryGet(characterId, out _))
+        {
+            return;
+        }
+
+        _pointer.CancelIfCharacter(characterId);
+        if (!_scene.Remove(
                 characterId,
                 out NativeCharacterState? state))
         {
             return;
         }
 
-        CancelPointerIfCharacter(characterId);
         _scaleShrinkPending.Remove(characterId);
-        _zOrder.Remove(characterId);
         ReleaseCharacterResources(state);
+        RefreshInputRegions();
         UpdateFrameTimerState();
-        CommitComposition();
+        _frameRenderer.Commit();
         CharactersStateChanged?.Invoke();
     }
 
     public void SetCharacterScale(string characterId, double scale)
     {
-        if (!_states.TryGetValue(
+        if (_closed ||
+            !_scene.TryGet(
                 characterId,
                 out NativeCharacterState? state))
         {
             return;
         }
 
-        state.CurrentScale = Math.Clamp(
+        double normalized = Math.Clamp(
             scale,
             MinimumScale,
             state.MaxScale);
-        state.Config.Scale = state.CurrentScale;
+        if (state.CurrentScale == normalized &&
+            state.Config.Scale == normalized)
+        {
+            return;
+        }
+
+        state.CurrentScale = normalized;
+        state.Config.Scale = normalized;
         _scaleShrinkPending.Add(characterId);
         _scaleSettleTimer.Stop();
         _scaleSettleTimer.Start();
@@ -440,17 +308,24 @@ public sealed class NativeCharacterRenderHost :
 
     public void SetCharacterSpeed(string characterId, double speed)
     {
-        if (!_states.TryGetValue(
+        if (_closed ||
+            !_scene.TryGet(
                 characterId,
                 out NativeCharacterState? state))
         {
             return;
         }
 
-        state.Config.AnimationSpeed = Math.Clamp(speed, 0.1, 2);
+        double normalized = Math.Clamp(speed, 0.1, 2);
+        if (state.Config.AnimationSpeed == normalized)
+            return;
+
+        state.Config.AnimationSpeed = normalized;
         if (state.Resource != null)
+        {
             state.Resource.AnimationState.TimeScale =
-                (float)state.Config.AnimationSpeed;
+                (float)normalized;
+        }
     }
 
     public void PlayCharacterAnimation(
@@ -458,17 +333,16 @@ public sealed class NativeCharacterRenderHost :
         string animation,
         bool repeat)
     {
-        if (!_states.TryGetValue(
+        if (_closed ||
+            !_scene.TryGet(
                 characterId,
-                out NativeCharacterState? state) ||
-            state.Resource == null ||
-            state.Resource.SkeletonData.FindAnimation(animation) == null)
+                out NativeCharacterState? state))
         {
             return;
         }
 
-        state.TemporaryAnimationPlayback.SetPersistent(
-            state.Resource.AnimationState,
+        NativeAnimationController.SetPersistent(
+            state,
             animation,
             repeat);
     }
@@ -476,29 +350,33 @@ public sealed class NativeCharacterRenderHost :
     public void SetConfigMode(bool configMode)
     {
         if (_closed || _configMode == configMode)
-        {
             return;
-        }
 
         _configMode = configMode;
-        CancelPointerInteraction(commitPosition: false);
-        foreach (NativeCharacterState state in _states.Values.Where(state =>
-                     state.IsVisible && state.Resource != null))
+        _pointer.Cancel(commitPosition: false);
+        foreach (NativeCharacterState state in _scene.States.Where(
+                     state => state.IsVisible &&
+                              state.Resource != null))
         {
-            SelectModeAnimation(state);
+            NativeAnimationController.SelectModeAnimation(state);
         }
     }
 
     public void SetRenderDragEnabled(bool enabled)
     {
+        if (_closed || _renderDragEnabled == enabled)
+            return;
+
         _renderDragEnabled = enabled;
-        if (!enabled && _pointerDragging)
-            CancelPointerInteraction(commitPosition: true);
+        _pointer.SetDragEnabled(enabled);
     }
 
     public void SetTargetFrameRate(int frameRate)
     {
         int normalized = GlobalConfig.NormalizeTargetFrameRate(frameRate);
+        if (_closed || _targetFrameRate == normalized)
+            return;
+
         if (!_dispatcher.CheckAccess())
         {
             _dispatcher.Invoke(() => SetTargetFrameRate(normalized));
@@ -515,33 +393,38 @@ public sealed class NativeCharacterRenderHost :
         double left,
         double top)
     {
-        if (!_states.TryGetValue(
+        if (_closed ||
+            !_scene.TryGet(
                 characterId,
-                out NativeCharacterState? state))
+                out NativeCharacterState? state) ||
+            (state.Config.PositionX == left &&
+             state.Config.PositionY == top))
         {
             return;
         }
 
         state.Config.PositionX = left;
         state.Config.PositionY = top;
-        UpdateSurfacePosition(state);
-        _compositionDirty = true;
+        _frameRenderer.UpdateSurfacePosition(state);
+        _frameRenderer.MarkCompositionDirty();
     }
 
     public void BeginCharacterMove()
     {
-        _explicitMoveDepth++;
+        if (!_closed)
+            _explicitMoveDepth++;
     }
 
     public void EndCharacterMove()
     {
-        if (_explicitMoveDepth > 0)
+        if (!_closed && _explicitMoveDepth > 0)
             _explicitMoveDepth--;
     }
 
     public void ResetCharacterPosition(string characterId)
     {
-        if (!_states.TryGetValue(
+        if (_closed ||
+            !_scene.TryGet(
                 characterId,
                 out NativeCharacterState? state))
         {
@@ -549,11 +432,16 @@ public sealed class NativeCharacterRenderHost :
         }
 
         Rect area = SystemParameters.WorkArea;
-        MoveCharacter(
-            characterId,
-            area.Left + area.Width / 2,
-            area.Bottom - CharacterBottomMargin);
-        CommitComposition();
+        double left = area.Left + area.Width / 2;
+        double top = area.Bottom - CharacterBottomMargin;
+        if (state.Config.PositionX == left &&
+            state.Config.PositionY == top)
+        {
+            return;
+        }
+
+        MoveCharacter(characterId, left, top);
+        _frameRenderer.Commit();
         CharacterPositionCommitted?.Invoke(
             characterId,
             state.Config.PositionX,
@@ -563,7 +451,7 @@ public sealed class NativeCharacterRenderHost :
     public void HideAll()
     {
         if (_closed ||
-            !_states.Values.Any(state =>
+            !_scene.States.Any(state =>
                 state.IsVisible ||
                 state.IsLoading ||
                 state.Resource != null ||
@@ -572,69 +460,27 @@ public sealed class NativeCharacterRenderHost :
             return;
         }
 
-        CancelPointerInteraction(commitPosition: false);
-        foreach (NativeCharacterState state in _states.Values)
+        _pointer.Cancel(commitPosition: false);
+        foreach (NativeCharacterState state in _scene.States)
         {
             state.IsVisible = false;
             state.Config.Visible = false;
             ReleaseCharacterResources(state);
         }
 
+        RefreshInputRegions();
         UpdateFrameTimerState();
-        CommitComposition();
+        _frameRenderer.Commit();
         CharactersStateChanged?.Invoke();
-    }
-
-    private void ReleaseCharacterResources(NativeCharacterState state)
-    {
-        state.LoadVersion++;
-        state.IsLoading = false;
-        if (state.Resource == null &&
-            state.Surface == null &&
-            state.LastBatches.Count == 0)
-        {
-            return;
-        }
-
-        // 隐藏即卸载：释放骨骼、托管纹理与 GPU 纹理、合成表面；
-        // 动画名缓存保留，面板在角色隐藏期间仍能显示完整动画列表。
-        state.HasCachedSilhouette = false;
-        state.CachedSilhouetteRuns.Clear();
-        state.LastBatches = Array.Empty<NativeSpineDrawBatch>();
-        state.ScreenBounds = RectangleF.Empty;
-        state.RenderRegionBounds = RectangleF.Empty;
-        state.PreviousRenderRegionBounds = RectangleF.Empty;
-        state.Surface?.Dispose();
-        state.Surface = null;
-        state.Resource?.Dispose();
-        state.Resource = null;
-        state.ResourceKey = string.Empty;
-        state.TemporaryAnimationPlayback.Clear();
-        PurgeUnusedTextures();
-        CollectIfIdleAfterUnload();
-    }
-
-    private void CollectIfIdleAfterUnload()
-    {
-        // 渲染循环停止后不再产生新分配，普通 GC 可能长时间不触发；
-        // 在最后一只可见角色隐藏时做一次后台压缩回收，
-        // 让"隐藏即释放"立即体现在进程内存上。
-        if (_states.Values.Any(state => state.IsVisible))
-        {
-            return;
-        }
-
-        GC.Collect(
-            GC.MaxGeneration,
-            GCCollectionMode.Forced,
-            blocking: false,
-            compacting: true);
     }
 
     public async Task RestoreVisibleCharactersAsync(
         IEnumerable<CharacterConfig> characters,
         bool configMode)
     {
+        if (_closed)
+            return;
+
         foreach (CharacterConfig character in characters.Where(
                      character => character.Visible))
         {
@@ -666,22 +512,27 @@ public sealed class NativeCharacterRenderHost :
 
         if (_closed)
             return;
+
         _closed = true;
         _lifetimeCancellation.Cancel();
+        if (_session.InputWindow != null)
+            _session.InputWindow.MouseInput = null;
 
         _frameScheduler.Dispose();
         _scaleSettleTimer.Stop();
-        foreach (NativeCharacterState state in _states.Values)
-            state.Dispose();
-        _states.Clear();
-        _zOrder.Clear();
-        _graphics?.Dispose();
-        _graphics = null;
-        _inputWindow?.Dispose();
-        _inputWindow = null;
-        _window?.Dispose();
-        _window = null;
+        _scaleSettleTimer.Tick -= OnScaleSettle;
+        _pointer.Cancel(commitPosition: false);
+        _scaleShrinkPending.Clear();
+        _scene.Clear();
+        _session.Dispose();
         _lifetimeCancellation.Dispose();
+
+        CharacterScaleChanged = null;
+        CharacterAnimationsLoaded = null;
+        CharacterLoadFailed = null;
+        CharactersStateChanged = null;
+        CharacterPositionCommitted = null;
+        CharacterRightClicked = null;
     }
 
     public void Dispose()
@@ -689,28 +540,114 @@ public sealed class NativeCharacterRenderHost :
         Close();
     }
 
+    private async Task LoadCharacterAsync(
+        CharacterConfig character,
+        NativeCharacterState state)
+    {
+        state.IsLoading = true;
+        int loadVersion = ++state.LoadVersion;
+        CharactersStateChanged?.Invoke();
+
+        try
+        {
+            NativeCharacterLoadResult loaded =
+                await NativeCharacterLoader.LoadAsync(
+                    character,
+                    _lifetimeCancellation.Token);
+            await _dispatcher.InvokeAsync(() =>
+            {
+                if (_closed ||
+                    !_scene.TryGet(
+                        character.Id,
+                        out NativeCharacterState? current) ||
+                    !ReferenceEquals(current, state) ||
+                    current.LoadVersion != loadVersion ||
+                    _session.Graphics is not { } graphics)
+                {
+                    loaded.Resource.Dispose();
+                    return;
+                }
+
+                current.Resource = loaded.Resource;
+                current.CachedAnimationNames =
+                    loaded.Resource.AnimationNames;
+                current.SetupBounds = loaded.Setup;
+                current.Envelope = loaded.Envelope;
+                current.Surface = graphics.CreateSurface();
+                if (current.Surface.SetVisible(current.IsVisible) &&
+                    current.IsVisible)
+                {
+                    _scene.MoveToTop(current.Config.Id);
+                }
+
+                current.IsLoading = false;
+                NativeAnimationController.SelectModeAnimation(current);
+                _frameRenderer.UpdateSurfacePosition(current);
+                _frameRenderer.MarkCompositionDirty();
+                RenderFrame(0);
+                UpdateFrameTimerState();
+
+                if (string.IsNullOrWhiteSpace(
+                        current.Config.ConfiguredAnimation) &&
+                    current.Resource.AnimationNames.Count > 0)
+                {
+                    current.Config.ConfiguredAnimation =
+                        NativeAnimationController.SelectIdleAnimationName(
+                            current.Resource.AnimationNames) ??
+                        current.Resource.AnimationNames[0];
+                }
+
+                CharacterAnimationsLoaded?.Invoke(
+                    character.Id,
+                    current.Resource.AnimationNames);
+                CharacterScaleChanged?.Invoke(
+                    character.Id,
+                    current.MaxScale,
+                    current.CurrentScale);
+                CharactersStateChanged?.Invoke();
+            });
+        }
+        catch (OperationCanceledException)
+            when (_lifetimeCancellation.IsCancellationRequested)
+        {
+            // Closing or unloading invalidates this load version.
+        }
+        catch (Exception exception)
+        {
+            await _dispatcher.InvokeAsync(() =>
+            {
+                if (_closed ||
+                    !_scene.TryGet(
+                        character.Id,
+                        out NativeCharacterState? current) ||
+                    !ReferenceEquals(current, state) ||
+                    current.LoadVersion != loadVersion)
+                {
+                    return;
+                }
+
+                current.IsLoading = false;
+                current.IsVisible = false;
+                current.Config.Visible = false;
+                RefreshInputRegions();
+                UpdateFrameTimerState();
+                AppLogger.Write(
+                    nameof(NativeCharacterRenderHost),
+                    $"character-load-failed id={character.Id} " +
+                    $"message={exception.Message}");
+                CharacterLoadFailed?.Invoke(character.Id);
+                CharactersStateChanged?.Invoke();
+            });
+            throw;
+        }
+    }
+
     private Task InitializeOnDispatcher()
     {
-        ObjectDisposedException.ThrowIf(_closed, this);
-        if (_graphics != null)
+        if (_closed)
             return Task.CompletedTask;
 
-        _window = new NativeCompositionWindow();
-        _graphics = new NativeGraphicsDevice(_window.Handle);
-        _inputWindow = new NativeInputWindow(
-            _window.Left,
-            _window.Top,
-            _window.Width,
-            _window.Height);
-        _inputWindow.MouseInput = OnNativeMouseInput;
-        _inputWindow.ClearAndHide();
-        AppLogger.Write(
-            nameof(NativeCharacterRenderHost),
-            $"initialized render-window={_window.Handle} " +
-            $"input-window={_inputWindow.Handle} " +
-            $"size={_window.Width}x{_window.Height} " +
-            $"dpi={_window.DpiScale:F2}");
-        return Task.CompletedTask;
+        return _session.Initialize(OnNativeMouseInput);
     }
 
     private static string GetResourceKey(CharacterConfig character) =>
@@ -723,16 +660,21 @@ public sealed class NativeCharacterRenderHost :
                 character.TexturePath
             }.Concat(character.AdditionalTexturePaths));
 
+    private NativeCharacterState GetOrCreateState(CharacterConfig character) =>
+        _scene.GetOrCreate(
+            character,
+            DefaultScale,
+            MinimumScale,
+            MaximumScale);
+
     private void UpdateFrameTimerState()
     {
-        bool shouldRun = !_closed && _states.Values.Any(state =>
+        bool shouldRun = !_closed && _scene.States.Any(state =>
             state.IsVisible &&
             state.Resource != null &&
             state.Surface != null);
         if (shouldRun == _frameScheduler.IsRunning)
-        {
             return;
-        }
 
         if (shouldRun)
         {
@@ -745,33 +687,11 @@ public sealed class NativeCharacterRenderHost :
         _frameClock.Reset();
     }
 
-    private NativeCharacterState GetOrCreateState(CharacterConfig character)
-    {
-        if (_states.TryGetValue(
-                character.Id,
-                out NativeCharacterState? existing))
-        {
-            return existing;
-        }
-
-        NativeCharacterState state = new()
-        {
-            Config = character,
-            CurrentScale = Math.Clamp(
-                character.Scale > 0
-                    ? character.Scale
-                    : DefaultScale,
-                MinimumScale,
-                MaximumScale),
-            MaxScale = MaximumScale
-        };
-        _states[character.Id] = state;
-        _zOrder.MoveToTop(character.Id);
-        return state;
-    }
-
     private void OnFrame()
     {
+        if (_closed)
+            return;
+
         double elapsed = _frameClock.Elapsed.TotalSeconds;
         _frameClock.Restart();
         RenderFrame(Math.Min(elapsed, 0.1));
@@ -780,25 +700,19 @@ public sealed class NativeCharacterRenderHost :
     private void OnScaleSettle(object? sender, EventArgs eventArgs)
     {
         _scaleSettleTimer.Stop();
-        if (_window == null)
+        if (_closed || _session.Window == null)
             return;
 
         foreach (string characterId in _scaleShrinkPending)
         {
-            if (!_states.TryGetValue(
+            if (_scene.TryGet(
                     characterId,
-                    out NativeCharacterState? state) ||
-                !state.IsVisible ||
-                state.Surface == null)
+                    out NativeCharacterState? state) &&
+                state.IsVisible &&
+                state.Surface != null)
             {
-                continue;
+                _frameRenderer.ShrinkSurface(state);
             }
-
-            state.Surface.ShrinkToScale(
-                state.Envelope,
-                state.PivotX,
-                state.PivotY,
-                (float)state.CurrentScale * _window.DpiScale);
         }
 
         _scaleShrinkPending.Clear();
@@ -807,1153 +721,70 @@ public sealed class NativeCharacterRenderHost :
 
     private void RenderFrame(double elapsedSeconds)
     {
-        if (_renderingFrame || _graphics == null || _window == null)
-            return;
-
-        long frameStartedTimestamp = _performanceTelemetryEnabled
-            ? Stopwatch.GetTimestamp()
-            : 0;
-        long frameStartedAllocatedBytes = _performanceTelemetryEnabled
-            ? GC.GetAllocatedBytesForCurrentThread()
-            : 0;
-        _renderingFrame = true;
-        try
-        {
-            FlushPendingPointerMove();
-            _pendingFrames.Clear();
-            foreach (NativeCharacterState state in _states.Values)
-            {
-                if (!state.IsVisible ||
-                    state.Resource == null ||
-                    state.Surface == null)
-                {
-                    continue;
-                }
-
-                state.Resource.AnimationState.TimeScale =
-                    (float)state.Config.AnimationSpeed;
-                state.Resource.Update((float)elapsedSeconds);
-                IReadOnlyList<NativeSpineDrawBatch> batches =
-                    state.Geometry.Build(state.Resource.Skeleton);
-                float pixelScale =
-                    (float)state.CurrentScale * _window.DpiScale;
-                state.Surface.EnsureSize(
-                    state.Envelope,
-                    state.PivotX,
-                    state.PivotY,
-                    pixelScale);
-                UpdateSurfacePosition(state);
-                UpdateScreenBounds(state, batches, pixelScale);
-                state.LastBatches = batches;
-                _pendingFrames.Add(new PendingFrame(
-                    state,
-                    batches,
-                    pixelScale));
-            }
-
-            UpdateWindowRegions();
-            foreach (PendingFrame frame in _pendingFrames)
-            {
-                _graphics.Render(
-                    frame.State.Surface!,
-                    frame.Batches,
-                    frame.State.Surface!.GetTransform(frame.PixelScale));
-            }
-
-            bool rendered = _pendingFrames.Count > 0;
-            if (rendered || _compositionDirty)
-            {
-                _graphics.Commit();
-                _compositionDirty = false;
-            }
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Write(
-                nameof(NativeCharacterRenderHost),
-                $"frame-failed message={exception.Message}");
-        }
-        finally
-        {
-            if (_performanceTelemetryEnabled)
-            {
-                RecordPerformanceFrame(
-                    frameStartedTimestamp,
-                    frameStartedAllocatedBytes,
-                    _pendingFrames.Count);
-            }
-
-            _pendingFrames.Clear();
-            _renderingFrame = false;
-        }
-    }
-
-    private void RecordPerformanceFrame(
-        long frameStartedTimestamp,
-        long frameStartedAllocatedBytes,
-        int visibleCharacterCount)
-    {
-        long completedTimestamp = Stopwatch.GetTimestamp();
-        long frameTicks = completedTimestamp - frameStartedTimestamp;
-        long allocatedBytes = Math.Max(
-            0,
-            GC.GetAllocatedBytesForCurrentThread() -
-            frameStartedAllocatedBytes);
-        if (_performanceWindowStartTimestamp == 0)
-        {
-            _performanceWindowStartTimestamp = frameStartedTimestamp;
-        }
-
-        _performanceFrameCount++;
-        _performanceFrameTicks += frameTicks;
-        _performanceMaximumFrameTicks = Math.Max(
-            _performanceMaximumFrameTicks,
-            frameTicks);
-        _performanceAllocatedBytes += allocatedBytes;
-
-        double windowSeconds =
-            (completedTimestamp - _performanceWindowStartTimestamp) /
-            (double)Stopwatch.Frequency;
-        if (windowSeconds < PerformanceWindowSeconds)
-        {
-            return;
-        }
-
-        double actualFrameRate = _performanceFrameCount / windowSeconds;
-        double averageFrameMilliseconds =
-            _performanceFrameTicks * 1000.0 /
-            Stopwatch.Frequency /
-            _performanceFrameCount;
-        double maximumFrameMilliseconds =
-            _performanceMaximumFrameTicks * 1000.0 /
-            Stopwatch.Frequency;
-        long allocatedBytesPerFrame =
-            _performanceAllocatedBytes / _performanceFrameCount;
-        AppLogger.Write(
-            nameof(NativeCharacterRenderHost),
-            $"performance target-fps={_targetFrameRate} " +
-            $"actual-fps={actualFrameRate:F2} " +
-            $"visible={visibleCharacterCount} " +
-            $"avg-frame-ms={averageFrameMilliseconds:F3} " +
-            $"max-frame-ms={maximumFrameMilliseconds:F3} " +
-            $"allocated-bytes-per-frame={allocatedBytesPerFrame}");
-
-        _performanceWindowStartTimestamp = completedTimestamp;
-        _performanceFrameTicks = 0;
-        _performanceMaximumFrameTicks = 0;
-        _performanceAllocatedBytes = 0;
-        _performanceFrameCount = 0;
-    }
-
-    private void UpdateSurfacePosition(NativeCharacterState state)
-    {
-        if (_window == null || state.Surface == null)
-            return;
-
-        state.Surface.SetAnchorPosition(
-            ToClientPixelX(state.Config.PositionX),
-            ToClientPixelY(state.Config.PositionY));
-    }
-
-    private void UpdateScreenBounds(
-        NativeCharacterState state,
-        IReadOnlyList<NativeSpineDrawBatch> batches,
-        float pixelScale)
-    {
-        if (_window == null)
-            return;
-
-        NativeSpineBounds bounds =
-            NativeSpineEnvelopeCalculator.GetBounds(batches);
-        float anchorX =
-            _window.Left + ToClientPixelX(state.Config.PositionX);
-        float anchorY =
-            _window.Top + ToClientPixelY(state.Config.PositionY);
-        state.PreviousRenderRegionBounds =
-            state.RenderRegionBounds;
-        if (bounds.IsEmpty)
-        {
-            state.ScreenBounds = RectangleF.Empty;
-            state.RenderRegionBounds = RectangleF.Empty;
-            return;
-        }
-
-        state.ScreenBounds = RectangleF.FromLTRB(
-            anchorX + (bounds.Left - state.PivotX) * pixelScale,
-            anchorY + (bounds.Top - state.PivotY) * pixelScale,
-            anchorX + (bounds.Right - state.PivotX) * pixelScale,
-            anchorY + (bounds.Bottom - state.PivotY) * pixelScale);
-        state.RenderRegionBounds = GetSurfaceScreenBounds(
-            state.Surface,
-            anchorX,
-            anchorY);
-    }
-
-    private float ToClientPixelX(double x) =>
-        _window == null
-            ? 0
-            : (float)((x - SystemParameters.VirtualScreenLeft) *
-                      _window.DpiScale);
-
-    private float ToClientPixelY(double y) =>
-        _window == null
-            ? 0
-            : (float)((y - SystemParameters.VirtualScreenTop) *
-                      _window.DpiScale);
-
-    private void CommitComposition()
-    {
-        if (_graphics == null)
-            return;
-        _graphics.Commit();
-        _compositionDirty = false;
-    }
-
-    private static void SelectModeAnimation(NativeCharacterState state)
-    {
-        NativeSpineResource? resource = state.Resource;
-        if (resource == null)
-            return;
-
-        string? animation = SelectConfiguredOrIdleAnimationName(
-            state.Config.ConfiguredAnimation,
-            resource.AnimationNames);
-        TrackEntry? current = resource.AnimationState.GetCurrent(0);
-        if (current?.Animation?.Name.Equals(
-                animation,
-                StringComparison.OrdinalIgnoreCase) == true &&
-            current.Loop)
-        {
-            return;
-        }
-
-        if (animation != null)
-        {
-            state.TemporaryAnimationPlayback.SetPersistent(
-                resource.AnimationState,
-                animation,
-                repeat: true);
-        }
-    }
-
-    private static void PlayClickAnimation(NativeCharacterState state)
-    {
-        NativeSpineResource? resource = state.Resource;
-        if (resource == null)
-            return;
-
-        string? clickAnimation =
-            SelectClickAnimationName(resource.AnimationNames);
-        string? defaultAnimation =
-            SelectConfiguredOrIdleAnimationName(
-                state.Config.ConfiguredAnimation,
-                resource.AnimationNames);
-        if (clickAnimation == null || defaultAnimation == null)
-            return;
-
-        state.TemporaryAnimationPlayback.Play(
-            resource.AnimationState,
-            clickAnimation,
-            defaultAnimation);
-    }
-
-    internal static string? SelectClickAnimationName(
-        IReadOnlyList<string> animationNames)
-    {
-        string[] preferredNames =
-        [
-            "action",
-            "click",
-            "touch",
-            "tap",
-            "reaction",
-            "interact",
-            "skillcut"
-        ];
-        foreach (string preferredName in preferredNames)
-        {
-            string? exact = animationNames.FirstOrDefault(name =>
-                name.Equals(
-                    preferredName,
-                    StringComparison.OrdinalIgnoreCase));
-            if (exact != null)
-                return exact;
-
-            string? prefixed = animationNames.FirstOrDefault(name =>
-                name.StartsWith(
-                    $"{preferredName}_",
-                    StringComparison.OrdinalIgnoreCase));
-            if (prefixed != null)
-                return prefixed;
-        }
-
-        return null;
-    }
-
-    internal static string? SelectIdleAnimationName(
-        IReadOnlyList<string> animationNames)
-    {
-        string? idle = animationNames.FirstOrDefault(name =>
-            name.Equals("idle", StringComparison.OrdinalIgnoreCase));
-        return idle ??
-               animationNames.FirstOrDefault(name =>
-                   name.StartsWith(
-                       "idle",
-                       StringComparison.OrdinalIgnoreCase)) ??
-               (animationNames.Count > 0 ? animationNames[0] : null);
-    }
-
-    internal static string? SelectConfiguredOrIdleAnimationName(
-        string? configuredAnimation,
-        IReadOnlyList<string> animationNames)
-    {
-        string? configured = animationNames.FirstOrDefault(name =>
-            name.Equals(
-                configuredAnimation,
-                StringComparison.OrdinalIgnoreCase));
-        return configured ?? SelectIdleAnimationName(animationNames);
-    }
-
-    private void UpdateWindowRegions()
-    {
-        if (_window == null || _inputWindow == null)
-            return;
-
-        // Mouse capture keeps drag input alive outside the old region. Avoid
-        // rebuilding and applying GDI regions on every drag frame; the cache
-        // is translated once when the drag ends.
-        if (_pointerDragging)
-            return;
-
-        // 输入区域以 8px 格子为精度，动画的亚像素变化不影响点击判定：
-        // 栅格化按 100ms 节流（锚点或缩放变化超过阈值时立即刷新），
-        // 每帧只做免分配的缓存拼装与工作区裁剪；
-        // 只有区域内容真正变化时 NativeInputWindow 才会重设窗口区域。
-        // 配置模式同样保持区域活跃：面板遮住其矩形内区域，
-        // 其余桌面可直接拖拽角色，不再依赖 WPF 覆盖层。
-        _inputRegions.Clear();
-        RefreshWorkingAreas();
-        long now = Stopwatch.GetTimestamp();
-        foreach (NativeCharacterState state in _states.Values)
-        {
-            if (!state.IsVisible)
-                continue;
-
-            float anchorX =
-                _window.Left + ToClientPixelX(state.Config.PositionX);
-            float anchorY =
-                _window.Top + ToClientPixelY(state.Config.PositionY);
-            float pixelScale =
-                (float)state.CurrentScale * _window.DpiScale;
-            if (NeedsSilhouetteRefresh(
-                    state,
-                    anchorX,
-                    anchorY,
-                    pixelScale,
-                    now))
-            {
-                CopySilhouetteRuns(
-                    state,
-                    RasterizeSilhouette(
-                        state.LastBatches,
-                        state.ScreenBounds,
-                        anchorX,
-                        anchorY,
-                        state.PivotX,
-                        state.PivotY,
-                        pixelScale,
-                        _window.Left,
-                        _window.Top));
-                state.HasCachedSilhouette = true;
-                state.CachedAnchorX = anchorX;
-                state.CachedAnchorY = anchorY;
-                state.CachedPixelScale = pixelScale;
-                state.CachedSilhouetteTimestamp = now;
-            }
-
-            foreach (Rectangle run in state.CachedSilhouetteRuns)
-            {
-                ClipToWorkingAreas(_inputRegions, run, _workingAreas);
-            }
-        }
-
-        _inputWindow.SetInteractiveRegions(_inputRegions);
-        _inputWindow.Show();
-    }
-
-    internal static bool NeedsSilhouetteRefresh(
-        NativeCharacterState state,
-        float anchorX,
-        float anchorY,
-        float pixelScale,
-        long nowTimestamp)
-    {
-        if (!state.HasCachedSilhouette)
-            return true;
-
-        if (Math.Abs(anchorX - state.CachedAnchorX) >=
-                SilhouetteAnchorEpsilonPixels ||
-            Math.Abs(anchorY - state.CachedAnchorY) >=
-                SilhouetteAnchorEpsilonPixels)
-            return true;
-
-        if (pixelScale != state.CachedPixelScale)
-            return true;
-
-        return Stopwatch.GetElapsedTime(
-            state.CachedSilhouetteTimestamp,
-            nowTimestamp) >= SilhouetteRefreshInterval;
-    }
-
-    private static void CopySilhouetteRuns(
-        NativeCharacterState state,
-        IReadOnlyList<Rectangle> runs)
-    {
-        // RasterizeSilhouette 返回的是共享 scratch 列表，
-        // 必须在下一次栅格化前复制到角色自己的缓存。
-        state.CachedSilhouetteRuns.Clear();
-        foreach (Rectangle run in runs)
-        {
-            state.CachedSilhouetteRuns.Add(run);
-        }
-    }
-
-    internal static IReadOnlyList<Rectangle> RasterizeSilhouette(
-        IReadOnlyList<NativeSpineDrawBatch> batches,
-        RectangleF screenBounds,
-        float anchorX,
-        float anchorY,
-        float pivotX,
-        float pivotY,
-        float pixelScale,
-        int windowLeft,
-        int windowTop)
-    {
-        if (batches.Count == 0 ||
-            screenBounds.IsEmpty ||
-            pixelScale <= 0)
-        {
-            return Array.Empty<Rectangle>();
-        }
-
-        Rectangle clientBounds = Rectangle.FromLTRB(
-            (int)Math.Floor(screenBounds.Left) - windowLeft,
-            (int)Math.Floor(screenBounds.Top) - windowTop,
-            (int)Math.Ceiling(screenBounds.Right) - windowLeft,
-            (int)Math.Ceiling(screenBounds.Bottom) - windowTop);
-        if (clientBounds.Width <= 0 || clientBounds.Height <= 0)
-            return Array.Empty<Rectangle>();
-
-        // 自适应格宽：大角色成倍放大格子，保证格数始终有界，
-        // 只有病态尺寸才退化为外接矩形。
-        int cellSize = SilhouetteCellSize;
-        int firstColumn;
-        int lastColumn;
-        int firstRow;
-        int lastRow;
-        while (true)
-        {
-            firstColumn = (int)Math.Floor(
-                clientBounds.Left / (double)cellSize);
-            lastColumn = (int)Math.Ceiling(
-                clientBounds.Right / (double)cellSize) - 1;
-            firstRow = (int)Math.Floor(
-                clientBounds.Top / (double)cellSize);
-            lastRow = (int)Math.Ceiling(
-                clientBounds.Bottom / (double)cellSize) - 1;
-            int columnCount = lastColumn - firstColumn + 1;
-            int rowCount = lastRow - firstRow + 1;
-            if (columnCount <= 0 || rowCount <= 0)
-                return Array.Empty<Rectangle>();
-            if ((long)columnCount * rowCount <= MaxSilhouetteCells ||
-                cellSize >= MaxSilhouetteCellSize)
-            {
-                break;
-            }
-
-            cellSize *= 2;
-        }
-
-        if ((long)(lastColumn - firstColumn + 1) *
-                (lastRow - firstRow + 1) > MaxSilhouetteCells)
-        {
-            return CreateFallbackRegion(clientBounds);
-        }
-
-        SilhouetteScratch scratch = SilhouetteScratchCache ??= new();
-        scratch.Triangles.Clear();
-        BuildSilhouetteTriangles(batches, scratch.Triangles);
-        if (scratch.Triangles.Count == 0)
-            return Array.Empty<Rectangle>();
-
-        int columnTotal = lastColumn - firstColumn + 1;
-        int rowTotal = lastRow - firstRow + 1;
-        scratch.EnsureGridCapacity(columnTotal * rowTotal);
-        Array.Clear(scratch.Grid, 0, columnTotal * rowTotal);
-
-        // 散射标记：每个三角形只扫自己包围盒覆盖的格子，
-        // 单格被任一三角形标记后跳过，成本与可见面积成正比。
-        foreach (SilhouetteTriangle triangle in scratch.Triangles)
-        {
-            float minClientX =
-                anchorX + (triangle.MinX - pivotX) * pixelScale -
-                windowLeft;
-            float maxClientX =
-                anchorX + (triangle.MaxX - pivotX) * pixelScale -
-                windowLeft;
-            float minClientY =
-                anchorY + (triangle.MinY - pivotY) * pixelScale -
-                windowTop;
-            float maxClientY =
-                anchorY + (triangle.MaxY - pivotY) * pixelScale -
-                windowTop;
-            int triangleFirstColumn = Math.Clamp(
-                (int)Math.Floor(minClientX / cellSize),
-                firstColumn,
-                lastColumn);
-            int triangleLastColumn = Math.Clamp(
-                (int)Math.Floor(maxClientX / cellSize),
-                firstColumn,
-                lastColumn);
-            int triangleFirstRow = Math.Clamp(
-                (int)Math.Floor(minClientY / cellSize),
-                firstRow,
-                lastRow);
-            int triangleLastRow = Math.Clamp(
-                (int)Math.Floor(maxClientY / cellSize),
-                firstRow,
-                lastRow);
-            for (int row = triangleFirstRow; row <= triangleLastRow;
-                 row++)
-            {
-                float skeletonY = pivotY +
-                    (windowTop +
-                         row * cellSize +
-                         cellSize / 2f -
-                         anchorY) /
-                    pixelScale;
-                int gridRow = row - firstRow;
-                for (int column = triangleFirstColumn;
-                     column <= triangleLastColumn;
-                     column++)
-                {
-                    int gridIndex =
-                        gridRow * columnTotal + column - firstColumn;
-                    if (scratch.Grid[gridIndex])
-                        continue;
-
-                    float skeletonX = pivotX +
-                        (windowLeft +
-                             column * cellSize +
-                             cellSize / 2f -
-                             anchorX) /
-                        pixelScale;
-                    if (IsVisibleSkeletonPoint(
-                            triangle,
-                            skeletonX,
-                            skeletonY))
-                    {
-                        scratch.Grid[gridIndex] = true;
-                    }
-                }
-            }
-        }
-
-        scratch.Runs.Clear();
-        List<(int Start, int End)>? mergeSpans = null;
-        List<(int Start, int End)> currentSpans = scratch.CurrentSpans;
-        int mergeStartRow = firstRow;
-        for (int row = firstRow; row <= lastRow; row++)
-        {
-            currentSpans.Clear();
-            int gridRow = row - firstRow;
-            int runStart = int.MinValue;
-            for (int column = firstColumn; column <= lastColumn + 1;
-                 column++)
-            {
-                bool visible = column <= lastColumn &&
-                    scratch.Grid[
-                        gridRow * columnTotal + column - firstColumn];
-                if (visible)
-                {
-                    if (runStart == int.MinValue)
-                        runStart = column;
-                }
-                else if (runStart != int.MinValue)
-                {
-                    currentSpans.Add((runStart, column));
-                    runStart = int.MinValue;
-                }
-            }
-
-            if (SpansEqual(mergeSpans, currentSpans))
-                continue;
-
-            FlushSilhouetteRuns(
-                scratch.Runs,
-                mergeSpans,
-                mergeStartRow,
-                row,
-                cellSize);
-            mergeSpans = currentSpans.Count == 0
-                ? null
-                : CopySpans(scratch, currentSpans);
-            mergeStartRow = row;
-            if (scratch.Runs.Count > MaxSilhouetteRunsPerCharacter)
-                return CreateFallbackRegion(clientBounds);
-        }
-
-        FlushSilhouetteRuns(
-            scratch.Runs,
-            mergeSpans,
-            mergeStartRow,
-            lastRow + 1,
-            cellSize);
-        if (scratch.Runs.Count > MaxSilhouetteRunsPerCharacter)
-            return CreateFallbackRegion(clientBounds);
-
-        return scratch.Runs;
-    }
-
-    [ThreadStatic]
-    private static SilhouetteScratch? SilhouetteScratchCache;
-
-    private static List<(int Start, int End)> CopySpans(
-        SilhouetteScratch scratch,
-        List<(int Start, int End)> source)
-    {
-        scratch.CopyBuffer.Clear();
-        scratch.CopyBuffer.AddRange(source);
-        return scratch.CopyBuffer;
-    }
-
-    private static void FlushSilhouetteRuns(
-        List<Rectangle> runs,
-        List<(int Start, int End)>? spans,
-        int startRow,
-        int endRowExclusive,
-        int cellSize)
-    {
-        if (spans == null)
-            return;
-
-        foreach ((int start, int end) in spans)
-        {
-            runs.Add(Rectangle.FromLTRB(
-                start * cellSize,
-                startRow * cellSize,
-                end * cellSize,
-                endRowExclusive * cellSize));
-        }
-    }
-
-    private static bool SpansEqual(
-        List<(int Start, int End)>? left,
-        List<(int Start, int End)> right)
-    {
-        if (left == null || left.Count != right.Count)
-            return false;
-
-        for (int index = 0; index < left.Count; index++)
-        {
-            if (left[index] != right[index])
-                return false;
-        }
-
-        return true;
-    }
-
-    private static void BuildSilhouetteTriangles(
-        IReadOnlyList<NativeSpineDrawBatch> batches,
-        List<SilhouetteTriangle> triangles)
-    {
-        foreach (NativeSpineDrawBatch batch in batches)
-        {
-            for (int triangle = batch.IndexCount - 3;
-                 triangle >= 0;
-                 triangle -= 3)
-            {
-                NativeSpineVertex first =
-                    batch.Vertices[batch.Indices[triangle]];
-                NativeSpineVertex second =
-                    batch.Vertices[batch.Indices[triangle + 1]];
-                NativeSpineVertex third =
-                    batch.Vertices[batch.Indices[triangle + 2]];
-                triangles.Add(new SilhouetteTriangle(
-                    first,
-                    second,
-                    third,
-                    batch.Texture));
-            }
-        }
-    }
-
-    private static bool IsVisibleSkeletonPoint(
-        SilhouetteTriangle triangle,
-        float x,
-        float y)
-    {
-        if (x < triangle.MinX ||
-            x > triangle.MaxX ||
-            y < triangle.MinY ||
-            y > triangle.MaxY)
-        {
-            return false;
-        }
-
-        if (!TryGetBarycentric(
-                x,
-                y,
-                triangle.First.Position,
-                triangle.Second.Position,
-                triangle.Third.Position,
-                out float firstWeight,
-                out float secondWeight,
-                out float thirdWeight))
-        {
-            return false;
-        }
-
-        float u =
-            triangle.First.TextureCoordinate.X * firstWeight +
-            triangle.Second.TextureCoordinate.X * secondWeight +
-            triangle.Third.TextureCoordinate.X * thirdWeight;
-        float v =
-            triangle.First.TextureCoordinate.Y * firstWeight +
-            triangle.Second.TextureCoordinate.Y * secondWeight +
-            triangle.Third.TextureCoordinate.Y * thirdWeight;
-        return triangle.Texture.IsVisiblePixel(u, v, 1f);
-    }
-
-    private static IReadOnlyList<Rectangle> CreateFallbackRegion(
-        Rectangle clientBounds)
-    {
-        int cellSize = SilhouetteCellSize;
-        int margin = SilhouetteFallbackMargin;
-        int left = (int)Math.Floor(
-            (clientBounds.Left - margin) / (double)cellSize) * cellSize;
-        int top = (int)Math.Floor(
-            (clientBounds.Top - margin) / (double)cellSize) * cellSize;
-        int right = (int)Math.Ceiling(
-            (clientBounds.Right + margin) / (double)cellSize) * cellSize;
-        int bottom = (int)Math.Ceiling(
-            (clientBounds.Bottom + margin) / (double)cellSize) * cellSize;
-        return [Rectangle.FromLTRB(left, top, right, bottom)];
-    }
-
-    private sealed class SilhouetteScratch
-    {
-        public List<SilhouetteTriangle> Triangles { get; } = [];
-
-        public bool[] Grid { get; private set; } = [];
-
-        public List<Rectangle> Runs { get; } = [];
-
-        public List<(int Start, int End)> CurrentSpans { get; } = [];
-
-        public List<(int Start, int End)> CopyBuffer { get; } = [];
-
-        public void EnsureGridCapacity(int required)
-        {
-            if (Grid.Length >= required)
-                return;
-
-            int capacity = Grid.Length;
-            while (capacity < required)
-                capacity = Math.Max(required, capacity * 2);
-            Grid = new bool[capacity];
-        }
-    }
-
-    private readonly struct SilhouetteTriangle(
-        NativeSpineVertex first,
-        NativeSpineVertex second,
-        NativeSpineVertex third,
-        NativeTextureSource texture)
-    {
-        public readonly NativeSpineVertex First = first;
-        public readonly NativeSpineVertex Second = second;
-        public readonly NativeSpineVertex Third = third;
-        public readonly NativeTextureSource Texture = texture;
-        public readonly float MinX = Math.Min(
-            Math.Min(first.Position.X, second.Position.X),
-            third.Position.X);
-        public readonly float MinY = Math.Min(
-            Math.Min(first.Position.Y, second.Position.Y),
-            third.Position.Y);
-        public readonly float MaxX = Math.Max(
-            Math.Max(first.Position.X, second.Position.X),
-            third.Position.X);
-        public readonly float MaxY = Math.Max(
-            Math.Max(first.Position.Y, second.Position.Y),
-            third.Position.Y);
-    }
-
-    private void RefreshWorkingAreas()
-    {
-        if (_inputWindow == null)
-        {
-            return;
-        }
-
-        long now = Stopwatch.GetTimestamp();
-        if (_workingAreas.Count > 0 &&
-            Stopwatch.GetElapsedTime(
-                _workingAreasRefreshTimestamp,
-                now) < WorkingAreaRefreshInterval)
-        {
-            return;
-        }
-
-        _workingAreas.Clear();
-        foreach (System.Windows.Forms.Screen screen in
-                 System.Windows.Forms.Screen.AllScreens)
-        {
-            _workingAreas.Add(ToClientPixelRectangle(
-                screen.WorkingArea,
-                _inputWindow.Left,
-                _inputWindow.Top));
-        }
-
-        _workingAreasRefreshTimestamp = now;
-    }
-
-    internal static RectangleF GetSurfaceScreenBounds(
-        NativeCompositionSurface? surface,
-        float anchorX,
-        float anchorY)
-    {
-        if (surface == null ||
-            surface.PixelWidth <= 0 ||
-            surface.PixelHeight <= 0)
-        {
-            return RectangleF.Empty;
-        }
-
-        return new RectangleF(
-            anchorX - surface.AnchorPixelX,
-            anchorY - surface.AnchorPixelY,
-            surface.PixelWidth,
-            surface.PixelHeight);
-    }
-
-    internal static void ClipToWorkingAreas(
-        List<Rectangle> clipped,
-        Rectangle characterRegion,
-        IReadOnlyList<Rectangle> workingAreas)
-    {
-        foreach (Rectangle area in workingAreas)
-        {
-            Rectangle intersection =
-                Rectangle.Intersect(characterRegion, area);
-            if (intersection.Width > 0 && intersection.Height > 0)
-                clipped.Add(intersection);
-        }
-    }
-
-    internal static Rectangle ToClientPixelRectangle(
-        Rectangle physicalScreenRectangle,
-        int windowLeft,
-        int windowTop)
-    {
-        return Rectangle.FromLTRB(
-            physicalScreenRectangle.Left - windowLeft,
-            physicalScreenRectangle.Top - windowTop,
-            physicalScreenRectangle.Right - windowLeft,
-            physicalScreenRectangle.Bottom - windowTop);
-    }
-
-    private void OnNativeMouseInput(
-        uint nativeMessage,
-        int x,
-        int y)
-    {
         if (_closed)
             return;
 
-        int message = checked((int)nativeMessage);
-        if (message != WmLeftButtonDown &&
-            message != WmRightButtonDown &&
-            message != WmMouseMove &&
-            message != WmLeftButtonUp &&
-            message != WmCaptureChanged)
-        {
-            return;
-        }
-
-        NativePoint point = new() { X = x, Y = y };
-        if (message == WmRightButtonDown)
-        {
-            CancelPointerInteraction(commitPosition: false);
-            if (TryHitCharacter(point, out NativeCharacterState? rightClickedState))
-            {
-                QueueRightClick(rightClickedState.Config.Id);
-            }
-            return;
-        }
-
-        if (message == WmLeftButtonDown &&
-            TryHitCharacter(point, out NativeCharacterState? state))
-        {
-            _pointerCharacterId = state.Config.Id;
-            _pointerStart = point;
-            _pointerLatest = point;
-            _pointerStartX = state.Config.PositionX;
-            _pointerStartY = state.Config.PositionY;
-            _pointerDragging = false;
-            _pointerMovePending = false;
-            return;
-        }
-
-        if (_pointerCharacterId != null && message == WmMouseMove)
-        {
-            _pointerLatest = point;
-            int deltaX = point.X - _pointerStart.X;
-            int deltaY = point.Y - _pointerStart.Y;
-            if (!_pointerDragging &&
-                _renderDragEnabled &&
-                (Math.Abs(deltaX) >=
-                     SystemParameters.MinimumHorizontalDragDistance *
-                     (_window?.DpiScale ?? 1) ||
-                 Math.Abs(deltaY) >=
-                     SystemParameters.MinimumVerticalDragDistance *
-                     (_window?.DpiScale ?? 1)))
-            {
-                _pointerDragging = true;
-                BeginCharacterMove();
-            }
-
-            if (_pointerDragging)
-                _pointerMovePending = true;
-            return;
-        }
-
-        if (_pointerCharacterId != null && message == WmLeftButtonUp)
-        {
-            _pointerLatest = point;
-            _pointerMovePending = _pointerDragging;
-            string characterId = _pointerCharacterId;
-            FlushPendingPointerMove();
-            if (_states.TryGetValue(
-                    characterId,
-                    out NativeCharacterState? releasedState))
-            {
-                if (_pointerDragging)
-                {
-                    AlignSilhouetteCacheToCurrentPosition(releasedState);
-                    EndCharacterMove();
-                    QueueCharacterPositionCommitted(
-                        characterId,
-                        releasedState.Config.PositionX,
-                        releasedState.Config.PositionY);
-                }
-                else
-                {
-                    PlayClickAnimation(releasedState);
-                }
-            }
-
-            ResetPointerState();
-            return;
-        }
-
-        if (_pointerCharacterId != null && message == WmCaptureChanged)
-            CancelPointerInteraction(commitPosition: true);
+        _frameRenderer.RenderFrame(
+            elapsedSeconds,
+            _pointer.IsDragging,
+            _pointer.FlushPendingMove,
+            _targetFrameRate);
     }
 
-    private bool TryHitCharacter(
-        NativePoint point,
-        out NativeCharacterState result)
+    private void RefreshInputRegions()
     {
-        foreach (string characterId in _zOrder.TopToBottom)
+        if (!_closed)
         {
-            if (!_states.TryGetValue(
-                    characterId,
-                    out NativeCharacterState? state))
-            {
-                continue;
-            }
-
-            if (state.IsVisible &&
-                !state.ScreenBounds.IsEmpty &&
-                state.ScreenBounds.Contains(point.X, point.Y) &&
-                HitTestGeometry(state, point))
-            {
-                result = state;
-                return true;
-            }
+            _inputRegions.Update(
+                _session,
+                _scene.States,
+                pointerDragging: false);
         }
-
-        result = null!;
-        return false;
     }
 
-    private bool HitTestGeometry(
-        NativeCharacterState state,
-        NativePoint point)
+    private void ReleaseCharacterResources(NativeCharacterState state)
     {
-        if (_window == null || state.LastBatches.Count == 0)
-            return false;
-
-        float pixelScale =
-            (float)state.CurrentScale * _window.DpiScale;
-        if (pixelScale <= 0)
-            return false;
-
-        float anchorX =
-            _window.Left + ToClientPixelX(state.Config.PositionX);
-        float anchorY =
-            _window.Top + ToClientPixelY(state.Config.PositionY);
-        float x = state.PivotX + (point.X - anchorX) / pixelScale;
-        float y = state.PivotY + (point.Y - anchorY) / pixelScale;
-
-        for (int batchIndex = state.LastBatches.Count - 1;
-             batchIndex >= 0;
-             batchIndex--)
-        {
-            NativeSpineDrawBatch batch = state.LastBatches[batchIndex];
-            for (int triangle = batch.IndexCount - 3;
-                 triangle >= 0;
-                 triangle -= 3)
-            {
-                NativeSpineVertex first =
-                    batch.Vertices[batch.Indices[triangle]];
-                NativeSpineVertex second =
-                    batch.Vertices[batch.Indices[triangle + 1]];
-                NativeSpineVertex third =
-                    batch.Vertices[batch.Indices[triangle + 2]];
-                if (!TryGetBarycentric(
-                        x,
-                        y,
-                        first.Position,
-                        second.Position,
-                        third.Position,
-                        out float firstWeight,
-                        out float secondWeight,
-                        out float thirdWeight))
-                {
-                    continue;
-                }
-
-                float u =
-                    first.TextureCoordinate.X * firstWeight +
-                    second.TextureCoordinate.X * secondWeight +
-                    third.TextureCoordinate.X * thirdWeight;
-                float v =
-                    first.TextureCoordinate.Y * firstWeight +
-                    second.TextureCoordinate.Y * secondWeight +
-                    third.TextureCoordinate.Y * thirdWeight;
-                float opacity =
-                    first.LightColor.W * firstWeight +
-                    second.LightColor.W * secondWeight +
-                    third.LightColor.W * thirdWeight;
-                if (batch.Texture.IsVisiblePixel(u, v, opacity))
-                    return true;
-            }
-        }
-
-        return false;
-    }
-
-    private static bool TryGetBarycentric(
-        float x,
-        float y,
-        System.Numerics.Vector2 first,
-        System.Numerics.Vector2 second,
-        System.Numerics.Vector2 third,
-        out float firstWeight,
-        out float secondWeight,
-        out float thirdWeight)
-    {
-        float denominator =
-            (second.Y - third.Y) * (first.X - third.X) +
-            (third.X - second.X) * (first.Y - third.Y);
-        if (MathF.Abs(denominator) < 0.00001f)
-        {
-            firstWeight = 0;
-            secondWeight = 0;
-            thirdWeight = 0;
-            return false;
-        }
-
-        firstWeight =
-            ((second.Y - third.Y) * (x - third.X) +
-             (third.X - second.X) * (y - third.Y)) /
-            denominator;
-        secondWeight =
-            ((third.Y - first.Y) * (x - third.X) +
-             (first.X - third.X) * (y - third.Y)) /
-            denominator;
-        thirdWeight = 1 - firstWeight - secondWeight;
-        const float tolerance = -0.0001f;
-        return firstWeight >= tolerance &&
-               secondWeight >= tolerance &&
-               thirdWeight >= tolerance;
-    }
-
-    private void PurgeUnusedTextures()
-    {
-        if (_graphics == null)
-            return;
-
-        HashSet<string> activePaths = new(
-            _states.Values
-                .Where(state => state.Resource != null)
-                .SelectMany(state =>
-                    state.Resource!.TextureLoader.Textures)
-                .Select(texture => texture.Path),
-            StringComparer.OrdinalIgnoreCase);
-        _graphics.PurgeTextures(activePaths);
-    }
-
-    private void FlushPendingPointerMove()
-    {
-        if (!_pointerMovePending ||
-            !_pointerDragging ||
-            _pointerCharacterId == null ||
-            _window == null)
+        state.LoadVersion++;
+        state.IsLoading = false;
+        if (state.Resource == null &&
+            state.Surface == null &&
+            state.LastBatches.Count == 0)
         {
             return;
         }
 
-        _pointerMovePending = false;
-        MoveCharacter(
-            _pointerCharacterId,
-            _pointerStartX +
-            (_pointerLatest.X - _pointerStart.X) / _window.DpiScale,
-            _pointerStartY +
-            (_pointerLatest.Y - _pointerStart.Y) / _window.DpiScale);
+        state.HasCachedSilhouette = false;
+        state.CachedSilhouetteRuns.Clear();
+        state.LastBatches = Array.Empty<NativeSpineDrawBatch>();
+        state.ScreenBounds = RectangleF.Empty;
+        state.RenderRegionBounds = RectangleF.Empty;
+        state.PreviousRenderRegionBounds = RectangleF.Empty;
+        state.Surface?.Dispose();
+        state.Surface = null;
+        state.Resource?.Dispose();
+        state.Resource = null;
+        state.ResourceKey = string.Empty;
+        state.TemporaryAnimationPlayback.Clear();
+        _frameRenderer.PurgeUnusedTextures();
+        CollectIfIdleAfterUnload();
     }
 
-    private void AlignSilhouetteCacheToCurrentPosition(
-        NativeCharacterState state)
+    private void CollectIfIdleAfterUnload()
     {
-        if (_window == null || !state.HasCachedSilhouette)
+        if (_scene.States.Any(state => state.IsVisible))
             return;
 
-        float anchorX =
-            _window.Left + ToClientPixelX(state.Config.PositionX);
-        float anchorY =
-            _window.Top + ToClientPixelY(state.Config.PositionY);
-        int offsetX = (int)Math.Round(
-            anchorX - state.CachedAnchorX);
-        int offsetY = (int)Math.Round(
-            anchorY - state.CachedAnchorY);
-        if (offsetX != 0 || offsetY != 0)
-        {
-            for (int index = 0;
-                 index < state.CachedSilhouetteRuns.Count;
-                 index++)
-            {
-                Rectangle translated = state.CachedSilhouetteRuns[index];
-                translated.Offset(offsetX, offsetY);
-                state.CachedSilhouetteRuns[index] = translated;
-            }
-        }
+        GC.Collect(
+            GC.MaxGeneration,
+            GCCollectionMode.Forced,
+            blocking: false,
+            compacting: true);
+    }
 
-        state.CachedAnchorX = anchorX;
-        state.CachedAnchorY = anchorY;
-        state.CachedSilhouetteTimestamp = Stopwatch.GetTimestamp();
+    private void OnNativeMouseInput(uint message, int x, int y)
+    {
+        if (!_closed)
+            _pointer.Handle(message, x, y);
     }
 
     private void QueueCharacterPositionCommitted(
@@ -1964,7 +795,7 @@ public sealed class NativeCharacterRenderHost :
         try
         {
             _dispatcher.BeginInvoke(
-                DispatcherPriority.ContextIdle,
+                DispatcherPriority.Input,
                 new Action(() =>
                 {
                     if (!_closed)
@@ -1978,8 +809,7 @@ public sealed class NativeCharacterRenderHost :
         }
         catch (InvalidOperationException)
         {
-            // The dispatcher can start shutting down while the input window
-            // is releasing mouse capture.
+            // Ignore input queued during dispatcher shutdown.
         }
     }
 
@@ -1997,61 +827,7 @@ public sealed class NativeCharacterRenderHost :
         }
         catch (InvalidOperationException)
         {
-            // Ignore input queued during application shutdown.
+            // Ignore input queued during dispatcher shutdown.
         }
-    }
-
-    private void CancelPointerIfCharacter(string characterId)
-    {
-        if (string.Equals(
-                _pointerCharacterId,
-                characterId,
-                StringComparison.Ordinal))
-        {
-            CancelPointerInteraction(commitPosition: false);
-        }
-    }
-
-    private void CancelPointerInteraction(bool commitPosition)
-    {
-        if (_pointerCharacterId != null &&
-            _states.TryGetValue(
-                _pointerCharacterId,
-                out NativeCharacterState? state))
-        {
-            FlushPendingPointerMove();
-            if (_pointerDragging)
-            {
-                AlignSilhouetteCacheToCurrentPosition(state);
-                EndCharacterMove();
-                if (commitPosition)
-                {
-                    QueueCharacterPositionCommitted(
-                        state.Config.Id,
-                        state.Config.PositionX,
-                        state.Config.PositionY);
-                }
-            }
-        }
-
-        ResetPointerState();
-    }
-
-    private void ResetPointerState()
-    {
-        _pointerCharacterId = null;
-        _pointerDragging = false;
-        _pointerMovePending = false;
-    }
-
-    private readonly record struct PendingFrame(
-        NativeCharacterState State,
-        IReadOnlyList<NativeSpineDrawBatch> Batches,
-        float PixelScale);
-
-    private struct NativePoint
-    {
-        public int X;
-        public int Y;
     }
 }

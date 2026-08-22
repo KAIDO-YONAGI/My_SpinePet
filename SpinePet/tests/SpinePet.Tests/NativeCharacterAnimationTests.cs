@@ -9,7 +9,7 @@ public sealed class NativeCharacterAnimationTests
     public void ClickAnimationPrefersConventionalActionName()
     {
         string? animation =
-            NativeCharacterRenderHost.SelectClickAnimationName(
+            NativeAnimationController.SelectClickAnimationName(
                 ["idle", "skillcut_1", "action"]);
 
         Assert.Equal("action", animation);
@@ -19,7 +19,7 @@ public sealed class NativeCharacterAnimationTests
     public void ClickAnimationSupportsBurstSkillcutNames()
     {
         string? animation =
-            NativeCharacterRenderHost.SelectClickAnimationName(
+            NativeAnimationController.SelectClickAnimationName(
                 ["idle", "idle2", "skillcut_1", "skillcut_2"]);
 
         Assert.Equal("skillcut_1", animation);
@@ -29,7 +29,7 @@ public sealed class NativeCharacterAnimationTests
     public void IdleAnimationUsesIdleVariantWhenExactIdleIsMissing()
     {
         string? animation =
-            NativeCharacterRenderHost.SelectIdleAnimationName(
+            NativeAnimationController.SelectIdleAnimationName(
                 ["walk", "idle2", "skillcut_1"]);
 
         Assert.Equal("idle2", animation);
@@ -39,7 +39,7 @@ public sealed class NativeCharacterAnimationTests
     public void ConfiguredAnimationIsKeptWhenItExists()
     {
         string? animation =
-            NativeCharacterRenderHost.SelectConfiguredOrIdleAnimationName(
+            NativeAnimationController.SelectConfiguredOrIdleAnimationName(
                 "action",
                 ["idle", "action"]);
 
@@ -50,7 +50,7 @@ public sealed class NativeCharacterAnimationTests
     public void MissingConfiguredAnimationFallsBackToIdle()
     {
         string? animation =
-            NativeCharacterRenderHost.SelectConfiguredOrIdleAnimationName(
+            NativeAnimationController.SelectConfiguredOrIdleAnimationName(
                 string.Empty,
                 ["action", "idle"]);
 
@@ -61,7 +61,7 @@ public sealed class NativeCharacterAnimationTests
     public void InvalidConfiguredAnimationFallsBackToIdleVariant()
     {
         string? animation =
-            NativeCharacterRenderHost.SelectConfiguredOrIdleAnimationName(
+            NativeAnimationController.SelectConfiguredOrIdleAnimationName(
                 "missing",
                 ["action", "idle_loop"]);
 
@@ -69,11 +69,10 @@ public sealed class NativeCharacterAnimationTests
     }
 
     [Fact]
-    public void TemporaryAnimationRestartsConfiguredDefaultState()
+    public void TemporaryAnimationRestartsConfiguredDefaultStateFromStart()
     {
         AnimationFixture fixture = CreateAnimationFixture(
             ("custom", 2),
-            ("idle", 2),
             ("action", 1));
         AnimationState animationState = fixture.AnimationState;
         TrackEntry persistent =
@@ -81,14 +80,14 @@ public sealed class NativeCharacterAnimationTests
         persistent.TrackTime = 0.75f;
         NativeTemporaryAnimationPlayback playback = new();
 
-        playback.Play(animationState, "action", "idle");
+        playback.Play(animationState, "action", "custom");
 
         TrackEntry temporary = Assert.IsType<TrackEntry>(
             animationState.GetCurrent(0));
         Assert.Equal("action", temporary.Animation.Name);
         Assert.False(temporary.Loop);
         TrackEntry restore = Assert.IsType<TrackEntry>(temporary.Next);
-        Assert.Equal("idle", restore.Animation.Name);
+        Assert.Equal("custom", restore.Animation.Name);
         Assert.True(restore.Loop);
         Assert.Equal(0, restore.TrackTime);
 
@@ -96,9 +95,25 @@ public sealed class NativeCharacterAnimationTests
 
         TrackEntry restored = Assert.IsType<TrackEntry>(
             animationState.GetCurrent(0));
-        Assert.Equal("idle", restored.Animation.Name);
+        Assert.Equal("custom", restored.Animation.Name);
         Assert.True(restored.Loop);
         Assert.False(playback.IsActive);
+    }
+
+    [Fact]
+    public void RepeatingPersistentSelectionKeepsCurrentTrackProgress()
+    {
+        AnimationFixture fixture = CreateAnimationFixture(("idle", 2));
+        AnimationState animationState = fixture.AnimationState;
+        TrackEntry current =
+            animationState.SetAnimation(0, "idle", true);
+        current.TrackTime = 0.75f;
+        NativeTemporaryAnimationPlayback playback = new();
+
+        playback.SetPersistent(animationState, "idle", repeat: true);
+
+        Assert.Same(current, animationState.GetCurrent(0));
+        Assert.Equal(0.75f, current.TrackTime);
     }
 
     [Fact]

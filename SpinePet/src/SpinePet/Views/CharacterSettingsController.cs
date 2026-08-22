@@ -420,7 +420,7 @@ internal sealed class CharacterSettingsController
                 }
             }
             _host.SelectedAnimation =
-                NativeCharacterRenderHost.SelectConfiguredOrIdleAnimationName(
+                NativeAnimationController.SelectConfiguredOrIdleAnimationName(
                     _host.SelectedCharacter.ConfiguredAnimation,
                     _host.SelectedAnimationNames) ??
                 string.Empty;

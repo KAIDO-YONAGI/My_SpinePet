@@ -12,7 +12,7 @@ public sealed class NativeSilhouetteRefreshTests
         NativeCharacterState state = CreateState();
         long now = Stopwatch.GetTimestamp();
 
-        Assert.True(NativeCharacterRenderHost.NeedsSilhouetteRefresh(
+        Assert.True(NativeSilhouetteRasterizer.NeedsRefresh(
             state,
             anchorX: 100,
             anchorY: 100,
@@ -27,7 +27,7 @@ public sealed class NativeSilhouetteRefreshTests
         long now = Stopwatch.GetTimestamp();
         SeedCache(state, anchorX: 100, anchorY: 100, pixelScale: 1, now);
 
-        Assert.False(NativeCharacterRenderHost.NeedsSilhouetteRefresh(
+        Assert.False(NativeSilhouetteRasterizer.NeedsRefresh(
             state,
             anchorX: 101.5f,
             anchorY: 100.5f,
@@ -42,7 +42,7 @@ public sealed class NativeSilhouetteRefreshTests
         long now = Stopwatch.GetTimestamp();
         SeedCache(state, anchorX: 100, anchorY: 100, pixelScale: 1, now);
 
-        Assert.True(NativeCharacterRenderHost.NeedsSilhouetteRefresh(
+        Assert.True(NativeSilhouetteRasterizer.NeedsRefresh(
             state,
             anchorX: 102,
             anchorY: 100,
@@ -57,7 +57,7 @@ public sealed class NativeSilhouetteRefreshTests
         long now = Stopwatch.GetTimestamp();
         SeedCache(state, anchorX: 100, anchorY: 100, pixelScale: 1, now);
 
-        Assert.True(NativeCharacterRenderHost.NeedsSilhouetteRefresh(
+        Assert.True(NativeSilhouetteRasterizer.NeedsRefresh(
             state,
             anchorX: 100,
             anchorY: 100,
@@ -78,7 +78,7 @@ public sealed class NativeSilhouetteRefreshTests
             pixelScale: 1,
             staleTimestamp);
 
-        Assert.True(NativeCharacterRenderHost.NeedsSilhouetteRefresh(
+        Assert.True(NativeSilhouetteRasterizer.NeedsRefresh(
             state,
             anchorX: 100,
             anchorY: 100,

@@ -67,7 +67,7 @@ public sealed class NativeCompositionWindowTests
     public void PhysicalWorkingAreaIsConvertedToClientPixels()
     {
         Rectangle result =
-            NativeCharacterRenderHost.ToClientPixelRectangle(
+            NativeInputRegionCoordinator.ToClientPixelRectangle(
                 new Rectangle(0, 31, 1707, 929),
                 windowLeft: 0,
                 windowTop: 0);
@@ -84,7 +84,7 @@ public sealed class NativeCompositionWindowTests
         Rectangle bottomTaskbarWorkArea = new(0, 0, 2560, 1392);
         List<Rectangle> clipped = [];
 
-        NativeCharacterRenderHost.ClipToWorkingAreas(
+        NativeInputRegionCoordinator.ClipToWorkingAreas(
             clipped,
             inputRegion,
             [bottomTaskbarWorkArea]);
@@ -103,7 +103,7 @@ public sealed class NativeCompositionWindowTests
             (0, 0, 160, 160));
 
         IReadOnlyList<Rectangle> runs =
-            NativeCharacterRenderHost.RasterizeSilhouette(
+            NativeSilhouetteRasterizer.Rasterize(
                 [batch],
                 RectangleF.FromLTRB(400, 400, 560, 560),
                 anchorX: 400,
@@ -128,7 +128,7 @@ public sealed class NativeCompositionWindowTests
             (120, 0, 200, 80));
 
         IReadOnlyList<Rectangle> runs =
-            NativeCharacterRenderHost.RasterizeSilhouette(
+            NativeSilhouetteRasterizer.Rasterize(
                 [batch],
                 RectangleF.FromLTRB(400, 400, 600, 480),
                 anchorX: 400,
@@ -157,7 +157,7 @@ public sealed class NativeCompositionWindowTests
         // 大边界自动把格子从 8px 倍增至 64px（78×78 格），仍保留轮廓，
         // 而不是退化为外接矩形。
         IReadOnlyList<Rectangle> runs =
-            NativeCharacterRenderHost.RasterizeSilhouette(
+            NativeSilhouetteRasterizer.Rasterize(
                 [batch],
                 RectangleF.FromLTRB(0, 0, 4992, 4992),
                 anchorX: 0,
@@ -182,7 +182,7 @@ public sealed class NativeCompositionWindowTests
 
         // 即使 128px 格子仍超出格数上限时，退化为外扩 12px 的对齐矩形。
         IReadOnlyList<Rectangle> runs =
-            NativeCharacterRenderHost.RasterizeSilhouette(
+            NativeSilhouetteRasterizer.Rasterize(
                 [batch],
                 RectangleF.FromLTRB(0, 0, 17000, 17000),
                 anchorX: 0,
@@ -203,7 +203,7 @@ public sealed class NativeCompositionWindowTests
     public void SilhouetteRasterizationReturnsEmptyWithoutBatches()
     {
         IReadOnlyList<Rectangle> runs =
-            NativeCharacterRenderHost.RasterizeSilhouette(
+            NativeSilhouetteRasterizer.Rasterize(
                 Array.Empty<NativeSpineDrawBatch>(),
                 RectangleF.FromLTRB(0, 0, 160, 160),
                 anchorX: 0,

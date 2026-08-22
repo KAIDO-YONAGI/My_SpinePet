@@ -612,7 +612,7 @@ public sealed class CharacterManager
             IReadOnlyList<string> animationNames =
                 _renderHost.GetAnimationNames(character.Id);
             string? idleAnimation =
-                NativeCharacterRenderHost.SelectIdleAnimationName(
+                NativeAnimationController.SelectIdleAnimationName(
                     animationNames);
 
             character.Scale = CharacterConfig.DefaultScale;
@@ -722,7 +722,7 @@ public sealed class CharacterManager
             animations.Count > 0)
         {
             character.ConfiguredAnimation =
-                NativeCharacterRenderHost.SelectIdleAnimationName(animations)
+                NativeAnimationController.SelectIdleAnimationName(animations)
                 ?? animations[0];
         }
 

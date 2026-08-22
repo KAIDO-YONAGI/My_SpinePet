@@ -32,6 +32,16 @@ internal sealed class NativeTemporaryAnimationPlayback
         string animation,
         bool repeat)
     {
+        TrackEntry? current = animationState.GetCurrent(0);
+        if (!IsActive &&
+            current?.Animation?.Name.Equals(
+                animation,
+                StringComparison.OrdinalIgnoreCase) == true &&
+            current.Loop == repeat)
+        {
+            return;
+        }
+
         Clear();
         animationState.SetAnimation(0, animation, repeat);
     }

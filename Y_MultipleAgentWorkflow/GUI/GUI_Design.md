@@ -4,7 +4,9 @@
 > 状态：`Active`  
 > 最后核验：`2026-08-22`
 
-本文档以当前代码为准，只记录已经实现的 GUI 功能。主界面由 WPF 配置面板和独立的原生 Spine 桌面渲染层组成。
+本文档记录已实现的 GUI 行为，以及渲染引擎重构必须满足的目标边界。主界面由
+WPF 配置面板和独立的原生 Spine 桌面渲染层组成；第 6、7 节中的新组件边界是本次
+重构的实施契约，代码验证完成后应与此保持一致。
 
 ## 1. 界面结构
 
@@ -67,7 +69,7 @@
 | 紧急退出 | 全局快捷键 Ctrl+Alt+Shift+F12 请求退出；界面线程失去响应时会强制结束进程 | 已实现 |
 | 状态持久化 | 保存角色显隐、位置、缩放分量、用户在 Animation 下拉框选择的常驻动画、速度，以及帧率、拖动和预览尺寸等全局设置；点击等临时动画不覆盖该选择 | 已实现 |
 
-## 6. 实现分层
+## 6. 实现分层与渲染引擎边界
 
 - `Views/MainWindow.xaml`：布局、控件、绑定、视觉状态和无障碍文本。
 - `Views/MainWindow.xaml.cs`：视图装配、事件路由、属性绑定和窗口命中测试。
@@ -78,8 +80,26 @@
 - `Services/CharacterResourceCoordinator.cs`：以纯计算方式匹配资源并生成同步差异。
 - `Services/CharacterManager.cs`：应用角色状态差异、持久化并发送通知。
 - `Services/ConfigNormalizer.cs`、`ConfigFileCommitter.cs`：配置规范化、版本排序和原子磁盘提交。
-- `Rendering/Native/NativeCharacterRenderHost.cs`：Spine 渲染、点击动画、拖动与位置提交。
+- `Rendering/Native/NativeCharacterRenderHost.cs`：保持 `ICharacterRenderHost` 的门面，
+  负责 Dispatcher 线程边界、生命周期、事件转发和组件装配，不再直接承载全部渲染细节。
+- `Rendering/Native/NativeRenderSession.cs`：原生窗口、输入窗口、D3D11/DirectComposition
+  资源的初始化、提交和释放。
+- `Rendering/Native/NativeCharacterScene.cs`：拥有角色状态集合与 z-order；
+  `NativeCharacterLoader.cs` 负责限流、可取消的资源解析和包络计算，安装与释放仍由宿主
+  按状态差异执行。
+- `Rendering/Native/NativeAnimationController.cs`：常驻动画选择、点击临时动画和模式切换。
+- `Rendering/Native/NativeFrameScheduler.cs` 负责帧节拍；
+  `NativeFrameRenderer.cs` 负责 Spine 更新、几何/曲面绘制、提交和性能采样，
+  二者均不拥有 UI 或配置持久化职责。
+- `Rendering/Native/NativePointerController.cs`、`NativeCharacterHitTester.cs`：
+  鼠标点击、拖动、右键和几何命中。
+- `Rendering/Native/NativeInputRegionCoordinator.cs`、`NativeSilhouetteRasterizer.cs`：
+  可点击区域、轮廓缓存、工作区裁剪和屏幕坐标转换。
 - `App.xaml.cs`、`TrayIconService.cs`：启动、托盘、单实例激活和退出。
+
+上述新增类型均为 `internal`。依赖方向固定为“门面 → 协调组件 → 原生资源”，
+WPF 控件、配置服务和第三方 `SpineRuntime41` 不反向依赖渲染内部组件。公开的
+`ICharacterRenderHost`、管理器方法签名、渲染事件和导入冲突语义保持不变。
 
 ## 7. 状态协调与生命周期
 
@@ -93,5 +113,13 @@
   渲染器；关闭后的渲染回调和重复关闭均为空操作。
 - 原生渲染宿主在初始化、显示、隐藏和配置模式切换中执行相同的目标状态判断，
   并保留一次性关闭语义。
+- 同一角色同一资源的加载请求使用 single-flight：加载中复用同一任务，已显示且资源
+  未变化时直接完成；失败或取消后清理加载占位并允许重试。
+- 渲染帧只在渲染线程/Dispatcher 上推进状态。后台线程只负责可取消的资源解析，
+  安装前必须再次确认角色版本、目标状态和宿主未关闭。
+- 点击临时动画完成后，始终从第 0 帧开始循环当前有效的常驻动画；常驻动画无效时
+  从第 0 帧开始循环默认待机动画。不得恢复点击前的旧播放进度。
+- 关闭顺序固定为：标记关闭并取消加载/帧调度，解除鼠标和渲染事件订阅，释放角色
+  与轮廓缓存，最后释放原生窗口和图形资源。关闭后的回调及重复关闭均为空操作。
 - 配置同步与异步保存共用同一原子提交路径；旧版本不能覆盖新版本，相同内容
   不替换磁盘文件，成功提交后统一清除 `RequiresRewrite`。
