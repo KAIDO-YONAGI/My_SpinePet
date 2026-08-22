@@ -2,7 +2,7 @@
 
 文档 ID：`WF-ROUTER`  
 状态：`Active`  
-维护计数：`4/5`
+维护计数：`0/5`
 最后更新：`2026-08-22`
 
 ## 路由
@@ -10,8 +10,8 @@
 | 任务 | 读取 |
 |---|---|
 | 工作流结构、业务增殖、五层限制、维护计数 | `Workflow_Guide.md` |
-| 跨项目配置、分类与模型入口接入 | `..\Workflow_Configuration_Guide.md` |
-| Skill 分发、客户端安装和显式升级 | `D:\My_Docs\Programmes\Y_MultipleAgentWorkflow\docs\Distribution_Guide.md` |
+| 把通用配置方法带入真实项目、分类与模型入口接入 | `..\Workflow_Configuration_Guide.md` |
+| Skill 分发、客户端安装和显式升级 | `..\..\..\Y_MultipleAgentWorkflow\docs\Distribution_Guide.md` |
 | 当前项目托管文件版本与哈希 | `WorkflowInstance.json` |
 | My_SpinePet 构建、发布和运行验证 | `Project_Validation_Guide.md` |
 | Agent 登记、冲突、等待、覆盖、心跳、构建屏障 | `Concurrency_Guide.md` |

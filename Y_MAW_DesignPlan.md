@@ -1,7 +1,7 @@
 # 多 Agent 工作流与并发租约体系：最终设计基线
 
 状态：Reference
-基线日期：2026-08-21
+基线日期：2026-08-22
 
 本文件记录设计目标、最终实现和验证结果，不是运行时操作入口。发生冲突时，
 以 `Y_MultipleAgentWorkflow\Router.md` 及其指向的 Guide/Design 为准。
@@ -15,6 +15,11 @@
 跨项目通用配置方法见：
 
 `Y_MultipleAgentWorkflow\Workflow_Configuration_Guide.md`
+
+该指南是可带入任意目标项目执行的通用方法论。My_SpinePet 的目录和验证
+结果只作为案例，不是其他项目的默认分类、命令或规则。全局 Skill
+`multiple-agent-workflow-config` 是该方法的执行载体，不替代方法文档或
+目标项目自身的权威文档。
 
 ## 2. 最终结构
 
@@ -80,6 +85,10 @@ Y_MultipleAgentWorkflow/
 
 分类不按模型、Agent、语言或文件类型。只有具备独立触发词、权威文档、并发
 资源或维护周期时才增殖业务根。索引最多五层。
+
+这些名称是 My_SpinePet 的分类结果，不是通用模板中的必选目录。跨项目配置
+时必须先盘点目标项目，再按稳定知识域、重复任务阶段、独立权威和共享资源
+提出候选分类。
 
 ## 4. WorkingAgent 最终协议
 
@@ -162,6 +171,11 @@ DeveloperLog/Proposal -> 模型入口与 Skill。
 - Aim/Cover 内容迁入 `Resources\StateSupport\Aim_Cover_Proposal.md`。
 - `.gitignore` 跟踪入口、工作流、脚本和项目 Skill，只忽略临时租约、锁和
   可重建产物。
+- 项目根在 `2026-08-22` 迁移为
+  `D:\My_Docs\Programmes\My_SpinePet`。项目入口、工作流文档和工具改为使用
+  工作区相对路径或从脚本位置推导根目录。
+- 原设计记录 `Y_MAW_DesignPlan.txt` 已更名为当前
+  `Y_MAW_DesignPlan.md`；旧扩展名只可作为历史路径元数据出现。
 
 ## 9. 验证结果
 
@@ -186,6 +200,10 @@ DeveloperLog/Proposal -> 模型入口与 Skill。
 首次完整收尾验证：Build 0 警告 0 错误，Publish 成功生成 release 与 zip，
 Run 后 `SpinePet.exe` 持续运行。
 
+`2026-08-22` 项目迁移后再次验证：工作流配置校验
+`58 pass / 0 warning / 0 error`，WorkingAgent 回归 `12/12`；新根下 Build
+仍为 0 警告 0 错误，Publish 和 Run 成功，`SpinePet.exe` 持续运行。
+
 ## 10. 已知环境事项
 
 执行首次 Run 的 Codex 子进程环境中 `WINDIR` 为空，WPF FontCache 因此抛出
@@ -200,9 +218,10 @@ $env:WINDIR = $env:SystemRoot
 
 ## 11. 跨项目 Skill 与分发
 
-通用 Skill 名称为 `multiple-agent-workflow-config`。唯一源码实体位于：
+通用 Skill 名称为 `multiple-agent-workflow-config`。从当前项目根定位唯一
+源码实体：
 
-`D:\My_Docs\Programmes\Y_MultipleAgentWorkflow\src\skills\multiple-agent-workflow-config`
+`..\Y_MultipleAgentWorkflow\src\skills\multiple-agent-workflow-config`
 
 Codex、Claude 与 ZCode 的用户级入口通过目录 Junction 共用该实体。独立
 私有仓库从同一源码生成三个客户端插件包和统一离线包，并以 `SHA256SUMS`
@@ -213,3 +232,13 @@ Codex、Claude 与 ZCode 的用户级入口通过目录 Junction 共用该实体
 `managed`；Router、日志、Guide、Design 与 Proposal 属于 `projectOwned`。
 托管文件发生项目漂移时停止覆盖并输出差异状态。模型入口默认不修改，必须
 先让用户选择“保留并加入导航”或“替换为精简入口”。
+
+`2026-08-22` 的 `1.0.1` 修订进一步纠正了分发边界：
+
+- 当前项目验证后的完整通用配置方法已同步为 Skill 的唯一方法源。
+- 初始化器从该方法源复制项目自包含指南，不再在模板目录维护第二份方法。
+- 三客户端 `release-layout` 快照不再进入 Git；只在 `.tmp` 中临时展开，
+  `dist` 保存可重建发布资产。
+- Claude Marketplace 直接引用标签下的唯一 Skill 源码目录。
+- 中文主手册 `README.cn.md` 记录仓库构成、Skill 使用和迁移步骤。
+- 分发回归 `36/36`，Skill 校验与 Claude 插件/Marketplace 校验通过。

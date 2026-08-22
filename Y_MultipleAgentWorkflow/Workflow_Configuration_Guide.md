@@ -1,26 +1,32 @@
-# 跨项目多 Agent 工作流配置方法
+# 通用多 Agent 工作流配置方法
 
 文档 ID：`WF-CONFIG-METHOD`  
 状态：`Active`  
-最后更新：`2026-08-21`  
-适用环境：`Windows + PowerShell 7`
+最后更新：`2026-08-22`
+方法适用范围：跨项目
+租约参考实现：`Windows + PowerShell 7`
 
-本文说明如何把已经在 SpineTools 验证过的多 Agent 路由、业务文档和并发租约
-体系配置到其他项目。通用方法由独立分发仓库中的 Skill
-`multiple-agent-workflow-config` 提供；本文记录 SpineTools 的项目实例与验证
-证据。项目中的现行操作始终以根 `Router.md` 及其指向的 Guide/Design 为准。
+本文是一份可带入真实项目执行的通用配置方法，不是 My_SpinePet 的项目操作
+指南。它帮助 Agent 从目标项目的事实出发，设计路由、业务分类、权威文档、
+并发资源和维护机制。文末的 My_SpinePet 仅是验证案例，不能作为其他项目的
+默认目录、命令或业务规则。
 
-## 1. 配置目标
+全局 Skill `multiple-agent-workflow-config` 是本方法的执行载体：负责发现、
+提案、确认、初始化和校验。Skill 不替代本方法，也不拥有目标项目的业务
+结论；每个项目的 Router 和 Guide/Design 才拥有项目事实。
 
-一个可复用的工作流应同时解决：
+## 1. 配置产物与目标
 
-1. Agent 只读取完成当前任务所需的最小上下文。
-2. 不同模型和 Agent 从同一个 Router 获取项目事实。
-3. 同类任务复用已有 Guide/Design，而不是反复重新探索。
-4. 多 Agent 在共享工作树中声明真实读写范围，并能识别冲突。
-5. 文档随着实际任务周期维护，Proposal 不会被误当成已实现能力。
+一个可复用的项目工作流应做到：
 
-推荐根结构：
+1. Agent 只读取当前任务需要的最小上下文。
+2. 不同模型和 Agent 从同一个根 Router 获取项目事实。
+3. 同类任务复用已有 Guide/Design，减少重复探索。
+4. 共享工作树中的 Agent 声明真实读写范围并识别冲突。
+5. Proposal、历史证据和已实现规则有明确状态边界。
+6. 文档按实际任务证据维护，而不是依赖某个会话的记忆。
+
+最小结构：
 
 ```text
 Y_MultipleAgentWorkflow/
@@ -42,227 +48,257 @@ Y_MultipleAgentWorkflow/
    └─ <Guide-or-Design.md>
 ```
 
-## 2. 分类角度
+业务根不是必需凑齐的固定清单。只创建目标项目确实需要的分类。
 
-### 2.1 一级：稳定知识域
+## 2. Agent 现场配置流程
 
-一级业务根描述长期稳定的责任边界，不按模型、Agent、编程语言或文件扩展名
-分类。适合成为一级根的例子：
+### 2.1 盘点事实
 
-| 分类 | 责任 |
+在提出目录前，先只读检查：
+
+- 项目根、源码与资源的实际边界。
+- 现有设计文档、操作指南、日志、计划和外部证据。
+- `AGENTS.md`、`CLAUDE.md`、项目 Skill 等模型入口。
+- 重复出现的任务类型、常见目标路径和共享运行资源。
+- 构建、发布、运行、数据库、配置和 Git 索引等全局状态。
+- 已存在的工作流、链接、Junction、忽略规则和双重权威。
+
+输出一份候选清单，说明每项内容的当前位置、建议状态、建议归属和理由。
+不要先建目录再寻找理由。
+
+### 2.2 提出方案
+
+Agent 应向用户展示：
+
+- 建议的一级知识域和二级任务阶段。
+- 每个分类的触发词、权威文档、资源范围和维护边界。
+- 迁移、保留、索引、归档或标为 Proposal 的文档。
+- 需要声明的路径、运行时、配置、流水线和 Git 资源。
+- 模型入口接入方案。
+- 是否需要独立的项目验证指南。
+
+新增顶级分类、迁移或删除旧权威、改变工作区规则、修改模型入口，都必须
+单独获得用户确认。
+
+### 2.3 初始化与核验
+
+1. 先以 `-WhatIf` 预览结构。
+2. 用户确认后初始化根结构和业务根。
+3. 迁移权威内容并在同一次修改中更新路径索引。
+4. 删除已确认的双重权威；旧路径只作为索引元数据保留。
+5. 运行结构、链接、PowerShell 语法和租约回归校验。
+6. 记录验证证据、未解决事项和初始化选择。
+
+## 3. 分类方法
+
+### 3.1 一级按稳定知识域
+
+一级目录表达长期责任边界，不表达当前实现形式。可选例子包括：
+
+| 候选知识域 | 适用信号 |
 |---|---|
-| `Workflow` | 路由、并发、模板、日志和维护机制 |
-| `GUI` | 界面结构、交互、窗口和视觉行为 |
-| `Resources` | 资源识别、处理、部署、证据与状态能力 |
+| `Workflow` | 路由、并发、模板、维护和工作区规范 |
+| `GUI` | 界面结构、交互、视觉状态和窗口生命周期 |
+| `Resources` | 外部资源的识别、处理、校验、部署和证据 |
+| `Data` | 数据模型、迁移、查询、质量和持久化规则 |
+| `Runtime` | 进程、服务、共享状态和运行环境 |
+| `Build` / `Deployment` | 存在独立权威、资源屏障和维护周期时 |
 
-### 2.2 二级：任务阶段或处理目标
+不要按模型、Agent、语言、文件扩展名或源码目录机械分类。这些边界常随工具
+变化，不能稳定承担业务路由。
 
-同一知识域内部，再按会重复出现的任务阶段或处理目标拆分。例如 SpineTools
-的 Resources：
+### 3.2 二级按重复任务阶段或处理目标
 
-| 子类 | 划分角度 | 独立原因 |
+同一知识域内部，仅在任务会被独立触发、独立执行或独立维护时拆分。例如资源
+生命周期可以候选拆成：
+
+| 阶段 | 典型目标 | 何时独立 |
 |---|---|---|
-| `Load` | 资源进入项目的生命周期 | 有独立导入流程、ID、图标和部署资源 |
-| `MatchClean` | 资源可用前的匹配与清理 | 有独立附件规则、动画排查和清理方法 |
-| `StateSupport` | 运行状态能力 | 当前主要是未实施 Proposal，不能混入现行导入规则 |
+| `Discover` | 搜索、识别、盘点来源 | 有独立证据库或发现流程 |
+| `Load` | 导入、入库、生成 ID | 有独立输入、目标路径和导入规范 |
+| `Transform` | 转换、压缩、生成派生物 | 有独立工具链或写入范围 |
+| `MatchClean` | 匹配、清理、修复关联 | 与导入触发词、规则和资源不同 |
+| `Validate` | 完整性、质量和一致性核验 | 有独立报告与通过标准 |
+| `StateSupport` | 资源驱动的运行状态能力 | 能独立演进；未实现时保持 Proposal |
 
-GUI 没有继续拆分，是因为当前 GUI 任务共享同一份设计权威和维护周期。目录
-不是越细越好；分类应降低路由成本，而不是复刻源码目录。
+这张表是判断角度，不是固定模板。小项目可能只有一个 `Resources` Guide；
+大型项目也可能按资产类型而非处理阶段拆分，但必须说明为什么那样能减少路由
+歧义和上下文读取。
 
-### 2.3 新建业务根的判断
+### 3.3 是否新建业务根
 
-候选分类满足下列任一强条件，或同时满足多个弱条件时，才值得独立：
+按以下问题评估候选分类：
 
-- 有清晰且反复出现的任务触发词。
-- 有独立的 Guide/Design，不能由上级文档简洁表达。
-- 有不同的共享资源、写入路径或并发冲突范围。
-- 有独立的维护周期和任务证据。
-- 可以独立演进，不会让多数任务同时读取相邻分类。
+| 判断问题 | 支持独立业务根 |
+|---|---|
+| 是否有反复出现且能区分其他任务的触发词？ | 是 |
+| 是否有不能被上级文档简洁容纳的独立 Guide/Design？ | 是 |
+| 是否拥有不同写入路径、运行时或并发资源？ | 是 |
+| 是否需要独立日志证据和维护周期？ | 是 |
+| 独立后能减少多数任务读取无关文档吗？ | 是 |
+| 是否只是一份索引、一次性想法或同一流程的小步骤？ | 否 |
+| 是否只能得到空 Router 和空 Log？ | 否 |
 
-以下情况不新建业务根：
+一个强理由通常足够；只有弱理由时应先留在上级 Router、标签、日志或
+Proposal 中，等实际任务证据出现再增殖。
 
-- 只有一份辅助索引或外部证据。
-- 一次性想法、尚未实施的单点方案。
-- 同一流程的一个步骤或一个文件类型。
-- 目录只会包含 Router/Log，没有真实业务权威内容。
+### 3.4 GUI 与资源分类示例
 
-这些内容应进入现有 Router 索引、DeveloperLog 或标记为 `Proposal`。
+GUI 适合作为独立一级根，是因为界面任务通常共享交互设计、窗口状态、视觉
+约束和运行时资源。只有当编辑器、托盘、设置页等区域拥有独立权威、触发词或
+冲突范围时才继续拆分；不要按每个窗口、页面或控件创建目录。
 
-## 3. 逐级路由与增殖
+Resources 适合作为独立一级根，是因为资源生命周期、证据来源和代码功能并不
+总是同步变化。导入与匹配清理若拥有不同输入、规则、路径和故障模式，可以
+拆成 `Load` 与 `MatchClean`；若它们总由同一任务完成并共用一份权威，则应
+合并。
 
-1. 从根 Router 按任务名词、目标路径、运行资源和输出结果匹配。
-2. 进入最接近的大类 Router，检查同义任务和下级分类。
+## 4. 路由、增殖与深度
+
+1. 根 Router 按任务词、目标路径、运行资源和预期结果匹配。
+2. 进入最近的大类 Router，继续匹配同义任务和下级分类。
 3. 有同类时读取其 Guide/Design、Router 和必要日志。
-4. 无同类时先提出建议归属；新增顶级大类必须征得用户确认。
-5. 确认后从模板初始化业务根，至少包含 Router 和 DeveloperLog。
-6. 目录深度即将超过五层时，优先提升独立子类、合并重复层级，或用 Router
-   标签替代目录。
+4. 无同类时先提出最近归属与增殖理由，不直接创建顶级分类。
+5. 确认后从模板创建业务根，至少包含 Router 和 DeveloperLog。
+6. 跨业务任务进入所有受影响业务根，分别读取和记录。
 
-跨业务任务必须路由到所有受影响业务。例如“导入资源并清理背景”同时进入
-`Resources.Load` 和 `Resources.MatchClean`，两边分别读取、记录和计数。
+工作流根以下最多五层。即将出现第六层时，依次考虑：
 
-## 4. 权威文档与外部证据
+- 把可独立演进的子类提升。
+- 合并语义重复的父子层。
+- 用 Router 表格、标签或文档 ID 替代目录。
 
-推荐权威顺序：
+## 5. 权威与文档状态
 
-1. 用户在当前任务中的最新明确要求。
-2. 实际代码、资源、运行结果与实验。
+推荐冲突顺序：
+
+1. 用户当前任务中的最新明确要求。
+2. 实际代码、资源、运行结果和可复现实验。
 3. Guide/Design。
 4. 业务 Router。
-5. DeveloperLog 和 Proposal。
+5. DeveloperLog、Reference 和 Proposal。
 6. 模型入口与 Skill。
 
-外部数据库、生成索引和已忽略的大体积资料不必复制到工作流中。Router 记录
-它们的真实路径、职责、状态和核验时间即可。外部证据不能替代项目内现行
-Guide，历史报告应标记为 Archived 或 Reference。
+建议状态：
 
-## 5. 并发资源设计
+| 状态 | 含义 |
+|---|---|
+| `Active` | 已实现并可作为现行规则 |
+| `Proposal` | 未实施设计，不得冒充当前能力 |
+| `Reference` | 设计来源、历史基线或辅助说明 |
+| `External` | 保持在工作流之外的证据或数据库 |
+| `Archived` | 冻结历史，不参与现行决策 |
 
-租约资源至少从三个角度声明：
+Router 索引至少记录文档 ID、相对路径、职责、触发任务、状态、更新时间、
+核验时间和旧路径。大体积或动态外部资料保持原位，只索引，不复制。
+
+## 6. 并发资源建模
+
+需要多 Agent 共享工作树时，租约至少从以下角度声明：
 
 ```text
 path:<实际读写路径>
 workflow:<业务根>
 runtime:<共享运行时>
-pipeline:<构建、发布或运行屏障>
 config:<共享配置>
+pipeline:<全局流水线>
 git:index
 ```
 
-- 路径不相交的写任务可以并行。
-- 父目录与子目录视为相交。
-- 写任务无法给出足够路径时，同一业务根默认冲突。
-- Router/Log 只在实际写入时短时取得 `workflow:<业务根>`。
+- 路径不相交的写任务可以并行，父子路径视为相交。
+- 写任务无法给出足够范围时，同业务根默认冲突。
+- Router/Log 仅在实际写入时短时取得 `workflow:<业务根>`。
 - 根分类调整短时取得 `workflow:root`。
-- 构建、发布和运行使用统一的 `pipeline:BuildPublishRun` 全局屏障。
-- 普通并发覆盖不能自动放行构建屏障。
+- 构建、发布或运行可使用统一流水线屏障，但名称和行为由目标项目确认。
+- 普通并发覆盖不应自动授权全局流水线。
 
-PowerShell 内调用数组参数时，优先直接调用脚本并传递数组：
+没有并发需求的项目可以只配置路由和文档维护，不必强制启用租约脚本。
 
-```powershell
-& $workingAgentScript -Action Acquire `
-  -Categories @('GUI') `
-  -Resources @('path:src\Views', 'workflow:GUI')
-```
+## 7. 模型入口接入
 
-不要把带引号的数组值拼成外层 `pwsh -File` 字符串；引号可能成为资源名的
-一部分。需要启动子进程时使用 `ProcessStartInfo.ArgumentList`。
+初始化默认 `EntryMode=None`，不修改入口。先检查现有规则和链接，再让用户
+选择：
 
-## 6. 模型入口接入指南
+1. 保留原规则并加入可重复维护的根 Router 导航块。
+2. 替换为只要求读取根 Router 的精简入口。
 
-初始化默认使用 `EntryMode=None`，不修改任何模型入口。先检查：
+未选择前不修改 `AGENTS.md`、`CLAUDE.md`、项目 Skill 或同类文件。多个客户
+端可以共享一个 Skill 源码实体，但项目工作流实例应随项目 Git 管理，不使用
+指向全局仓库的 Junction 或 Submodule。
 
-- 根 `AGENTS.md`、`CLAUDE.md` 等已有规则。
-- 项目级 `.zcode\skills` 或其他客户端入口。
-- 用户级 Skill 目录是否为实体、Junction 或 SymbolicLink。
-- 多个客户端是否已经共享同一个 Skill 实体。
+## 8. 项目验证是可选配置
 
-然后向用户提供两种接入方式：
+初始化时单独询问 `ProjectValidationMode`：
 
-1. **保留并加入导航**：保留现有规则，加入可识别、可重复更新的 Router
-   导航区块。适合已有成熟规范的项目。
-2. **替换为精简入口**：入口只要求读取根 Router。适合规则已经完成迁移、
-   且用户明确接受移除旧入口内容的项目。
+- `None`：不创建项目验证指南，也不强制构建或运行。
+- `Guide`：创建并索引 `Workflow\Project_Validation_Guide.md`。
 
-未得到明确选择前不得修改入口。发布用户可以按客户端复制安装；维护该 Skill
-的开发机应让三个客户端入口通过 Junction 指向同一份受版本控制的源码，
-避免三处手工维护。
+选择 `Guide` 后仍需让用户确认触发条件、命令顺序、进程处理、成功标准和
+环境变量。根 Router 只保存路径索引，具体命令放在独立指南。不得从案例或
+Skill 推断另一个项目的 Build/Publish/Run 流程。
 
-## 7. 初始化步骤
+## 9. 初始化、维护与升级
 
-使用全局 Skill 时：
-
-1. 索引项目现有文档、入口、构建命令、共享运行时和忽略规则。
-2. 输出建议业务树、拆分理由、资源名和迁移清单。
-3. 单独询问用户是否配置项目验证流程：
-   - `None`：不创建项目验证指南；
-   - `Guide`：创建并索引独立的
-     `Workflow\Project_Validation_Guide.md`，再由用户确认具体命令。
-4. 等待用户确认顶级分类、文档迁移和入口接入方式。
-5. 调用初始化脚本生成工作流根、业务 Router/Log、租约脚本和测试。
-6. 选择 `Guide` 时，把确认后的项目验证流程写入独立指南；Router 只索引。
-7. 运行配置校验和 WorkingAgent 回归测试。
-8. 迁移完成后删除双重权威；必要的旧路径只保留在索引元数据中。
-
-示例：
+使用 Skill 时应从客户端解析实际 Skill 根，不在项目文档中硬编码安装位置：
 
 ```powershell
-$skill = 'D:\My_Docs\Programmes\Y_MultipleAgentWorkflow\src\skills\multiple-agent-workflow-config'
+$skillRoot = '<resolved-skill-root>'
 
-& "$skill\scripts\Initialize-Workflow.ps1" `
-  -ProjectRoot 'D:\ExampleProject' `
-  -Categories @('Workflow', 'GUI', 'Resources.Load', 'Resources.MatchClean') `
-  -ProjectValidationMode None
+& "$skillRoot\scripts\Initialize-Workflow.ps1" `
+  -ProjectRoot '<target-project-root>' `
+  -Categories @('Workflow', 'GUI', 'Resources.Load') `
+  -ProjectValidationMode None `
+  -WhatIf
 
-& "$skill\scripts\Test-WorkflowConfiguration.ps1" `
-  -ProjectRoot 'D:\ExampleProject' `
+& "$skillRoot\scripts\Test-WorkflowConfiguration.ps1" `
+  -ProjectRoot '<target-project-root>' `
   -RunWorkingAgentTests
 ```
 
-初始化脚本不会修改模型入口。目标工作流已存在时默认拒绝覆盖；`-Merge`
-只补充缺失文件，不重写现有内容。先用 `-WhatIf` 查看计划。
+目标已存在时默认拒绝覆盖；`-Merge` 只补充缺失项。工作流实例中的租约脚本、
+测试、模板和忽略规则可以登记为 `managed`；Router、日志、Guide、Design 和
+Proposal 应为 `projectOwned`，不能由升级器自动覆盖。
 
-## 8. 分发与升级
+可选维护计数默认周期为五次：
 
-通用分发仓库位于 `D:\My_Docs\Programmes\Y_MultipleAgentWorkflow`。其中 `src` 是唯一
-源码，`release-layout` 是由构建脚本生成并提交的客户端适配快照，项目中的
-`Y_MultipleAgentWorkflow` 仍是复制初始化的项目实例，不使用 Junction 或
-Submodule。
+- 成功且实际影响业务的任务计数 `+1`。
+- 跨业务分别计数。
+- 失败、取消、只读调查、并发登记和纯文档维护不计数。
+- 达到阈值后复查日志与实际实现，更新权威文档；无变化记录
+  `reviewed-no-change` 后归零。
 
-- `Install-MAW.ps1` 支持 Copy、Junction、离线包和 `-WhatIf`。
-- `Update-MAW.ps1` 只在显式调用时访问私有 GitHub Release，并校验包清单与
-  SHA-256。
-- `Uninstall-MAW.ps1` 只删除安装记录能够证明由 MAW 创建的入口。
-- `Update-WorkflowInstance.ps1` 只更新
-  `Workflow\WorkflowInstance.json` 登记且未漂移的托管文件。
-- 模型入口和项目验证命令不属于分发器自动修改范围。
+## 10. 已验证案例：My_SpinePet
 
-项目实例中的 Router、DeveloperLog、Guide、Design 和 Proposal 永远是
-`projectOwned`。通用指南变化只形成迁移建议，不自动覆盖项目结论。
+以下结构证明分类方法可落地，但不是其他项目的预设：
 
-## 9. 文档维护
+- `Workflow`：路由、租约、模板、维护和分发边界。
+- `GUI`：WPF 界面与交互共用一份设计权威，因此没有按窗口继续拆分。
+- `Resources.Load`：资源识别、入库、ID、图标和部署。
+- `Resources.MatchClean`：附件匹配、背景清理和动画排查。
+- `Resources.StateSupport`：aim/cover 尚未实施，独立标记为 Proposal。
 
-每个成功且实际影响业务的任务使该业务维护计数 `+1`。跨业务分别计数。
-失败、取消、并发登记、只读调查和纯文档维护不计数。
+这里的拆分依据分别是稳定知识域、重复处理目标、独立权威文档和不同资源
+范围，不是因为源码中恰好存在同名目录。
 
-达到 `5/5` 时：
+验证证据截至 `2026-08-22`：
 
-1. 复查本周期 DeveloperLog 和实际代码/资源。
-2. 更新 Guide/Design、Router 与根路径索引。
-3. 无需修改时记录 `reviewed-no-change`。
-4. 完成复查后将计数归零。
+- WorkingAgent 回归 `12/12`。
+- 工作流配置校验 `58 pass / 0 warning / 0 error`。
+- GUI、资源导入、清理、Aim/Cover、跨业务、未知业务、维护周期和五层限制
+  路由演练符合预期。
+- 项目迁移到新根后，相对路径解析、Build、Publish 和 Run 均重新验证成功。
 
-路径迁移与文档更新必须在同一次变更中同步索引。
-
-## 10. SpineTools 验证实例
-
-SpineTools 使用：
-
-- `Workflow` 管理工作流自身。
-- `GUI` 管理 WPF 界面和交互设计。
-- `Resources.Load` 管理资源导入。
-- `Resources.MatchClean` 管理匹配、清理和动画排查。
-- `Resources.StateSupport` 隔离未实施的 aim/cover Proposal。
-
-已验证场景包括 GUI、导入、清理、Aim/Cover、跨业务、未知业务、第五次维护
-和五层限制。WorkingAgent 回归覆盖 12 类并发行为，结果为 `12/12`。首次
-SpineTools 初始化时已选择独立项目验证指南。本次完整收尾中，Build 为
-0 警告 0 错误，Publish 成功，Run 后进程持续运行；这些是 SpineTools
-实例证据，不是其他项目的默认要求。
-
-Agent 启动环境曾缺少 `WINDIR`，导致 WPF FontCache URI 异常。验证时仅给
-Run 子进程设置 `$env:WINDIR=$env:SystemRoot` 后成功；这是调用进程环境
-问题，不应写成应用代码或通用项目规则。
+上述构建流程和环境处理只属于 My_SpinePet。它们不进入通用初始化默认项。
 
 ## 11. 验收清单
 
-- 根 Router 能把已知、跨业务和未知任务路由到正确位置。
-- 每个业务根都有 Router、DeveloperLog 和明确能力边界。
-- 目录深度不超过五层。
-- Proposal、Reference、External 和 Active 状态没有混用。
-- WorkingAgent 脚本通过语法检查和回归测试。
-- `.gitignore` 只忽略运行时租约，不忽略权威文档和脚本。
-- 模型入口修改经过用户选择，Skill 只有一个实体。
-- 初始化时已明确选择 `ProjectValidationMode`。
-- 项目验证流程位于独立指南并由 Router 索引。
-- 构建/运行命令来自目标项目，不从 SpineTools 示例硬编码推断。
+- 分类来自项目事实，并为每个业务根写明拆分理由。
+- 根 Router 能处理已知、跨业务和未知任务。
+- 每个业务根有 Router、DeveloperLog 和明确权威边界。
+- 目录深度不超过五层，没有空壳分类。
+- Active、Proposal、Reference、External 和 Archived 没有混用。
+- 索引路径可解析，迁移后没有双重权威。
+- 并发资源与真实共享状态一致；不需要时没有强制启用租约。
+- 模型入口修改经过用户确认。
+- 项目验证模式经过单独选择，命令来自目标项目。
+- Skill 负责执行通用方法，项目文档负责保存项目事实。
