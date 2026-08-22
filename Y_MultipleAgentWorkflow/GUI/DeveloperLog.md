@@ -1,5 +1,26 @@
 # GUI Developer Log
 
+## 2026-08-22：维护周期提前复核并清零
+
+- 按用户要求提前复核当前 `1/5` 周期，逐项对照动画交互日志、
+  `CharacterSettingsController`、`NativeCharacterRenderHost` 和临时动画测试。
+- 确认只有用户从 `Animation` 下拉框选择时才修改常驻动画；点击动画保存并
+  恢复播放前状态，连续点击和用户中途覆盖的边界均已写入 GUI Design。
+- 权威设计无需新增能力说明，仅同步最后核验日期。
+- 复核结论：文档与当前实现一致，维护计数：`1/5 -> 0/5`。
+
+## 2026-08-22：临时动画恢复用户常驻状态
+
+- `Animation` 下拉框仍是常驻动画状态的唯一修改入口；临时点击动画不再
+  覆盖 `ConfiguredAnimation`。
+- 播放点击动画前保存当前动画名、循环设置和播放进度，播放结束后恢复；
+  连续点击保留最初的恢复目标，用户中途选择动画则覆盖旧的临时队列。
+- 关键实现位于 `NativeTemporaryAnimationPlayback`、
+  `NativeCharacterRenderHost`、`NativeCharacterState` 和对应动画测试。
+- 验证证据：目标测试 `9/9`、全量测试 `197/197`；Release Build 为
+  0 警告、0 错误，Publish/Run 通过且 `SpinePet.exe` 持续运行。
+- 本次实际影响 GUI 动画选择和点击交互，维护计数：`0/5 -> 1/5`。
+
 ## 2026-08-20：双列预览导航与职责重构
 
 - 双列列表改用真实卡片几何和视口中线，补齐顶部首项与底部末项边界。

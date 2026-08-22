@@ -384,8 +384,10 @@ public sealed class NativeCharacterRenderHost :
             return;
         }
 
-        state.Config.ConfiguredAnimation = animation;
-        state.Resource.SetAnimation(animation, repeat);
+        state.TemporaryAnimationPlayback.SetPersistent(
+            state.Resource.AnimationState,
+            animation,
+            repeat);
     }
 
     public void SetConfigMode(bool configMode)
@@ -503,6 +505,7 @@ public sealed class NativeCharacterRenderHost :
         state.Surface = null;
         state.Resource?.Dispose();
         state.Resource = null;
+        state.TemporaryAnimationPlayback.Clear();
         PurgeUnusedTextures();
         CollectIfIdleAfterUnload();
     }
@@ -901,7 +904,22 @@ public sealed class NativeCharacterRenderHost :
         string? animation = SelectConfiguredOrIdleAnimationName(
             state.Config.ConfiguredAnimation,
             resource.AnimationNames);
-        resource.SetAnimationIfNeeded(animation, true);
+        TrackEntry? current = resource.AnimationState.GetCurrent(0);
+        if (current?.Animation?.Name.Equals(
+                animation,
+                StringComparison.OrdinalIgnoreCase) == true &&
+            current.Loop)
+        {
+            return;
+        }
+
+        if (animation != null)
+        {
+            state.TemporaryAnimationPlayback.SetPersistent(
+                resource.AnimationState,
+                animation,
+                repeat: true);
+        }
     }
 
     private static void PlayClickAnimation(NativeCharacterState state)
@@ -915,20 +933,9 @@ public sealed class NativeCharacterRenderHost :
         if (clickAnimation == null)
             return;
 
-        resource.AnimationState.SetAnimation(0, clickAnimation, false);
-        string? idleAnimation =
-            SelectIdleAnimationName(resource.AnimationNames);
-        if (idleAnimation != null &&
-            !idleAnimation.Equals(
-                clickAnimation,
-                StringComparison.OrdinalIgnoreCase))
-        {
-            resource.AnimationState.AddAnimation(
-                0,
-                idleAnimation,
-                true,
-                0);
-        }
+        state.TemporaryAnimationPlayback.Play(
+            resource.AnimationState,
+            clickAnimation);
     }
 
     internal static string? SelectClickAnimationName(

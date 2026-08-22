@@ -20,6 +20,8 @@ internal sealed class NativeCharacterState : IDisposable
         Array.Empty<NativeSpineDrawBatch>();
     public IReadOnlyList<string> CachedAnimationNames { get; set; } =
         Array.Empty<string>();
+    public NativeTemporaryAnimationPlayback TemporaryAnimationPlayback
+        { get; } = new();
     public bool IsVisible { get; set; }
     public bool IsLoading { get; set; }
     public double CurrentScale { get; set; } = 0.2;
@@ -38,6 +40,7 @@ internal sealed class NativeCharacterState : IDisposable
 
     public void Dispose()
     {
+        TemporaryAnimationPlayback.Clear();
         Surface?.Dispose();
         Resource?.Dispose();
         Surface = null;
