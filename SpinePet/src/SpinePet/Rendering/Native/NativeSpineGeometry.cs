@@ -157,6 +157,29 @@ internal sealed class NativeSpineDrawBatch
     }
 }
 
+internal readonly record struct NativeFrameRenderPlan(
+    IReadOnlyList<NativeSpineDrawBatch> Batches,
+    int VertexCount,
+    int IndexCount)
+{
+    public static NativeFrameRenderPlan Create(
+        IReadOnlyList<NativeSpineDrawBatch> batches)
+    {
+        int vertexCount = 0;
+        int indexCount = 0;
+        foreach (NativeSpineDrawBatch batch in batches)
+        {
+            vertexCount = checked(vertexCount + batch.VertexCount);
+            indexCount = checked(indexCount + batch.IndexCount);
+        }
+
+        return new NativeFrameRenderPlan(
+            batches,
+            vertexCount,
+            indexCount);
+    }
+}
+
 internal sealed class NativeSpineGeometry
 {
     private static readonly int[] QuadTriangles = [0, 1, 2, 2, 3, 0];
@@ -169,10 +192,15 @@ internal sealed class NativeSpineGeometry
     public NativeSpineBounds Bounds { get; private set; } =
         NativeSpineBounds.Empty;
 
-    public IReadOnlyList<NativeSpineDrawBatch> Build(Skeleton skeleton)
+    public IReadOnlyList<NativeSpineDrawBatch> Build(Skeleton skeleton) =>
+        BuildFramePlan(skeleton).Batches;
+
+    public NativeFrameRenderPlan BuildFramePlan(Skeleton skeleton)
     {
         _activeBatches.Clear();
         Bounds = NativeSpineBounds.Empty;
+        int totalVertexCount = 0;
+        int totalIndexCount = 0;
         Slot[] slots = skeleton.DrawOrder.Items;
 
         for (int slotIndex = 0; slotIndex < skeleton.DrawOrder.Count; slotIndex++)
@@ -282,11 +310,17 @@ internal sealed class NativeSpineGeometry
                 out NativeSpineBounds appendedBounds);
             Bounds = Bounds.Union(appendedBounds);
             batch.AppendIndices(triangles, indexCount, vertexOffset);
+            totalVertexCount = checked(
+                totalVertexCount + verticesLength / 2);
+            totalIndexCount = checked(totalIndexCount + indexCount);
             _clipper.ClipEnd(slot);
         }
 
         _clipper.ClipEnd();
-        return _activeBatches;
+        return new NativeFrameRenderPlan(
+            _activeBatches,
+            totalVertexCount,
+            totalIndexCount);
     }
 
     private void EnsureWorldVertices(int length)

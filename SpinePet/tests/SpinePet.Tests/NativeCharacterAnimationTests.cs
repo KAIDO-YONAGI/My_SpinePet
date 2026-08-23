@@ -95,16 +95,13 @@ public sealed class NativeCharacterAnimationTests
         persistent.TrackTime = 0.75f;
         NativeTemporaryAnimationPlayback playback = new();
 
-        playback.Play(animationState, "action", "custom");
+        playback.Play(animationState, "action", () => "custom");
 
         TrackEntry temporary = Assert.IsType<TrackEntry>(
             animationState.GetCurrent(0));
         Assert.Equal("action", temporary.Animation.Name);
         Assert.False(temporary.Loop);
-        TrackEntry restore = Assert.IsType<TrackEntry>(temporary.Next);
-        Assert.Equal("custom", restore.Animation.Name);
-        Assert.True(restore.Loop);
-        Assert.Equal(0, restore.TrackTime);
+        Assert.Null(temporary.Next);
 
         AdvancePastCurrentAnimation(fixture, 1.1f);
 
@@ -112,7 +109,9 @@ public sealed class NativeCharacterAnimationTests
             animationState.GetCurrent(0));
         Assert.Equal("custom", restored.Animation.Name);
         Assert.True(restored.Loop);
+        Assert.Equal(0, restored.TrackTime);
         Assert.False(playback.IsActive);
+        Assert.Equal(1, playback.RestoreCount);
     }
 
     [Fact]
@@ -132,29 +131,42 @@ public sealed class NativeCharacterAnimationTests
     }
 
     [Fact]
-    public void RepeatedTemporaryAnimationKeepsOriginalRestoreState()
+    public void RepeatedTemporaryAnimationUsesLatestRestoreStateOnce()
     {
         AnimationFixture fixture = CreateAnimationFixture(
             ("custom", 2),
-            ("action", 1));
+            ("action", 1),
+            ("selected", 2));
         AnimationState animationState = fixture.AnimationState;
         animationState.SetAnimation(0, "custom", true);
         NativeTemporaryAnimationPlayback playback = new();
+        string restoreAnimation = "custom";
 
-        playback.Play(animationState, "action", "custom");
-        playback.Play(animationState, "action", "custom");
+        playback.Play(
+            animationState,
+            "action",
+            () => restoreAnimation);
+        restoreAnimation = "selected";
+        playback.Play(
+            animationState,
+            "action",
+            () => restoreAnimation);
 
         TrackEntry temporary = Assert.IsType<TrackEntry>(
             animationState.GetCurrent(0));
-        TrackEntry restore = Assert.IsType<TrackEntry>(temporary.Next);
-        Assert.Equal("custom", restore.Animation.Name);
-        Assert.True(restore.Loop);
+        Assert.Equal("action", temporary.Animation.Name);
+        Assert.Null(temporary.Next);
 
         AdvancePastCurrentAnimation(fixture, 1.1f);
 
         Assert.Equal(
-            "custom",
+            "selected",
             animationState.GetCurrent(0)?.Animation.Name);
+        Assert.Equal(1, playback.RestoreCount);
+
+        AdvancePastCurrentAnimation(fixture, 2.1f);
+
+        Assert.Equal(1, playback.RestoreCount);
     }
 
     [Fact]
@@ -167,7 +179,7 @@ public sealed class NativeCharacterAnimationTests
         AnimationState animationState = fixture.AnimationState;
         animationState.SetAnimation(0, "idle", true);
         NativeTemporaryAnimationPlayback playback = new();
-        playback.Play(animationState, "action", "idle");
+        playback.Play(animationState, "action", () => "idle");
 
         playback.SetPersistent(
             animationState,
@@ -181,6 +193,83 @@ public sealed class NativeCharacterAnimationTests
         Assert.True(selected.Loop);
         Assert.Null(selected.Next);
         Assert.False(playback.IsActive);
+        Assert.Equal(0, playback.RestoreCount);
+    }
+
+    [Fact]
+    public void ClearedTemporaryAnimationCannotRestoreAfterCancellation()
+    {
+        AnimationFixture fixture = CreateAnimationFixture(
+            ("idle", 2),
+            ("action", 1),
+            ("selected", 2));
+        AnimationState animationState = fixture.AnimationState;
+        animationState.SetAnimation(0, "idle", true);
+        NativeTemporaryAnimationPlayback playback = new();
+        playback.Play(animationState, "action", () => "idle");
+
+        playback.Clear();
+        animationState.SetAnimation(0, "selected", true);
+        AdvancePastCurrentAnimation(fixture, 2.1f);
+
+        Assert.Equal(
+            "selected",
+            animationState.GetCurrent(0)?.Animation.Name);
+        Assert.False(playback.IsActive);
+        Assert.Equal(0, playback.RestoreCount);
+    }
+
+    [Fact]
+    public void MissingRestoreAtCompletionDoesNotQueueAnOldAnimation()
+    {
+        AnimationFixture fixture = CreateAnimationFixture(
+            ("idle", 2),
+            ("action", 1));
+        AnimationState animationState = fixture.AnimationState;
+        animationState.SetAnimation(0, "idle", true);
+        NativeTemporaryAnimationPlayback playback = new();
+        playback.Play(animationState, "action", () => null);
+
+        AdvancePastCurrentAnimation(fixture, 1.1f);
+
+        Assert.Equal(
+            "action",
+            animationState.GetCurrent(0)?.Animation.Name);
+        Assert.False(playback.IsActive);
+        Assert.Equal(0, playback.RestoreCount);
+    }
+
+    [Theory]
+    [InlineData(CharacterDisplayModes.Normal, "normal_idle")]
+    [InlineData(CharacterBattleStates.Cover, "cover_idle")]
+    [InlineData(CharacterBattleStates.Aim, "aim_idle")]
+    public void CurrentDefaultAnimationFollowsActiveResourceState(
+        string resourceState,
+        string expected)
+    {
+        NativeCharacterState state = new()
+        {
+            Config = new CharacterConfig
+            {
+                ConfiguredAnimation = "normal_idle",
+                Battle = new CharacterBattleConfig
+                {
+                    Animations = new CharacterBattleAnimationsConfig
+                    {
+                        CoverIdle = "cover_idle",
+                        AimIdle = "aim_idle"
+                    }
+                }
+            },
+            ActiveResourceState = resourceState
+        };
+
+        string? selected =
+            NativeAnimationController.SelectDefaultAnimationNameForState(
+                state,
+                ["normal_idle", "cover_idle", "aim_idle"]);
+
+        Assert.Equal(expected, selected);
     }
 
     private static AnimationFixture CreateAnimationFixture(

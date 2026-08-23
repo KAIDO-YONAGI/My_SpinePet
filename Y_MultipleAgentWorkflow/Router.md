@@ -27,8 +27,11 @@
 1. 阅读本文件，根据任务描述选择一个或多个业务 Router。
 2. 阅读 `Workflow\Concurrency_Guide.md`，扫描现有租约。
 3. 用 `Workflow\Scripts\WorkingAgent.ps1` 获取精确范围的租约。
-4. 阅读被路由业务的 Guide/Design、Router 和必要日志。
-5. 工作范围扩大前先执行 `UpdateScope`；结束、失败或取消均执行 `Release`。
+4. 若发现重叠的活动/等待租约，且当前客户端支持原生 Agent 通信，先向
+   对方任务发送冲突通知，再开始修改。
+5. 阅读被路由业务的 Guide/Design、Router 和必要日志。
+6. 工作范围扩大前先执行 `UpdateScope`；结束、失败或取消均执行 `Release`，
+   并在释放后通知正在等待的任务。
 
 只读子 Agent 无法自行登记时，由父 Agent 创建 `read` 租约并填写
 `parentLeaseId`。
@@ -38,6 +41,7 @@
 | 任务线索 | 必读 Router | 权威内容 |
 |---|---|---|
 | 多 Agent、并发、租约、路由、模板、文档维护 | `Workflow\Router.md` | Workflow Guide / Concurrency Guide |
+| Codex Agent 通信、重叠任务协调、租约释放通知 | `Workflow\Router.md` | Concurrency Guide |
 | 为当前或其他项目配置多 Agent 工作流 | `Workflow_Configuration_Guide.md` | 分类、接入、初始化与验证方法 |
 | 安装、分发、升级通用 Skill 或项目托管文件 | `Workflow\Router.md` | 外部分发仓库与 WorkflowInstance |
 | My_SpinePet 构建、发布、运行验证 | `Workflow\Project_Validation_Guide.md` | 本项目已确认的验证流程 |
@@ -109,7 +113,7 @@ workflow:Resources.StateSupport
 | 业务根 | 计数 | Router |
 |---|---:|---|
 | Workflow | `0/5` | `Workflow\Router.md` |
-| GUI | `1/5` | `GUI\Router.md` |
+| GUI | `2/5` | `GUI\Router.md` |
 | Resources.Load | `3/5` | `Resources\Load\Router.md` |
 | Resources.MatchClean | `1/5` | `Resources\MatchClean\Router.md` |
 | Resources.StateSupport | `4/5` | `Resources\StateSupport\Router.md` |

@@ -35,7 +35,39 @@ pwsh -NoProfile -File $script -Action Release `
 所有输出均为 JSON。退出码：`0` 成功，`2` 活动冲突，`3` 疑似失活冲突，
 `4` 参数/所有权/注册表错误，`5` 等待超时。
 
-## 3. 冲突规则
+## 3. Codex 原生 Agent 协作
+
+Codex 任务之间可以使用原生消息通道协调，但消息通道只是租约协议的适配层，
+不替代租约、Router 或实际工作区状态。
+
+- `Status` 发现活动或等待中的重叠租约后，若当前 Codex 任务能识别对方，
+  发送简短冲突通知。通知写明重叠路径/共享资源、自己的读写模式、任务摘要，
+  以及请求释放、协调范围还是等待回复。
+- 路径不相交或 `read + read` 时无需发送消息；消息不能授权绕过冲突。
+- 对方确认完成后，等待对方 `Release`，再重新执行 `Status`；不能只凭消息
+  判断范围已经释放。
+- `suspectedStale` 只是疑似失活，不能自动接管。确认旧任务停止后，仍按
+  `ConfirmStaleRemoval` 的显式规则处理，或把决定交给用户。
+- 被阻塞任务解除后发送事实更新；任务完成时先 `Release`，再通知等待任务。
+  只传递已核验的范围、结果和测试状态，推断必须标为假设。
+- 当前客户端没有原生通信能力时，仍执行相同租约检查，并把未解决冲突报告
+  给用户；不得假设存在后台监听或自动协调。
+
+推荐消息格式：
+
+```text
+[LEASE CONFLICT]
+task: <当前任务摘要>
+overlap: <路径或共享资源>
+access: <read/write/exclusive>
+request: <release / coordinate scope / confirm status>
+lease: <当前 lease id；如适用>
+```
+
+通信结果不是新的权威来源。实际文件、租约注册表、运行结果和可复现实验
+优先于任何任务消息。
+
+## 4. 冲突规则
 
 - `read + read` 可并行。
 - `path:` 资源相交时，任一方为 `write` 即冲突；父子目录视为相交。
@@ -46,7 +78,7 @@ pwsh -NoProfile -File $script -Action Release `
 - `pipeline:BuildPublishRun` 是全局屏障：与其他活动写/独占租约冲突。
 - Router/Log 写入短时使用 `workflow:<业务根>`；根结构使用 `workflow:root`。
 
-## 4. 心跳与疑似失活
+## 5. 心跳与疑似失活
 
 活动或等待中的 Agent 每 5 分钟、长操作前后和扩大范围时更新心跳。超过
 15 分钟无心跳仅标记 `suspectedStale`，绝不自动删除。非冲突的疑似失活
@@ -61,7 +93,7 @@ pwsh -NoProfile -File $script -Action Release `
 
 该操作只允许删除已超过 15 分钟的租约。
 
-## 5. 等待与覆盖
+## 6. 等待与覆盖
 
 等待会写入 `waiting` 标记并按间隔重新原子检测：
 
@@ -77,7 +109,7 @@ waiting 标记；停止当前任务时用正常 Release 清理。
 `-OverrideConflict`。租约状态变为 `override`，记录冲突 ID 与确认时间。
 普通覆盖不自动允许 Build/Publish/Run；构建屏障冲突必须单独再次确认。
 
-## 6. 子 Agent 与释放
+## 7. 子 Agent 与释放
 
 只读子 Agent 无法登记时，父 Agent 代为 Acquire，设置 `parentLeaseId`，
 并使用独立 sessionId。Lease ID 是唯一租约标识；Heartbeat、UpdateScope 和

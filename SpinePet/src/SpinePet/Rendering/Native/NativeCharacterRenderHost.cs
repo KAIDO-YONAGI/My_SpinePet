@@ -406,7 +406,10 @@ public sealed class NativeCharacterRenderHost :
                 resourceState,
                 StringComparison.OrdinalIgnoreCase))
         {
-            RestartResourceIdleAnimation(state, idleAnimation);
+            ApplyResourceIdleAnimation(
+                state,
+                idleAnimation,
+                restart: false);
             return true;
         }
 
@@ -432,7 +435,10 @@ public sealed class NativeCharacterRenderHost :
         state.ActiveResourceState = resourceState;
         state.Resource.AnimationState.TimeScale =
             (float)state.Config.AnimationSpeed;
-        RestartResourceIdleAnimation(state, idleAnimation);
+        ApplyResourceIdleAnimation(
+            state,
+            idleAnimation,
+            restart: true);
         state.HasCachedSilhouette = false;
         state.CachedSilhouetteRuns.Clear();
         _frameRenderer.UpdateSurfacePosition(state);
@@ -449,25 +455,30 @@ public sealed class NativeCharacterRenderHost :
 
         _configMode = configMode;
         _pointer.Cancel(commitPosition: false);
-        foreach (NativeCharacterState state in _scene.States.Where(
-                     state => state.IsVisible &&
-                              state.Resource != null))
-        {
-            NativeAnimationController.SelectModeAnimation(state);
-        }
     }
 
-    private static void RestartResourceIdleAnimation(
+    private static void ApplyResourceIdleAnimation(
         NativeCharacterState state,
-        string? configuredAnimation)
+        string? configuredAnimation,
+        bool restart)
     {
         NativeSpineResource resource = state.Resource!;
         string? animation =
             NativeAnimationController.SelectConfiguredOrIdleAnimationName(
                 configuredAnimation,
                 resource.AnimationNames);
+        if (!restart &&
+            string.Equals(
+                state.PersistentAnimationName,
+                animation,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         state.TemporaryAnimationPlayback.Clear();
         resource.SetAnimation(animation, true);
+        state.PersistentAnimationName = animation;
     }
 
     public void SetRenderDragEnabled(bool enabled)
@@ -879,6 +890,7 @@ public sealed class NativeCharacterRenderHost :
         }
         state.ResourceSlots.Clear();
         state.ActiveResourceState = CharacterDisplayModes.Normal;
+        state.PersistentAnimationName = null;
         state.ResourceKey = string.Empty;
         state.TemporaryAnimationPlayback.Clear();
         _frameRenderer.PurgeUnusedTextures();

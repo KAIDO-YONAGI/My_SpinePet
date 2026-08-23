@@ -11,3 +11,6 @@ pwsh -NoProfile -File ..\Workflow\Scripts\WorkingAgent.ps1 -Action Status
 
 完整协议见 `..\Workflow\Concurrency_Guide.md`。15 分钟无心跳只代表疑似
 失活，不允许自动接管或清理。
+
+Codex 任务可以使用原生任务消息互相通知重叠租约或已释放范围，但消息不替代
+注册表。修改前仍须核验租约和实际工作区，完成时先释放租约，再通知等待任务。

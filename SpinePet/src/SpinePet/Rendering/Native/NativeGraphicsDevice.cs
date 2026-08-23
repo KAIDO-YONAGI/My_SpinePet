@@ -15,6 +15,17 @@ using DxgiFormat = Vortice.DXGI.Format;
 
 namespace SpinePet.Rendering.Native;
 
+internal readonly record struct NativeRenderSubmissionStatistics(
+    int GeometryUploadCount,
+    int TextureBindCount,
+    int BlendStateBindCount,
+    int DrawCallCount);
+
+internal readonly record struct NativeRenderedFrame(
+    int Width,
+    int Height,
+    byte[] BgraPixels);
+
 internal sealed class NativeGraphicsDevice : IDisposable
 {
     private const int VertexStride = 48;
@@ -125,6 +136,12 @@ internal sealed class NativeGraphicsDevice : IDisposable
     private int _indexCapacity;
     private bool _disposed;
 
+    internal int PipelineCreationCount { get; private set; }
+    internal int TextureUploadCount { get; private set; }
+    internal int TextureCacheCount => _textures.Count;
+    internal NativeRenderSubmissionStatistics LastSubmissionStatistics
+        { get; private set; }
+
     public NativeGraphicsDevice(IntPtr windowHandle)
     {
         _device = D3D11CreateDevice(
@@ -223,26 +240,13 @@ internal sealed class NativeGraphicsDevice : IDisposable
             RasterizerDescription.CullNone);
         _depthStencilState = _device.CreateDepthStencilState(
             DepthStencilDescription.None);
-        _normalBlend = _device.CreateBlendState(
-            new BlendDescription(
-                Blend.One,
-                Blend.InverseSourceAlpha));
-        _additiveBlend = _device.CreateBlendState(
-            new BlendDescription(Blend.One, Blend.One));
-        _multiplyBlend = _device.CreateBlendState(
-            new BlendDescription(
-                Blend.DestinationColor,
-                Blend.InverseSourceAlpha,
-                Blend.One,
-                Blend.InverseSourceAlpha));
-        _screenBlend = _device.CreateBlendState(
-            new BlendDescription(
-                Blend.One,
-                Blend.InverseSourceColor,
-                Blend.One,
-                Blend.InverseSourceAlpha));
+        _normalBlend = CreateBlendState(BlendMode.Normal);
+        _additiveBlend = CreateBlendState(BlendMode.Additive);
+        _multiplyBlend = CreateBlendState(BlendMode.Multiply);
+        _screenBlend = CreateBlendState(BlendMode.Screen);
         _constantBuffer = _device.CreateConstantBuffer<ShaderConstants>();
         _compositionDevice.Commit().CheckError();
+        PipelineCreationCount = 1;
         AppLogger.Write(nameof(NativeGraphicsDevice), "pipeline-created");
     }
 
@@ -290,6 +294,35 @@ internal sealed class NativeGraphicsDevice : IDisposable
     internal void Render(
         NativeCompositionSurface surface,
         IReadOnlyList<NativeSpineDrawBatch> batches,
+        Vector4 transform) =>
+        Render(
+            surface,
+            NativeFrameRenderPlan.Create(batches),
+            transform);
+
+    internal void Render(
+        NativeCompositionSurface surface,
+        NativeFrameRenderPlan plan,
+        Vector4 transform)
+    {
+        SubmitFrame(surface, plan, transform);
+        CompleteFrame(surface);
+    }
+
+    internal NativeRenderedFrame RenderAndReadback(
+        NativeCompositionSurface surface,
+        NativeFrameRenderPlan plan,
+        Vector4 transform)
+    {
+        SubmitFrame(surface, plan, transform);
+        NativeRenderedFrame frame = Readback(surface);
+        CompleteFrame(surface);
+        return frame;
+    }
+
+    private void SubmitFrame(
+        NativeCompositionSurface surface,
+        NativeFrameRenderPlan plan,
         Vector4 transform)
     {
         ID3D11RenderTargetView target = surface.RenderTarget ??
@@ -312,21 +345,19 @@ internal sealed class NativeGraphicsDevice : IDisposable
         _context.PSSetShader(_pixelShader);
         _context.PSSetSampler(0, _sampler);
 
-        foreach (NativeSpineDrawBatch batch in batches)
+        int geometryUploadCount = 0;
+        int textureBindCount = 0;
+        int blendStateBindCount = 0;
+        int drawCallCount = 0;
+        if (plan.VertexCount > 0 && plan.IndexCount > 0)
         {
             EnsureDynamicBuffers(
-                batch.VertexCount,
-                batch.IndexCount);
-            UploadSpan<NativeSpineVertex>(
-                _vertexBuffer!,
-                batch.Vertices.AsSpan(0, batch.VertexCount));
-            UploadSpan<int>(
-                _indexBuffer!,
-                batch.Indices.AsSpan(0, batch.IndexCount));
-
+                plan.VertexCount,
+                plan.IndexCount);
+            UploadGeometry(plan);
+            geometryUploadCount = 1;
             ShaderConstants constants = new(transform);
             UploadValue(_constantBuffer, constants);
-            GpuTexture texture = GetOrCreateTexture(batch.Texture);
             _context.IASetVertexBuffer(
                 0,
                 _vertexBuffer!,
@@ -336,19 +367,113 @@ internal sealed class NativeGraphicsDevice : IDisposable
                 _indexBuffer,
                 DxgiFormat.R32_UInt,
                 0);
-            _context.PSSetShaderResource(0, texture.View);
-            _context.OMSetBlendState(GetBlendState(batch.BlendMode));
-            _context.DrawIndexed(
-                checked((uint)batch.IndexCount),
-                0,
-                0);
+
+            string? currentTexturePath = null;
+            BlendMode? currentBlendMode = null;
+            int vertexOffset = 0;
+            int indexOffset = 0;
+            foreach (NativeSpineDrawBatch batch in plan.Batches)
+            {
+                if (!string.Equals(
+                        currentTexturePath,
+                        batch.Texture.Path,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    GpuTexture texture =
+                        GetOrCreateTexture(batch.Texture);
+                    _context.PSSetShaderResource(0, texture.View);
+                    currentTexturePath = batch.Texture.Path;
+                    textureBindCount++;
+                }
+
+                if (currentBlendMode != batch.BlendMode)
+                {
+                    _context.OMSetBlendState(
+                        GetBlendState(batch.BlendMode));
+                    currentBlendMode = batch.BlendMode;
+                    blendStateBindCount++;
+                }
+
+                _context.DrawIndexed(
+                    checked((uint)batch.IndexCount),
+                    checked((uint)indexOffset),
+                    vertexOffset);
+                vertexOffset = checked(
+                    vertexOffset + batch.VertexCount);
+                indexOffset = checked(
+                    indexOffset + batch.IndexCount);
+                drawCallCount++;
+            }
         }
 
+        LastSubmissionStatistics =
+            new NativeRenderSubmissionStatistics(
+                geometryUploadCount,
+                textureBindCount,
+                blendStateBindCount,
+                drawCallCount);
+    }
+
+    private void CompleteFrame(NativeCompositionSurface surface)
+    {
         _context.PSSetShaderResource(0, null!);
         _context.OMSetRenderTargets(
             Array.Empty<ID3D11RenderTargetView>(),
             null);
         surface.Present();
+    }
+
+    private NativeRenderedFrame Readback(
+        NativeCompositionSurface surface)
+    {
+        ID3D11Texture2D backBuffer = surface.BackBuffer ??
+            throw new InvalidOperationException("Surface has no back buffer.");
+        Texture2DDescription description = new(
+            DxgiFormat.B8G8R8A8_UNorm,
+            checked((uint)surface.PixelWidth),
+            checked((uint)surface.PixelHeight),
+            1,
+            1,
+            BindFlags.None,
+            ResourceUsage.Staging,
+            CpuAccessFlags.Read,
+            1,
+            0,
+            ResourceOptionFlags.None);
+        using ID3D11Texture2D staging =
+            _device.CreateTexture2D(description);
+        _context.CopyResource(staging, backBuffer);
+
+        MappedSubresource mapped = _context.Map(
+            staging,
+            0,
+            MapMode.Read,
+            D3DMapFlags.None);
+        try
+        {
+            int rowLength = checked(surface.PixelWidth * 4);
+            byte[] pixels = new byte[
+                checked(rowLength * surface.PixelHeight)];
+            for (int row = 0; row < surface.PixelHeight; row++)
+            {
+                Marshal.Copy(
+                    IntPtr.Add(
+                        mapped.DataPointer,
+                        checked(row * (int)mapped.RowPitch)),
+                    pixels,
+                    checked(row * rowLength),
+                    rowLength);
+            }
+
+            return new NativeRenderedFrame(
+                surface.PixelWidth,
+                surface.PixelHeight,
+                pixels);
+        }
+        finally
+        {
+            _context.Unmap(staging, 0);
+        }
     }
 
     internal ID3D11RenderTargetView CreateRenderTarget(
@@ -401,6 +526,7 @@ internal sealed class NativeGraphicsDevice : IDisposable
         };
         _context.GenerateMips(gpuTexture.View);
         _textures[source.Path] = gpuTexture;
+        TextureUploadCount++;
         return gpuTexture;
     }
 
@@ -423,6 +549,10 @@ internal sealed class NativeGraphicsDevice : IDisposable
             BlendMode.Screen => _screenBlend,
             _ => _normalBlend
         };
+
+    private ID3D11BlendState CreateBlendState(BlendMode blendMode) =>
+        _device.CreateBlendState(
+            NativeBlendProfiles.Get(blendMode).CreateDescription());
 
     private void EnsureDynamicBuffers(int vertexCount, int indexCount)
     {
@@ -467,6 +597,56 @@ internal sealed class NativeGraphicsDevice : IDisposable
                 mapped.DataPointer.ToPointer(),
                 data.Length));
         _context.Unmap(buffer);
+    }
+
+    private unsafe void UploadGeometry(NativeFrameRenderPlan plan)
+    {
+        MappedSubresource mappedVertices = _context.Map(
+            _vertexBuffer!,
+            MapMode.WriteDiscard,
+            D3DMapFlags.None);
+        try
+        {
+            Span<NativeSpineVertex> destination =
+                new(
+                    mappedVertices.DataPointer.ToPointer(),
+                    plan.VertexCount);
+            int offset = 0;
+            foreach (NativeSpineDrawBatch batch in plan.Batches)
+            {
+                batch.Vertices
+                    .AsSpan(0, batch.VertexCount)
+                    .CopyTo(destination[offset..]);
+                offset += batch.VertexCount;
+            }
+        }
+        finally
+        {
+            _context.Unmap(_vertexBuffer!);
+        }
+
+        MappedSubresource mappedIndices = _context.Map(
+            _indexBuffer!,
+            MapMode.WriteDiscard,
+            D3DMapFlags.None);
+        try
+        {
+            Span<int> destination = new(
+                mappedIndices.DataPointer.ToPointer(),
+                plan.IndexCount);
+            int offset = 0;
+            foreach (NativeSpineDrawBatch batch in plan.Batches)
+            {
+                batch.Indices
+                    .AsSpan(0, batch.IndexCount)
+                    .CopyTo(destination[offset..]);
+                offset += batch.IndexCount;
+            }
+        }
+        finally
+        {
+            _context.Unmap(_indexBuffer!);
+        }
     }
 
     private void UploadValue<T>(ID3D11Buffer buffer, T value)

@@ -34,6 +34,7 @@ internal sealed class NativeCompositionSurface : IDisposable
     public float AnchorPixelX { get; private set; }
     public float AnchorPixelY { get; private set; }
     internal int AnchorPositionApplyCount { get; private set; }
+    internal ID3D11Texture2D? BackBuffer => _backBuffer;
 
     public bool CanContainScale(float pixelScale) =>
         _swapChain != null && pixelScale <= CapacityScale;

@@ -90,7 +90,6 @@ internal sealed class NativeSpineResource : IDisposable
 
     public void SetAnimationIfNeeded(string? animationName, bool repeat)
     {
-        ClearOverlayTracks();
         string? selected = ResolveAnimationName(animationName);
         if (selected == null)
             return;
@@ -104,6 +103,7 @@ internal sealed class NativeSpineResource : IDisposable
             return;
         }
 
+        ClearOverlayTracks();
         AnimationState.SetAnimation(0, selected, repeat);
     }
 

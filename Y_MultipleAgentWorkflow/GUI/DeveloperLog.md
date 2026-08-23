@@ -1,5 +1,25 @@
 # GUI Developer Log
 
+## 2026-08-23：特殊混合渲染管线与右键过曝修复
+
+- 原生帧提交改为按 Spine draw order 生成有序计划，每个角色每帧统一上传一次
+  几何；D3D11 管线、四种混合状态和可增长顶点/索引缓冲区由设备复用，并去重
+  实际未变化的纹理与混合状态绑定。
+- 混合配置拆分 RGB 与 Alpha 因子。`Additive` 同时累加预乘颜色和资源源 Alpha，
+  保证 DirectComposition 表面持续满足 `RGB <= Alpha`，修复发光附件叠加后角色
+  过曝并半透明；Normal、Multiply、Screen 及资源作者制作的淡出、透明和发光保留。
+- 右键开启或关闭角色配置面板只切换交互模式并取消指针捕获，不再重选或重启
+  当前动画轨。点击临时动画结束时重新解析完成瞬间的资源状态与默认动画，通过
+  generation 只从第 0 帧恢复一次。
+- standing、aim、cover 的已加载资源共同参与纹理存活判断；缓存真正丢失时允许
+  从源贴图重新解码上传。本轮未改变 Aim 附加轨的 BattleEffects 播放配置语义。
+- 验证证据：定向测试 `25/25`、动画与 Battle 回归 `37/37`、全量测试
+  `272/272`；Release Build 0 警告、0 错误，Publish 成功，Run 在机器时间
+  `2026-08-24 04:35:20` 写入新的 `startup-complete`，PID 28564 持续响应。
+  任务日期仍按 `2026-08-23` 记录。
+- 本次实际影响 GUI 原生渲染、动画交互和生命周期，维护计数：
+  `1/5 -> 2/5`。
+
 ## 2026-08-23：修复 Battle 返回 Normal 的状态分裂
 
 - `ICharacterRenderHost.SetCharacterResourceState` 改为返回实际切换结果；

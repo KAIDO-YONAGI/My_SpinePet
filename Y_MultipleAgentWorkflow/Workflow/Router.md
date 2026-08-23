@@ -14,7 +14,7 @@
 | Skill 分发、客户端安装和显式升级 | `..\..\..\Y_MultipleAgentWorkflow\docs\Distribution_Guide.md` |
 | 当前项目托管文件版本与哈希 | `WorkflowInstance.json` |
 | My_SpinePet 构建、发布和运行验证 | `Project_Validation_Guide.md` |
-| Agent 登记、冲突、等待、覆盖、心跳、构建屏障 | `Concurrency_Guide.md` |
+| Agent 登记、冲突、等待、覆盖、心跳、构建屏障、Codex 任务通信 | `Concurrency_Guide.md` |
 | 新业务根初始化 | `Templates\BusinessRouter.template.md`、`Templates\DeveloperLog.template.md` |
 | 实际租约操作 | `Scripts\WorkingAgent.ps1` |
 | 协议回归 | `Scripts\Test-WorkingAgent.ps1` |

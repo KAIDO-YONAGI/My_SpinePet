@@ -321,6 +321,7 @@ public sealed class NativeSpineResourceTests
 
             Assert.StartsWith("4.1", resource.SkeletonData.Version);
             Assert.NotEmpty(resource.TextureLoader.Textures);
+            AssertEveryAnimationProducesFiniteGeometry(resource);
         }
     }
 
@@ -494,6 +495,84 @@ public sealed class NativeSpineResourceTests
         Assert.Equal("aim_fire_hair", overlay.Animation.Name);
         Assert.True(overlay.Loop);
         Assert.Equal(0, overlay.AnimationTime);
+    }
+
+    private static void AssertEveryAnimationProducesFiniteGeometry(
+        NativeSpineResource resource)
+    {
+        NativeSpineGeometry geometry = new();
+        foreach (Animation animation in resource.SkeletonData.Animations)
+        {
+            resource.AnimationState.ClearTracks();
+            TrackEntry entry = resource.AnimationState.SetAnimation(
+                0,
+                animation,
+                loop: false);
+            float[] sampleTimes =
+            [
+                0,
+                animation.Duration * 0.25f,
+                animation.Duration * 0.5f,
+                animation.Duration * 0.75f,
+                animation.Duration
+            ];
+            foreach (float sampleTime in sampleTimes.Distinct())
+            {
+                entry.TrackTime = sampleTime;
+                resource.Skeleton.SetToSetupPose();
+                resource.AnimationState.Apply(resource.Skeleton);
+                resource.Skeleton.UpdateWorldTransform();
+
+                NativeFrameRenderPlan plan =
+                    geometry.BuildFramePlan(resource.Skeleton);
+
+                Assert.Equal(
+                    plan.Batches.Sum(batch => batch.VertexCount),
+                    plan.VertexCount);
+                Assert.Equal(
+                    plan.Batches.Sum(batch => batch.IndexCount),
+                    plan.IndexCount);
+                Assert.InRange(
+                    plan.Batches.Count,
+                    0,
+                    resource.Skeleton.DrawOrder.Count);
+                foreach (NativeSpineDrawBatch batch in plan.Batches)
+                {
+                    Assert.True(File.Exists(batch.Texture.Path));
+                    Assert.True(batch.Texture.Width > 0);
+                    Assert.True(batch.Texture.Height > 0);
+                    Assert.All(
+                        batch.Vertices.Take(batch.VertexCount),
+                        vertex =>
+                        {
+                            AssertFinite(vertex.Position.X);
+                            AssertFinite(vertex.Position.Y);
+                            AssertFinite(vertex.TextureCoordinate.X);
+                            AssertFinite(vertex.TextureCoordinate.Y);
+                            AssertFinite(vertex.LightColor.X);
+                            AssertFinite(vertex.LightColor.Y);
+                            AssertFinite(vertex.LightColor.Z);
+                            AssertFinite(vertex.LightColor.W);
+                            AssertFinite(vertex.DarkColor.X);
+                            AssertFinite(vertex.DarkColor.Y);
+                            AssertFinite(vertex.DarkColor.Z);
+                            AssertFinite(vertex.DarkColor.W);
+                        });
+                    Assert.All(
+                        batch.Indices.Take(batch.IndexCount),
+                        index => Assert.InRange(
+                            index,
+                            0,
+                            batch.VertexCount - 1));
+                }
+            }
+        }
+    }
+
+    private static void AssertFinite(float value)
+    {
+        Assert.False(float.IsNaN(value));
+        Assert.False(float.IsInfinity(value));
     }
 
     private static string FindRepositoryRoot()

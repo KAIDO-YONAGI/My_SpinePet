@@ -105,8 +105,9 @@ internal sealed class NativeFrameRenderer
                 }
 
                 state.Resource.Update((float)elapsedSeconds);
-                IReadOnlyList<NativeSpineDrawBatch> batches =
-                    state.Geometry.Build(state.Resource.Skeleton);
+                NativeFrameRenderPlan plan =
+                    state.Geometry.BuildFramePlan(
+                        state.Resource.Skeleton);
                 float pixelScale =
                     (float)state.CurrentScale * window.DpiScale;
                 state.Surface.EnsureSize(
@@ -120,10 +121,10 @@ internal sealed class NativeFrameRenderer
                     window,
                     state.Geometry.Bounds,
                     pixelScale);
-                state.LastBatches = batches;
+                state.LastBatches = plan.Batches;
                 _pendingFrames.Add(new PendingFrame(
                     state,
-                    batches,
+                    plan,
                     pixelScale));
             }
 
@@ -135,7 +136,7 @@ internal sealed class NativeFrameRenderer
             {
                 graphics.Render(
                     frame.State.Surface!,
-                    frame.Batches,
+                    frame.Plan,
                     frame.State.Surface!.GetTransform(frame.PixelScale));
             }
 
@@ -311,6 +312,6 @@ internal sealed class NativeFrameRenderer
 
     private readonly record struct PendingFrame(
         NativeCharacterState State,
-        IReadOnlyList<NativeSpineDrawBatch> Batches,
+        NativeFrameRenderPlan Plan,
         float PixelScale);
 }

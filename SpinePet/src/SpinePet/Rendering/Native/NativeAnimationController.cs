@@ -18,6 +18,7 @@ internal static class NativeAnimationController
         string? animation = SelectConfiguredOrIdleAnimationName(
             state.Config.ConfiguredAnimation,
             resource.AnimationNames);
+        state.PersistentAnimationName = animation;
         TrackEntry? current = resource.AnimationState.GetCurrent(0);
         if (current?.Animation?.Name.Equals(
                 animation,
@@ -49,17 +50,16 @@ internal static class NativeAnimationController
 
         string? clickAnimation =
             SelectClickAnimationName(resource.AnimationNames);
-        string? defaultAnimation =
-            SelectConfiguredOrIdleAnimationName(
-                state.Config.ConfiguredAnimation,
-                resource.AnimationNames);
-        if (clickAnimation == null || defaultAnimation == null)
+        if (clickAnimation == null)
             return;
 
+        AnimationState animationState = resource.AnimationState;
         state.TemporaryAnimationPlayback.Play(
-            resource.AnimationState,
+            animationState,
             clickAnimation,
-            defaultAnimation);
+            () => SelectCurrentDefaultAnimationName(
+                state,
+                animationState));
     }
 
     public static void SetPersistent(
@@ -78,6 +78,7 @@ internal static class NativeAnimationController
             resource.AnimationState,
             animation,
             repeat);
+        state.PersistentAnimationName = animation;
     }
 
     internal static string? SelectClickAnimationName(
@@ -135,5 +136,54 @@ internal static class NativeAnimationController
                 configuredAnimation,
                 StringComparison.OrdinalIgnoreCase));
         return configured ?? SelectIdleAnimationName(animationNames);
+    }
+
+    internal static string? SelectCurrentDefaultAnimationName(
+        NativeCharacterState state,
+        AnimationState expectedAnimationState)
+    {
+        NativeSpineResource? resource = state.Resource;
+        if (resource == null ||
+            !ReferenceEquals(
+                resource.AnimationState,
+                expectedAnimationState))
+        {
+            return null;
+        }
+
+        string? selected = SelectDefaultAnimationNameForState(
+            state,
+            resource.AnimationNames);
+        state.PersistentAnimationName = selected;
+        return selected;
+    }
+
+    internal static string? SelectDefaultAnimationNameForState(
+        NativeCharacterState state,
+        IReadOnlyList<string> animationNames)
+    {
+        string? configuredAnimation;
+        if (state.ActiveResourceState.Equals(
+                CharacterBattleStates.Aim,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            configuredAnimation =
+                state.Config.Battle?.Animations.AimIdle;
+        }
+        else if (state.ActiveResourceState.Equals(
+                     CharacterBattleStates.Cover,
+                     StringComparison.OrdinalIgnoreCase))
+        {
+            configuredAnimation =
+                state.Config.Battle?.Animations.CoverIdle;
+        }
+        else
+        {
+            configuredAnimation = state.Config.ConfiguredAnimation;
+        }
+
+        return SelectConfiguredOrIdleAnimationName(
+            configuredAnimation,
+            animationNames);
     }
 }

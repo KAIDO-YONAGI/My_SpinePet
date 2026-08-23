@@ -24,6 +24,7 @@ internal sealed class NativeCharacterState : IDisposable
         { get; } = new(StringComparer.OrdinalIgnoreCase);
     public string ActiveResourceState { get; set; } =
         CharacterDisplayModes.Normal;
+    public string? PersistentAnimationName { get; set; }
     public NativeTemporaryAnimationPlayback TemporaryAnimationPlayback
         { get; } = new();
     public bool IsVisible { get; set; }
@@ -56,5 +57,6 @@ internal sealed class NativeCharacterState : IDisposable
         ResourceSlots.Clear();
         Surface = null;
         Resource = null;
+        PersistentAnimationName = null;
     }
 }
