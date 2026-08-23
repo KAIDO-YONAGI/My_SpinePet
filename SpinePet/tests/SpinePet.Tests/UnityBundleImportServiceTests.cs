@@ -140,8 +140,8 @@ public sealed class UnityBundleImportServiceTests : IDisposable
             Assert.True(Directory.Exists(
                 Path.Combine(skinDirectory, resourceType)));
         }
-        Assert.False(Directory.Exists(Path.Combine(skinDirectory, "aim")));
-        Assert.False(Directory.Exists(Path.Combine(skinDirectory, "cover")));
+        Assert.True(Directory.Exists(Path.Combine(skinDirectory, "aim")));
+        Assert.True(Directory.Exists(Path.Combine(skinDirectory, "cover")));
 
         Assert.True(File.Exists(Path.Combine(
             result.DestinationDirectory,
@@ -279,7 +279,7 @@ public sealed class UnityBundleImportServiceTests : IDisposable
     [Theory]
     [InlineData("aim")]
     [InlineData("cover")]
-    public void ImportSkeletonRejectsRetiredResourceTypes(string resourceType)
+    public void ImportSkeletonRejectsBattleResourceTypes(string resourceType)
     {
         string sourceDirectory = Path.Combine(
             _temporaryDirectory,

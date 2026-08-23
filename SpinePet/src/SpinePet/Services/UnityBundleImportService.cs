@@ -281,7 +281,10 @@ public sealed class UnityBundleImportService
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (!string.IsNullOrWhiteSpace(resourceType) &&
-            !CharacterResourceTypes.IsRenderable(resourceType))
+            !string.Equals(
+                resourceType,
+                CharacterResourceTypes.Standing,
+                StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidDataException(
                 "Only standing skeleton resources can be imported.");

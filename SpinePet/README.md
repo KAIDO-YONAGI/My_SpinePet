@@ -30,6 +30,7 @@ src/SpinePet/
 src/SpineRuntime41/            Isolated Spine 4.1 runtime assembly
 third_party/spine-csharp-4.1/  Licensed Spine runtime source
 tools/atlas-cleaner/          Optional atlas maintenance utility
+tools/battle-catalog-importer/ Audit/import complete local Aim/Cover sets
 tools/icons-downloader/       Local character icon downloader
 tools/resource-layout/        Legacy resource layout migration
 tools/skeleton-inspector/     Spine skeleton attachment inspector
@@ -105,11 +106,20 @@ referenced atlas textures directly into the matching skin's `standing`
 directory, then attempts to download that Skin's separate official icon bundle.
 Manually supplied icon bundles use the icon extractor and write the resulting
 PNG into the matching skin's `icons` directory. An icon-only import does not
-create a character card. Aim and cover bundles are not imported or used. Imports refuse
-to overwrite existing character resources, reject Spine exports other than 4.1,
-and stop if two character IDs would share the same display-name and skin
-directory. Correct `CharacterNames.json` or export the bundle with Spine 4.1
-before retrying.
+create a character card. Ordinary Add imports remain standing-only. Complete
+Aim/Cover pairs can be imported through the DB entry or audited and imported in
+bulk from `resources/Characters` with `tools/battle-catalog-importer`; incomplete
+or non-4.1 battle pairs are skipped. Imports refuse to overwrite unrelated
+existing character resources and stop if two character IDs would share the same
+display-name and skin directory. Correct `CharacterNames.json` or export the
+bundle with Spine 4.1 before retrying.
+
+Audit and import the local character catalog:
+
+```powershell
+dotnet run --project .\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- --audit ..\resources\Characters
+dotnet run --project .\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- ..\resources\Characters .\res
+```
 
 ## Build
 

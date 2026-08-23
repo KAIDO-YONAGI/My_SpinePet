@@ -43,10 +43,18 @@ internal sealed class NativeTextureSource
         if (uploadPixels != null)
             return uploadPixels;
 
-        // 像素只能被消费一次：资源在则 GPU 纹理必然存在，
-        // 资源被卸载后会整体重新加载，不存在二次上传的场景。
-        throw new InvalidOperationException(
-            $"Texture pixels for '{Path}' were already consumed.");
+        // Keep the long-lived CPU resource compact. If the GPU cache was
+        // evicted while this resource sat in another state slot, rehydrate
+        // the upload pixels from the source image.
+        (BitmapSource bitmap, byte[] pixels) = DecodeBitmap(Path);
+        if (bitmap.PixelWidth != Width || bitmap.PixelHeight != Height)
+        {
+            throw new InvalidDataException(
+                $"Texture dimensions changed after load: '{Path}'.");
+        }
+        if (_requiresPremultiplication)
+            PremultiplyBgraPixels(pixels);
+        return pixels;
     }
 
     public bool IsVisiblePixel(float u, float v, float opacity)
@@ -62,6 +70,20 @@ internal sealed class NativeTextureSource
     }
 
     public static NativeTextureSource Load(string path, bool premultipliedAlpha)
+    {
+        if (!File.Exists(path))
+            throw new FileNotFoundException("Atlas texture not found.", path);
+
+        (BitmapSource source, byte[] pixels) = DecodeBitmap(path);
+        return new NativeTextureSource(
+            path,
+            source,
+            premultipliedAlpha,
+            pixels);
+    }
+
+    private static (BitmapSource Bitmap, byte[] Pixels) DecodeBitmap(
+        string path)
     {
         if (!File.Exists(path))
             throw new FileNotFoundException("Atlas texture not found.", path);
@@ -91,11 +113,7 @@ internal sealed class NativeTextureSource
         byte[] pixels =
             new byte[checked(stride * source.PixelHeight)];
         source.CopyPixels(pixels, stride, 0);
-        return new NativeTextureSource(
-            path,
-            source,
-            premultipliedAlpha,
-            pixels);
+        return (source, pixels);
     }
 
     private uint[] BuildVisiblePixelMask(byte[] pixels)

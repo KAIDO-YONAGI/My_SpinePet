@@ -883,7 +883,7 @@ public sealed class CharacterManagerTests : IDisposable
         Assert.Equal(removesAfterRemove, renderHost.RemovedCharacterIds.Count);
         Assert.Equal(savesAfterRemove, configService.SaveRequestCount);
 
-        Assert.Equal(6, renderHost.EventSubscriptionCount);
+        Assert.Equal(7, renderHost.EventSubscriptionCount);
         int notifications = 0;
         manager.CharactersChanged += () => notifications++;
         manager.Close();
@@ -893,6 +893,237 @@ public sealed class CharacterManagerTests : IDisposable
         Assert.Equal(1, renderHost.CloseCount);
         Assert.Equal(0, renderHost.EventSubscriptionCount);
         Assert.Equal(0, notifications);
+    }
+
+    [Fact]
+    public async Task BattleModeIsManualDefaultsToCoverAndReturnsToNormal()
+    {
+        CharacterConfig character = CreateBattleCharacter(
+            "battle-mode");
+        FakeCharacterRenderHost renderHost = new();
+        CharacterManager manager = CreateManager(
+            SaveConfig("battle-mode.json", character),
+            renderHost);
+        character = Assert.Single(manager.Characters);
+
+        Assert.Equal(
+            CharacterDisplayModes.Normal,
+            manager.GetCharacterDisplayMode(character.Id));
+        Assert.Equal(
+            CharacterBattleStates.Cover,
+            manager.GetCharacterBattleState(character.Id));
+        Assert.Empty(renderHost.ResourceStateChanges);
+
+        await manager.SetCharacterDisplayModeAsync(
+            character,
+            CharacterDisplayModes.Battle);
+
+        Assert.Equal(
+            CharacterDisplayModes.Battle,
+            manager.GetCharacterDisplayMode(character.Id));
+        Assert.Equal(
+            CharacterBattleStates.Cover,
+            manager.GetCharacterBattleState(character.Id));
+        Assert.Equal(CharacterBattleStates.Cover,
+            renderHost.ResourceStateChanges[^1].State);
+
+        await manager.SetCharacterBattleStateAsync(
+            character,
+            CharacterBattleStates.Aim);
+
+        Assert.Equal(
+            CharacterBattleStates.Aim,
+            manager.GetCharacterBattleState(character.Id));
+        Assert.Equal(CharacterBattleStates.Aim,
+            renderHost.ResourceStateChanges[^1].State);
+
+        await manager.SetCharacterDisplayModeAsync(
+            character,
+            CharacterDisplayModes.Normal);
+
+        Assert.Equal(
+            CharacterDisplayModes.Normal,
+            manager.GetCharacterDisplayMode(character.Id));
+        Assert.Equal(CharacterDisplayModes.Normal,
+            renderHost.ResourceStateChanges[^1].State);
+    }
+
+    [Fact]
+    public async Task FailedResourceSwitchKeepsRuntimeOnLastRenderedState()
+    {
+        CharacterConfig character = CreateBattleCharacter(
+            "battle-switch-failure");
+        FakeCharacterRenderHost renderHost = new();
+        CharacterManager manager = CreateManager(
+            SaveConfig("battle-switch-failure.json", character),
+            renderHost);
+        character = Assert.Single(manager.Characters);
+        List<(string Mode, string State)> notifications = [];
+        manager.CharacterBattleStateChanged += (_, mode, state) =>
+            notifications.Add((mode, state));
+
+        Assert.True(await manager.SetCharacterDisplayModeAsync(
+            character,
+            CharacterDisplayModes.Battle));
+        renderHost.SetCharacterResourceStateHandler =
+            (_, state, _) => !state.Equals(
+                CharacterBattleStates.Aim,
+                StringComparison.OrdinalIgnoreCase);
+
+        Assert.False(await manager.SetCharacterBattleStateAsync(
+            character,
+            CharacterBattleStates.Aim));
+        Assert.Equal(
+            CharacterDisplayModes.Battle,
+            manager.GetCharacterDisplayMode(character.Id));
+        Assert.Equal(
+            CharacterBattleStates.Cover,
+            manager.GetCharacterBattleState(character.Id));
+        Assert.Equal(
+            (CharacterDisplayModes.Battle, CharacterBattleStates.Cover),
+            notifications[^1]);
+
+        renderHost.SetCharacterResourceStateHandler =
+            (_, state, _) => !state.Equals(
+                CharacterDisplayModes.Normal,
+                StringComparison.OrdinalIgnoreCase);
+
+        Assert.False(await manager.SetCharacterDisplayModeAsync(
+            character,
+            CharacterDisplayModes.Normal));
+        Assert.Equal(
+            CharacterDisplayModes.Battle,
+            manager.GetCharacterDisplayMode(character.Id));
+        Assert.Equal(
+            CharacterBattleStates.Cover,
+            manager.GetCharacterBattleState(character.Id));
+        Assert.Equal(
+            (CharacterDisplayModes.Battle, CharacterBattleStates.Cover),
+            notifications[^1]);
+    }
+
+    [Fact]
+    public async Task RightHoldAtThresholdFiresUntilReleaseThenReloadsInCover()
+    {
+        CharacterConfig character = CreateBattleCharacter(
+            "battle-hold");
+        FakeCharacterRenderHost renderHost = new();
+        CharacterManager manager = CreateManager(
+            SaveConfig("battle-hold.json", character),
+            renderHost);
+        character = Assert.Single(manager.Characters);
+        await manager.SetCharacterDisplayModeAsync(
+            character,
+            CharacterDisplayModes.Battle);
+        renderHost.ResourceStateChanges.Clear();
+        renderHost.AnimationSequences.Clear();
+
+        renderHost.RaiseRightPressed(character.Id);
+        await Task.Delay(250);
+        Assert.DoesNotContain(
+            renderHost.ResourceStateChanges,
+            change => change.State == CharacterBattleStates.Aim);
+        await WaitUntilAsync(() =>
+            renderHost.ResourceStateChanges.Any(change =>
+                change.State == CharacterBattleStates.Aim));
+
+        Assert.Equal(
+            ["to_aim", "aim_fire"],
+            renderHost.AnimationSequences[^1].Animations);
+        Assert.True(renderHost.AnimationSequences[^1].LoopLast);
+        Assert.Equal(
+            ["aim_fire_hair", "aim_fire_hip"],
+            renderHost.AnimationSequences[^1].ParallelAnimations);
+
+        renderHost.RaiseRightReleased(character.Id);
+        await WaitUntilAsync(() =>
+            renderHost.ResourceStateChanges.Any(change =>
+                change.State == CharacterBattleStates.Cover));
+
+        Assert.Equal(
+            ["to_cover", "cover_reload"],
+            renderHost.AnimationSequences[^1].Animations);
+        Assert.Equal(
+            "cover_idle",
+            renderHost.AnimationSequences[^1].RestoreAnimation);
+        Assert.False(renderHost.AnimationSequences[^1].LoopLast);
+        Assert.Empty(
+            renderHost.AnimationSequences[^1].ParallelAnimations);
+        Assert.Equal(
+            CharacterBattleStates.Cover,
+            manager.GetCharacterBattleState(character.Id));
+    }
+
+    [Fact]
+    public async Task StaleReleaseCannotQueueReloadAfterReturningToNormal()
+    {
+        CharacterConfig character = CreateBattleCharacter(
+            "battle-stale-release");
+        FakeCharacterRenderHost renderHost = new();
+        CharacterManager manager = CreateManager(
+            SaveConfig("battle-stale-release.json", character),
+            renderHost);
+        character = Assert.Single(manager.Characters);
+        await manager.SetCharacterDisplayModeAsync(
+            character,
+            CharacterDisplayModes.Battle);
+
+        renderHost.RaiseRightPressed(character.Id);
+        await WaitUntilAsync(() =>
+            manager.GetCharacterBattleState(character.Id) ==
+            CharacterBattleStates.Aim);
+
+        TaskCompletionSource preloadRelease = new(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        renderHost.PreloadBattleResourcesHandler =
+            _ => preloadRelease.Task;
+        renderHost.RaiseRightReleased(character.Id);
+        await WaitUntilAsync(() => renderHost.BattlePreloadCount >= 3);
+
+        await manager.SetCharacterDisplayModeAsync(
+            character,
+            CharacterDisplayModes.Normal);
+        int sequenceCount = renderHost.AnimationSequences.Count;
+        preloadRelease.SetResult();
+        await Task.Delay(50);
+
+        Assert.Equal(
+            CharacterDisplayModes.Normal,
+            manager.GetCharacterDisplayMode(character.Id));
+        Assert.Equal(sequenceCount, renderHost.AnimationSequences.Count);
+        Assert.Equal(
+            CharacterDisplayModes.Normal,
+            renderHost.ResourceStateChanges[^1].State);
+    }
+
+    [Fact]
+    public async Task ShortRightClickAndNormalRightClickKeepPanelBehavior()
+    {
+        CharacterConfig character = CreateBattleCharacter(
+            "battle-short-click");
+        FakeCharacterRenderHost renderHost = new();
+        CharacterManager manager = CreateManager(
+            SaveConfig("battle-short-click.json", character),
+            renderHost);
+        character = Assert.Single(manager.Characters);
+        int clicks = 0;
+        manager.CharacterRightClicked += _ => clicks++;
+
+        renderHost.RaiseRightPressed(character.Id);
+        renderHost.RaiseRightReleased(character.Id);
+        Assert.Equal(1, clicks);
+
+        await manager.SetCharacterDisplayModeAsync(
+            character,
+            CharacterDisplayModes.Battle);
+        renderHost.RaiseRightPressed(character.Id);
+        await Task.Delay(50);
+        renderHost.RaiseRightReleased(character.Id);
+
+        Assert.Equal(2, clicks);
+        Assert.Equal(
+            CharacterBattleStates.Cover,
+            manager.GetCharacterBattleState(character.Id));
     }
 
     [Fact]
@@ -1010,6 +1241,81 @@ public sealed class CharacterManagerTests : IDisposable
                 characterCode,
                 skinCode,
                 characterName));
+    }
+
+    private CharacterConfig CreateBattleCharacter(string rootName)
+    {
+        CharacterResourceFiles standing = CreateResources(
+            rootName,
+            "Rapi",
+            "010",
+            "00",
+            CharacterResourceTypes.Standing);
+        CharacterResourceFiles aim = CreateResources(
+            rootName,
+            "Rapi",
+            "010",
+            "00",
+            CharacterResourceTypes.Aim);
+        CharacterResourceFiles cover = CreateResources(
+            rootName,
+            "Rapi",
+            "010",
+            "00",
+            CharacterResourceTypes.Cover);
+        return new CharacterConfig
+        {
+            Id = rootName,
+            Name = "Rapi",
+            SkeletonPath = standing.SkeletonPath,
+            AtlasPath = standing.AtlasPath,
+            TexturePath = standing.PrimaryTexturePath,
+            Visible = false,
+            Battle = new CharacterBattleConfig
+            {
+                Aim = new CharacterBattleResourceConfig
+                {
+                    SkeletonPath = aim.SkeletonPath,
+                    AtlasPath = aim.AtlasPath,
+                    TexturePath = aim.PrimaryTexturePath
+                },
+                Cover = new CharacterBattleResourceConfig
+                {
+                    SkeletonPath = cover.SkeletonPath,
+                    AtlasPath = cover.AtlasPath,
+                    TexturePath = cover.PrimaryTexturePath
+                },
+                Animations = new CharacterBattleAnimationsConfig
+                {
+                    AimIdle = "aim_idle",
+                    ToAim = "to_aim",
+                    AimFire = "aim_fire",
+                    AimFireEffects =
+                        ["aim_fire_hair", "aim_fire_hip"],
+                    CoverIdle = "cover_idle",
+                    ToCover = "to_cover",
+                    ReloadSequence = ["cover_reload"]
+                }
+            }
+        };
+    }
+
+    private static async Task WaitUntilAsync(
+        Func<bool> predicate,
+        int timeoutMilliseconds = 2000)
+    {
+        DateTime deadline = DateTime.UtcNow.AddMilliseconds(
+            timeoutMilliseconds);
+        while (!predicate())
+        {
+            if (DateTime.UtcNow >= deadline)
+            {
+                throw new TimeoutException(
+                    "The expected asynchronous state was not reached.");
+            }
+
+            await Task.Delay(10);
+        }
     }
 
     private static void WriteSkeletonHeader(

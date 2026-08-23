@@ -1,5 +1,32 @@
 # GUI Developer Log
 
+## 2026-08-23：修复 Battle 返回 Normal 的状态分裂
+
+- `ICharacterRenderHost.SetCharacterResourceState` 改为返回实际切换结果；
+  管理器仅在资源槽交换成功后提交 Normal/Battle 与 Cover/Aim 运行时状态。
+- 视图切换失败或异常时重新同步最后一个已渲染状态，不再出现下拉框已回
+  Normal、模型仍在 Battle 的虚假选择。
+- 返回 Normal 时清除临时轨并从第 0 帧循环配置动画；无效配置回退 standing
+  idle，避免资源交换后停在空轨或一次性动画末帧。
+- 全量测试 `251/251`；Release Build 0 警告、0 错误，Publish 成功，
+  Run 出现新的 `startup-complete` 且实例持续响应。
+- 本次实际影响 GUI 状态协调，维护计数：`0/5 -> 1/5`。
+
+## 2026-08-23：Aim/Cover 控件、输入与周期复核
+
+- 右侧详情新增显式 Normal/Battle 模式选择，并在原动画下拉框右侧平行增加
+  Cover/Aim 下拉框；Battle 仅对完整配置启用，默认 Cover。
+- Battle 中右键按住 300ms 进入 Aim 并连续开火，释放或捕获丢失后回 Cover
+  并换弹；短右键面板操作与左键点击、拖动保持原行为。
+- 模式和战斗状态为运行时状态，启动、首次展示与重启仍从 Normal idle 开始。
+- 完整资源重查后，实际配置中 63 个角色有 43 个可手动进入 Battle，
+  其余角色仅显示 Normal，不生成无效 Battle 入口。
+- 验证证据：全量测试 `240/240`；Release Build 0 警告、0 错误，
+  Publish 成功，Run 出现 `startup-complete` 且新实例持续响应。
+- 本任务使维护计数 `4/5 -> 5/5`。随后对照 GUI Design、视图绑定、管理器
+  输入状态机和原生捕获释放路径完成周期复核，文档已同步，无遗留旧口径，
+  计数按规则归零为 `0/5`。
+
 ## 2026-08-22：原生渲染管线热路径去重
 
 - 帧调度器改为最多保留一个 Dispatcher 待执行帧；渲染繁忙时丢弃过期节拍，

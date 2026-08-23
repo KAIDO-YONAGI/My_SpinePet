@@ -81,11 +81,14 @@ public sealed class App : Application
             new(identityService);
         UnityBundleImportService bundleImporter =
             new(identityService, resourceDiscovery);
+        NikkeDbResourceImportService nikkeDbImporter =
+            new(resourceDiscovery);
         _characterManager = new CharacterManager(configService, identityService);
         _mainWindow = new MainWindow(
             _characterManager,
             resourceDiscovery,
-            bundleImporter);
+            bundleImporter,
+            nikkeDbImporter);
         StartActivationListener();
 
         _trayIcon = new TrayIconService(

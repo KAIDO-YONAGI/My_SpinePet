@@ -20,6 +20,10 @@ internal sealed class NativeCharacterState : IDisposable
         Array.Empty<NativeSpineDrawBatch>();
     public IReadOnlyList<string> CachedAnimationNames { get; set; } =
         Array.Empty<string>();
+    public Dictionary<string, NativeCharacterLoadResult> ResourceSlots
+        { get; } = new(StringComparer.OrdinalIgnoreCase);
+    public string ActiveResourceState { get; set; } =
+        CharacterDisplayModes.Normal;
     public NativeTemporaryAnimationPlayback TemporaryAnimationPlayback
         { get; } = new();
     public bool IsVisible { get; set; }
@@ -45,6 +49,11 @@ internal sealed class NativeCharacterState : IDisposable
         TemporaryAnimationPlayback.Clear();
         Surface?.Dispose();
         Resource?.Dispose();
+        foreach (NativeCharacterLoadResult slot in ResourceSlots.Values)
+        {
+            slot.Resource.Dispose();
+        }
+        ResourceSlots.Clear();
         Surface = null;
         Resource = null;
     }

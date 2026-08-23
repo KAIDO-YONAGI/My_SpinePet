@@ -1,4 +1,5 @@
 using Spine;
+using SpinePet.Models;
 using SpinePet.Rendering.Native;
 
 namespace SpinePet.Tests;
@@ -55,6 +56,20 @@ public sealed class NativeCharacterAnimationTests
                 ["action", "idle"]);
 
         Assert.Equal("idle", animation);
+    }
+
+    [Theory]
+    [InlineData(CharacterDisplayModes.Normal, true)]
+    [InlineData(CharacterBattleStates.Cover, false)]
+    [InlineData(CharacterBattleStates.Aim, false)]
+    public void ConfiguredAnimationSelectionOnlyAppliesToNormalResources(
+        string resourceState,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            NativeAnimationController.ShouldSelectModeAnimation(
+                resourceState));
     }
 
     [Fact]

@@ -17,6 +17,7 @@ internal sealed class NativeInputWindow : IDisposable
     private const uint WmLeftButtonDown = 0x0201;
     private const uint WmLeftButtonUp = 0x0202;
     private const uint WmRightButtonDown = 0x0204;
+    private const uint WmRightButtonUp = 0x0205;
     private const uint WmCaptureChanged = 0x0215;
     private const int HitClient = 1;
     private const int RegionOr = 2;
@@ -257,10 +258,12 @@ internal sealed class NativeInputWindow : IDisposable
 
                 if (message == WmLeftButtonDown ||
                     message == WmRightButtonDown ||
+                    message == WmRightButtonUp ||
                     message == WmMouseMove ||
                     message == WmLeftButtonUp)
                 {
-                    if (message == WmLeftButtonDown)
+                    if (message == WmLeftButtonDown ||
+                        message == WmRightButtonDown)
                         SetCapture(window);
 
                     GetCursorPos(out NativePoint point);
@@ -269,7 +272,8 @@ internal sealed class NativeInputWindow : IDisposable
                         point.X,
                         point.Y);
 
-                    if (message == WmLeftButtonUp)
+                    if (message == WmLeftButtonUp ||
+                        message == WmRightButtonUp)
                         ReleaseCapture();
                     return IntPtr.Zero;
                 }

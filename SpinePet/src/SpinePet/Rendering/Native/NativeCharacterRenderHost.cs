@@ -53,7 +53,8 @@ public sealed class NativeCharacterRenderHost :
             EndCharacterMove,
             NativeAnimationController.PlayClickAnimation,
             QueueCharacterPositionCommitted,
-            QueueRightClick);
+            QueueRightPress,
+            QueueRightRelease);
         _frameScheduler = new NativeFrameScheduler(
             _dispatcher,
             OnFrame,
@@ -74,7 +75,8 @@ public sealed class NativeCharacterRenderHost :
     public event Action<string>? CharacterLoadFailed;
     public event Action? CharactersStateChanged;
     public event Action<string, double, double>? CharacterPositionCommitted;
-    public event Action<string>? CharacterRightClicked;
+    public event Action<string>? CharacterRightPressed;
+    public event Action<string>? CharacterRightReleased;
 
     public bool IsCharacterLoading(string characterId) =>
         !_closed &&
@@ -89,7 +91,7 @@ public sealed class NativeCharacterRenderHost :
     public IReadOnlyList<string> GetAnimationNames(string characterId) =>
         !_closed &&
         _scene.TryGet(characterId, out NativeCharacterState? state)
-            ? state.Resource?.AnimationNames ?? state.CachedAnimationNames
+            ? state.CachedAnimationNames
             : Array.Empty<string>();
 
     public double GetMaxScale(string characterId) =>
@@ -347,6 +349,99 @@ public sealed class NativeCharacterRenderHost :
             repeat);
     }
 
+    public void PlayCharacterAnimationSequence(
+        string characterId,
+        IReadOnlyList<string> animations,
+        string? restoreAnimation,
+        bool loopLast,
+        IReadOnlyList<string>? parallelAnimations = null)
+    {
+        if (_closed ||
+            !_scene.TryGet(characterId, out NativeCharacterState? state) ||
+            state.Resource == null)
+        {
+            return;
+        }
+
+        state.TemporaryAnimationPlayback.Clear();
+        state.Resource.SetAnimationSequence(
+            animations,
+            restoreAnimation,
+            loopLast,
+            parallelAnimations);
+    }
+
+    public async Task PreloadBattleResourcesAsync(CharacterConfig character)
+    {
+        if (_closed || character.Battle == null)
+            return;
+
+        await InitializeAsync();
+        if (!_scene.TryGet(character.Id, out NativeCharacterState? state))
+            return;
+
+        await PreloadResourceSlotAsync(
+            state,
+            CharacterBattleStates.Aim,
+            character.Battle.Aim.CreateRenderConfig(character));
+        await PreloadResourceSlotAsync(
+            state,
+            CharacterBattleStates.Cover,
+            character.Battle.Cover.CreateRenderConfig(character));
+    }
+
+    public bool SetCharacterResourceState(
+        string characterId,
+        string resourceState,
+        string? idleAnimation)
+    {
+        if (_closed ||
+            !_scene.TryGet(characterId, out NativeCharacterState? state) ||
+            state.Resource == null)
+        {
+            return false;
+        }
+
+        if (state.ActiveResourceState.Equals(
+                resourceState,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            RestartResourceIdleAnimation(state, idleAnimation);
+            return true;
+        }
+
+        if (!state.ResourceSlots.Remove(
+                resourceState,
+                out NativeCharacterLoadResult target))
+        {
+            AppLogger.Write(
+                nameof(NativeCharacterRenderHost),
+                $"resource-state-switch-missed id={characterId} " +
+                $"active={state.ActiveResourceState} target={resourceState}");
+            return false;
+        }
+
+        state.ResourceSlots[state.ActiveResourceState] =
+            new NativeCharacterLoadResult(
+                state.Resource,
+                state.SetupBounds,
+                state.Envelope);
+        state.Resource = target.Resource;
+        state.SetupBounds = target.Setup;
+        state.Envelope = target.Envelope;
+        state.ActiveResourceState = resourceState;
+        state.Resource.AnimationState.TimeScale =
+            (float)state.Config.AnimationSpeed;
+        RestartResourceIdleAnimation(state, idleAnimation);
+        state.HasCachedSilhouette = false;
+        state.CachedSilhouetteRuns.Clear();
+        _frameRenderer.UpdateSurfacePosition(state);
+        _frameRenderer.MarkCompositionDirty();
+        RenderFrame(0);
+        RefreshInputRegions();
+        return true;
+    }
+
     public void SetConfigMode(bool configMode)
     {
         if (_closed || _configMode == configMode)
@@ -360,6 +455,19 @@ public sealed class NativeCharacterRenderHost :
         {
             NativeAnimationController.SelectModeAnimation(state);
         }
+    }
+
+    private static void RestartResourceIdleAnimation(
+        NativeCharacterState state,
+        string? configuredAnimation)
+    {
+        NativeSpineResource resource = state.Resource!;
+        string? animation =
+            NativeAnimationController.SelectConfiguredOrIdleAnimationName(
+                configuredAnimation,
+                resource.AnimationNames);
+        state.TemporaryAnimationPlayback.Clear();
+        resource.SetAnimation(animation, true);
     }
 
     public void SetRenderDragEnabled(bool enabled)
@@ -532,7 +640,8 @@ public sealed class NativeCharacterRenderHost :
         CharacterLoadFailed = null;
         CharactersStateChanged = null;
         CharacterPositionCommitted = null;
-        CharacterRightClicked = null;
+        CharacterRightPressed = null;
+        CharacterRightReleased = null;
     }
 
     public void Dispose()
@@ -569,6 +678,7 @@ public sealed class NativeCharacterRenderHost :
                 }
 
                 current.Resource = loaded.Resource;
+                current.ActiveResourceState = CharacterDisplayModes.Normal;
                 current.CachedAnimationNames =
                     loaded.Resource.AnimationNames;
                 current.SetupBounds = loaded.Setup;
@@ -763,6 +873,12 @@ public sealed class NativeCharacterRenderHost :
         state.Surface = null;
         state.Resource?.Dispose();
         state.Resource = null;
+        foreach (NativeCharacterLoadResult slot in state.ResourceSlots.Values)
+        {
+            slot.Resource.Dispose();
+        }
+        state.ResourceSlots.Clear();
+        state.ActiveResourceState = CharacterDisplayModes.Normal;
         state.ResourceKey = string.Empty;
         state.TemporaryAnimationPlayback.Clear();
         _frameRenderer.PurgeUnusedTextures();
@@ -813,7 +929,51 @@ public sealed class NativeCharacterRenderHost :
         }
     }
 
-    private void QueueRightClick(string characterId)
+    private async Task PreloadResourceSlotAsync(
+        NativeCharacterState state,
+        string resourceState,
+        CharacterConfig resourceConfig)
+    {
+        if (state.ActiveResourceState.Equals(
+                resourceState,
+                StringComparison.OrdinalIgnoreCase) ||
+            state.ResourceSlots.ContainsKey(resourceState))
+        {
+            return;
+        }
+
+        NativeCharacterLoadResult loaded =
+            await NativeCharacterLoader.LoadAsync(
+                resourceConfig,
+                _lifetimeCancellation.Token);
+        await _dispatcher.InvokeAsync(() =>
+        {
+            if (_closed ||
+                !_scene.TryGet(state.Config.Id, out NativeCharacterState? current) ||
+                !ReferenceEquals(current, state) ||
+                current.ResourceSlots.ContainsKey(resourceState) ||
+                current.ActiveResourceState.Equals(
+                    resourceState,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                loaded.Resource.Dispose();
+                return;
+            }
+            loaded.Resource.AnimationState.TimeScale =
+                (float)current.Config.AnimationSpeed;
+            current.ResourceSlots[resourceState] = loaded;
+        });
+    }
+
+    private void QueueRightPress(string characterId) =>
+        QueueInputEvent(CharacterRightPressed, characterId);
+
+    private void QueueRightRelease(string characterId) =>
+        QueueInputEvent(CharacterRightReleased, characterId);
+
+    private void QueueInputEvent(
+        Action<string>? handler,
+        string characterId)
     {
         try
         {
@@ -822,7 +982,7 @@ public sealed class NativeCharacterRenderHost :
                 new Action(() =>
                 {
                     if (!_closed)
-                        CharacterRightClicked?.Invoke(characterId);
+                        handler?.Invoke(characterId);
                 }));
         }
         catch (InvalidOperationException)

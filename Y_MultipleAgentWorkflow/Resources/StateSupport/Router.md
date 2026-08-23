@@ -1,12 +1,11 @@
 # Resources State Support Router
 
 文档 ID：`RES-STATE-SUPPORT-ROUTER`  
-状态：`Proposal`  
-维护计数：`0/5`  
-最后更新：`2026-08-21`
+状态：`Active`
+维护计数：`4/5`
+最后更新：`2026-08-23`
 
-standing/aim/cover 多状态资源支持目前尚未实施。`Aim_Cover_Proposal.md`
-仅说明现状、限制与候选方案，不代表扫描、导入、配置或 GUI 已支持。
+standing/aim/cover 多状态资源、Battle 配置、射击附加轨、动画回退和输入规则统一读取
+`Aim_Cover_Proposal.md`。该文件保留旧文件名，但已升级为 Active 指南。
 
-任何实施任务都必须先核对实际代码，并由用户确认状态触发方式和范围。
 更新文档时短时使用 `workflow:Resources.StateSupport`。

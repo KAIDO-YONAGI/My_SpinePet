@@ -53,7 +53,7 @@ public sealed class CharacterResourceDiscoveryServiceTests : IDisposable
     }
 
     [Fact]
-    public void DiscoverGroupsSkinsAndIgnoresRetiredStateDirectories()
+    public void DiscoverGroupsSkinsAndIncludesBattleStateDirectories()
     {
         string characterDirectory =
             Path.Combine(_temporaryDirectory, "Anis Star");
@@ -88,17 +88,14 @@ public sealed class CharacterResourceDiscoveryServiceTests : IDisposable
             service.DiscoverAll(_temporaryDirectory);
 
         Assert.Equal(2, standing.Count);
-        Assert.Equal(2, all.Count);
-        Assert.All(
+        Assert.Equal(3, all.Count);
+        Assert.Contains(
             all,
-            resource => Assert.Equal(
-                CharacterResourceTypes.Standing,
-                resource.ResourceType));
-        Assert.DoesNotContain(
-            all,
-            resource => resource.SkeletonPath.Contains(
-                $"{Path.DirectorySeparatorChar}aim{Path.DirectorySeparatorChar}",
-                StringComparison.OrdinalIgnoreCase));
+            resource => resource.ResourceType == CharacterResourceTypes.Aim);
+        Assert.Equal(
+            2,
+            all.Count(resource =>
+                resource.ResourceType == CharacterResourceTypes.Standing));
     }
 
     [Fact]
@@ -122,7 +119,7 @@ public sealed class CharacterResourceDiscoveryServiceTests : IDisposable
     }
 
     [Fact]
-    public void DiscoverAllReadsLegacyStandingButIgnoresLegacyAim()
+    public void DiscoverAllReadsLegacyStandingAndAim()
     {
         string aimDirectory = Path.Combine(
             _temporaryDirectory,
@@ -138,15 +135,23 @@ public sealed class CharacterResourceDiscoveryServiceTests : IDisposable
             new Dictionary<string, string>());
         CharacterResourceDiscoveryService service = new(identityService);
 
-        CharacterResourceFiles resource = Assert.Single(
-            service.DiscoverAll(_temporaryDirectory));
+        IReadOnlyList<CharacterResourceFiles> resources =
+            service.DiscoverAll(_temporaryDirectory);
 
-        Assert.Equal(CharacterResourceTypes.Standing, resource.ResourceType);
-        Assert.Equal("Legacy Hero", resource.Identity.DisplayName);
-        Assert.Equal("03", resource.Identity.SkinCode);
+        Assert.Equal(2, resources.Count);
+        CharacterResourceFiles standing = Assert.Single(
+            resources,
+            resource =>
+                resource.ResourceType == CharacterResourceTypes.Standing);
+        CharacterResourceFiles aim = Assert.Single(
+            resources,
+            resource => resource.ResourceType == CharacterResourceTypes.Aim);
+        Assert.Equal("Legacy Hero", standing.Identity.DisplayName);
+        Assert.Equal("03", standing.Identity.SkinCode);
         Assert.Equal(standingDirectory, Path.GetDirectoryName(
-            resource.SkeletonPath));
-        Assert.Null(service.DiscoverForSkeleton(
+            standing.SkeletonPath));
+        Assert.Equal(aimDirectory, Path.GetDirectoryName(aim.SkeletonPath));
+        Assert.NotNull(service.DiscoverForSkeleton(
             Path.Combine(aimDirectory, "c999_03.skel")));
     }
 

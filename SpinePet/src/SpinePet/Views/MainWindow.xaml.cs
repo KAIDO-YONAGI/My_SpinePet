@@ -35,6 +35,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
     private readonly CharacterResourceStorageService _resourceStorage = new();
     private readonly ObservableCollection<CharacterViewModel> _characters = new();
     private readonly ObservableCollection<string> _selectedAnimationNames = new();
+    private readonly ObservableCollection<string> _displaySelectionOptions = new();
     private CharacterPreviewNavigationController _previewNavigation = null!;
     private CharacterLibraryController _libraryController = null!;
     private CharacterSettingsController _settingsController = null!;
@@ -43,9 +44,11 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
     private TextBox _characterSearchBox = null!;
     private ListBox _characterCards = null!;
     private ComboBox _animationCombo = null!;
+    private ComboBox _displayModeCombo = null!;
     private Slider _speedSlider = null!;
     private Border _windowChrome = null!;
     private Button _addCharacterButton = null!;
+    private Button _importNikkeDbButton = null!;
     private Button _scanResourcesButton = null!;
     private Button _openResourceFolderButton = null!;
     private ComboBox _batchProcessingCombo = null!;
@@ -56,8 +59,11 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
     private Button _exitButton = null!;
     private CheckBox _allowDraggingToggle = null!;
     private bool _isRefreshingSelection;
+    private bool _isUpdatingDisplaySelection;
     private CharacterViewModel? _selectedCharacter;
     private string _selectedAnimation = string.Empty;
+    private string _selectedDisplayMode = CharacterDisplayModes.Normal;
+    private string _selectedBattleState = CharacterBattleStates.Cover;
     private double _selectedScale =
         CharacterSettingsDefaults.DefaultScale;
     private double _selectedScaleMax =
@@ -106,6 +112,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         CharacterManager characterManager,
         CharacterResourceDiscoveryService resourceDiscovery,
         UnityBundleImportService bundleImporter,
+        NikkeDbResourceImportService nikkeDbImporter,
         CharacterIconDownloadService? characterIconDownloader = null)
     {
         LoadView();
@@ -128,12 +135,16 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             RequireNamedElement<ListBox>("CharacterCards");
         _animationCombo =
             RequireNamedElement<ComboBox>("AnimationCombo");
+        _displayModeCombo =
+            RequireNamedElement<ComboBox>("DisplayModeCombo");
         _speedSlider =
             RequireNamedElement<Slider>("SpeedSlider");
         _windowChrome =
             RequireNamedElement<Border>("WindowChrome");
         _addCharacterButton =
             RequireNamedElement<Button>("AddCharacterButton");
+        _importNikkeDbButton =
+            RequireNamedElement<Button>("ImportNikkeDbButton");
         _scanResourcesButton =
             RequireNamedElement<Button>("ScanResourcesButton");
         _openResourceFolderButton =
@@ -174,6 +185,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             characterManager,
             resourceDiscovery,
             bundleImporter,
+            nikkeDbImporter,
             characterIconDownloader ?? new(),
             Characters,
             CharacterView,
@@ -236,6 +248,8 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             OnCharacterPositionChanged;
         _characterManager.CharacterRightClicked +=
             OnCharacterRightClicked;
+        _characterManager.CharacterBattleStateChanged +=
+            OnCharacterBattleStateChanged;
     }
 
     public ObservableCollection<CharacterViewModel> Characters =>
@@ -247,6 +261,9 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
 
     public ObservableCollection<string> SelectedAnimationNames =>
         _selectedAnimationNames;
+
+    public ObservableCollection<string> DisplaySelectionOptions =>
+        _displaySelectionOptions;
 
     public string CharacterSearchText
     {
@@ -323,6 +340,21 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
 
     public bool HasSelectedCharacter => SelectedCharacter != null;
 
+    public IReadOnlyList<string> DisplayModeOptions { get; } =
+        [CharacterDisplayModes.Normal, CharacterDisplayModes.Battle];
+
+    public IReadOnlyList<string> BattleStateOptions { get; } =
+        [CharacterBattleStates.Cover, CharacterBattleStates.Aim];
+
+    public bool HasSelectedBattle =>
+        FindSelectedCharacterConfig()?.Battle != null;
+
+    public bool IsDisplaySelectionEnabled =>
+        HasSelectedCharacter &&
+        (SelectedDisplayMode == CharacterDisplayModes.Battle
+            ? HasSelectedBattle
+            : _displaySelectionOptions.Count > 0);
+
     public string SelectedAnimation
     {
         get => _selectedAnimation;
@@ -334,6 +366,67 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             }
 
             _selectedAnimation = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedDisplaySelection));
+        }
+    }
+
+    public string SelectedDisplayMode
+    {
+        get => _selectedDisplayMode;
+        set
+        {
+            if (_selectedDisplayMode == value)
+                return;
+            _selectedDisplayMode = value;
+            OnPropertyChanged();
+            _isUpdatingDisplaySelection = true;
+            try
+            {
+                RefreshDisplaySelectionOptions();
+            }
+            finally
+            {
+                _isUpdatingDisplaySelection = false;
+            }
+        }
+    }
+
+    public string SelectedBattleState
+    {
+        get => _selectedBattleState;
+        set
+        {
+            if (_selectedBattleState == value)
+                return;
+            _selectedBattleState = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedDisplaySelection));
+        }
+    }
+
+    public string SelectedDisplaySelection
+    {
+        get => SelectedDisplayMode == CharacterDisplayModes.Battle
+            ? SelectedBattleState
+            : SelectedAnimation;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(value) ||
+                !_displaySelectionOptions.Contains(value))
+            {
+                return;
+            }
+
+            if (SelectedDisplayMode == CharacterDisplayModes.Battle)
+            {
+                SelectedBattleState = value;
+            }
+            else
+            {
+                SelectedAnimation = value;
+            }
+
             OnPropertyChanged();
         }
     }
@@ -535,6 +628,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         _windowChrome.MouseLeftButtonDown +=
             OnWindowChromeMouseLeftButtonDown;
         _addCharacterButton.Click += OnAddCharacter;
+        _importNikkeDbButton.Click += OnImportNikkeDb;
         _scanResourcesButton.Click += OnScanResources;
         _openResourceFolderButton.Click += OnOpenResourceFolder;
         _batchProcessingCombo.SelectionChanged += OnBatchProcessingChanged;
@@ -549,7 +643,8 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         _characterCards.AddHandler(
             Button.ClickEvent,
             new RoutedEventHandler(OnCharacterCardButtonClick));
-        _animationCombo.SelectionChanged += OnAnimationChanged;
+        _animationCombo.SelectionChanged += OnDisplaySelectionChanged;
+        _displayModeCombo.SelectionChanged += OnDisplayModeChanged;
         _speedSlider.ValueChanged += OnSpeedChanged;
         _allowDraggingToggle.Loaded += OnDragToggleLoaded;
         _allowDraggingToggle.Checked += OnDragToggleStateChanged;
@@ -698,6 +793,9 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         _ = _libraryController.AddCharacterAsync(
             sender as Button);
 
+    private void OnImportNikkeDb(object sender, RoutedEventArgs e) =>
+        _libraryController.ImportFromNikkeDb();
+
     private void OnScanResources(object sender, RoutedEventArgs e) =>
         _ = _libraryController.ScanResourcesAsync(
             sender as Button);
@@ -771,10 +869,113 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
     private void OnResetSpeed(object sender, RoutedEventArgs e) =>
         _settingsController.ResetSpeed();
 
-    private void OnAnimationChanged(
+    private async void OnDisplaySelectionChanged(
         object sender,
-        SelectionChangedEventArgs e) =>
-        _settingsController.HandleAnimationChanged(sender, e);
+        SelectionChangedEventArgs e)
+    {
+        if (_isRefreshingSelection ||
+            _isUpdatingDisplaySelection ||
+            FindSelectedCharacterConfig() is not { } character)
+        {
+            return;
+        }
+
+        string? selection = e.AddedItems
+            .OfType<string>()
+            .LastOrDefault() ??
+            _animationCombo.SelectedItem as string;
+        if (string.IsNullOrWhiteSpace(selection) ||
+            !DisplaySelectionOptions.Contains(selection))
+        {
+            return;
+        }
+
+        if (SelectedDisplayMode == CharacterDisplayModes.Normal)
+        {
+            if (string.Equals(
+                    character.ConfiguredAnimation,
+                    selection,
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            SelectedAnimation = selection;
+            _settingsController.HandleAnimationChanged(sender, e);
+            return;
+        }
+
+        if (!BattleStateOptions.Contains(selection) ||
+            string.Equals(
+                _characterManager.GetCharacterBattleState(character.Id),
+                selection,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        SelectedBattleState = selection;
+        try
+        {
+            bool switched =
+                await _characterManager.SetCharacterBattleStateAsync(
+                    character,
+                    selection);
+            if (!switched)
+                SyncSelectedCharacterSettings();
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Write(
+                nameof(MainWindow),
+                $"battle-state-switch-failed id={character.Id} " +
+                $"message={exception.Message}");
+            SyncSelectedCharacterSettings();
+        }
+    }
+
+    private async void OnDisplayModeChanged(
+        object sender,
+        SelectionChangedEventArgs e)
+    {
+        if (_isRefreshingSelection ||
+            FindSelectedCharacterConfig() is not { } character)
+        {
+            return;
+        }
+
+        string? mode = e.AddedItems
+            .OfType<string>()
+            .LastOrDefault() ??
+            _displayModeCombo.SelectedItem as string;
+        if (string.IsNullOrWhiteSpace(mode) ||
+            !DisplayModeOptions.Contains(mode) ||
+            string.Equals(
+                _characterManager.GetCharacterDisplayMode(character.Id),
+                mode,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            bool switched =
+                await _characterManager.SetCharacterDisplayModeAsync(
+                    character,
+                    mode);
+            if (!switched)
+                SyncSelectedCharacterSettings();
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Write(
+                nameof(MainWindow),
+                $"display-mode-switch-failed id={character.Id} " +
+                $"message={exception.Message}");
+            SyncSelectedCharacterSettings();
+        }
+    }
 
     private async void OnDeleteSelectedSkin(
         object sender,
@@ -830,6 +1031,8 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             OnCharacterPositionChanged;
         _characterManager.CharacterRightClicked -=
             OnCharacterRightClicked;
+        _characterManager.CharacterBattleStateChanged -=
+            OnCharacterBattleStateChanged;
         Dispose();
     }
 
@@ -858,8 +1061,70 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         character.PositionY = (int)top;
     }
 
-    private void SyncSelectedCharacterSettings() =>
+    private void SyncSelectedCharacterSettings()
+    {
         _settingsController?.SyncSelectedCharacterSettings();
+        _isRefreshingSelection = true;
+        try
+        {
+            CharacterConfig? character = FindSelectedCharacterConfig();
+            SelectedDisplayMode = character == null
+                ? CharacterDisplayModes.Normal
+                : _characterManager.GetCharacterDisplayMode(character.Id);
+            SelectedBattleState = character == null
+                ? CharacterBattleStates.Cover
+                : _characterManager.GetCharacterBattleState(character.Id);
+            OnPropertyChanged(nameof(HasSelectedBattle));
+            RefreshDisplaySelectionOptions();
+        }
+        finally
+        {
+            _isRefreshingSelection = false;
+        }
+    }
+
+    private void OnCharacterBattleStateChanged(
+        string characterId,
+        string mode,
+        string battleState)
+    {
+        if (SelectedCharacter?.Id != characterId)
+            return;
+
+        _isRefreshingSelection = true;
+        try
+        {
+            SelectedDisplayMode = mode;
+            SelectedBattleState = battleState;
+            RefreshDisplaySelectionOptions();
+        }
+        finally
+        {
+            _isRefreshingSelection = false;
+        }
+    }
+
+    private CharacterConfig? FindSelectedCharacterConfig() =>
+        SelectedCharacter == null
+            ? null
+            : _characterManager.Characters.FirstOrDefault(
+                character => character.Id == SelectedCharacter.Id);
+
+    private void RefreshDisplaySelectionOptions()
+    {
+        _displaySelectionOptions.Clear();
+        IEnumerable<string> options =
+            SelectedDisplayMode == CharacterDisplayModes.Battle
+                ? BattleStateOptions
+                : SelectedAnimationNames;
+        foreach (string option in options)
+        {
+            _displaySelectionOptions.Add(option);
+        }
+
+        OnPropertyChanged(nameof(SelectedDisplaySelection));
+        OnPropertyChanged(nameof(IsDisplaySelectionEnabled));
+    }
 
     private void NotifySearchResultsChanged()
     {

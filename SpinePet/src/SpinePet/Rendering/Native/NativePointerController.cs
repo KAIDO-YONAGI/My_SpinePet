@@ -8,6 +8,7 @@ internal sealed class NativePointerController
     private const int WmLeftButtonDown = 0x0201;
     private const int WmLeftButtonUp = 0x0202;
     private const int WmRightButtonDown = 0x0204;
+    private const int WmRightButtonUp = 0x0205;
     private const int WmCaptureChanged = 0x0215;
 
     private readonly NativeCharacterScene _scene;
@@ -17,7 +18,9 @@ internal sealed class NativePointerController
     private readonly Action _endMove;
     private readonly Action<NativeCharacterState> _playClickAnimation;
     private readonly Action<string, double, double> _positionCommitted;
-    private readonly Action<string> _rightClicked;
+    private readonly Action<string> _rightPressed;
+    private readonly Action<string> _rightReleased;
+    private string? _rightCharacterId;
     private string? _characterId;
     private NativePoint _start;
     private NativePoint _latest;
@@ -35,7 +38,8 @@ internal sealed class NativePointerController
         Action endMove,
         Action<NativeCharacterState> playClickAnimation,
         Action<string, double, double> positionCommitted,
-        Action<string> rightClicked)
+        Action<string> rightPressed,
+        Action<string> rightReleased)
     {
         _scene = scene;
         _getWindow = getWindow;
@@ -44,7 +48,8 @@ internal sealed class NativePointerController
         _endMove = endMove;
         _playClickAnimation = playClickAnimation;
         _positionCommitted = positionCommitted;
-        _rightClicked = rightClicked;
+        _rightPressed = rightPressed;
+        _rightReleased = rightReleased;
     }
 
     public bool IsDragging => _dragging;
@@ -61,6 +66,7 @@ internal sealed class NativePointerController
         int message = checked((int)nativeMessage);
         if (message != WmLeftButtonDown &&
             message != WmRightButtonDown &&
+            message != WmRightButtonUp &&
             message != WmMouseMove &&
             message != WmLeftButtonUp &&
             message != WmCaptureChanged)
@@ -77,10 +83,17 @@ internal sealed class NativePointerController
                     _getWindow(),
                     point.X,
                     point.Y,
-                    out NativeCharacterState? rightClickedState))
+                out NativeCharacterState? rightClickedState))
             {
-                _rightClicked(rightClickedState.Config.Id);
+                _rightCharacterId = rightClickedState.Config.Id;
+                _rightPressed(_rightCharacterId);
             }
+            return;
+        }
+
+        if (message == WmRightButtonUp)
+        {
+            ReleaseRight();
             return;
         }
 
@@ -157,8 +170,12 @@ internal sealed class NativePointerController
             return;
         }
 
-        if (_characterId != null && message == WmCaptureChanged)
-            Cancel(commitPosition: true);
+        if (message == WmCaptureChanged)
+        {
+            if (_characterId != null)
+                Cancel(commitPosition: true);
+            ReleaseRight();
+        }
     }
 
     public void FlushPendingMove()
@@ -188,6 +205,13 @@ internal sealed class NativePointerController
         {
             Cancel(commitPosition: false);
         }
+        if (string.Equals(
+                _rightCharacterId,
+                characterId,
+                StringComparison.Ordinal))
+        {
+            ReleaseRight();
+        }
     }
 
     public void Cancel(bool commitPosition)
@@ -215,6 +239,7 @@ internal sealed class NativePointerController
         }
 
         Reset();
+        ReleaseRight();
     }
 
     private void Reset()
@@ -222,6 +247,16 @@ internal sealed class NativePointerController
         _characterId = null;
         _dragging = false;
         _movePending = false;
+    }
+
+    private void ReleaseRight()
+    {
+        string? characterId = _rightCharacterId;
+        _rightCharacterId = null;
+        if (characterId != null)
+        {
+            _rightReleased(characterId);
+        }
     }
 
     private readonly record struct NativePoint(int X, int Y);

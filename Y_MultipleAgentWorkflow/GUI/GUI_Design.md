@@ -14,7 +14,7 @@ WPF 配置面板和独立的原生 Spine 桌面渲染层组成；第 6、7 节�
 |---|---|---|
 | 配置窗口 | 无边框、置顶、可缩放的深色窗口；默认宽 1020，启动时贴齐工作区右上方，高度约为工作区的 60% | `MainWindow.xaml`、`MainWindowLifecycleController.cs` |
 | 左侧角色库 | 两列角色卡片，包含自适应缩略图、角色名、显示状态、Show/Hide 和 Position 操作；卡片不显示 Skin 文本 | `MainWindow.xaml`、`CharacterViewModel.cs` |
-| 右侧详情栏 | 固定 300 宽，显示当前角色名与 Skin，并提供动画、全局设置、缩放、速度和删除 Skin 等控件 | `MainWindow.xaml`、`CharacterSettingsController.cs` |
+| 右侧详情栏 | 固定 300 宽，显示当前角色名与 Skin，并提供 Mode 联动动画/战斗状态选择、全局设置、缩放、速度和删除 Skin 等控件 | `MainWindow.xaml`、`CharacterSettingsController.cs` |
 | 窗口操作 | 拖动空白区域可移动窗口，边缘可调整大小；Finish Configuration、Alt+F4 或关闭动作会保存状态并隐藏面板 | `MainWindow.xaml.cs`、`MainWindowLifecycleController.cs` |
 
 ## 2. 左侧角色库
@@ -38,7 +38,8 @@ WPF 配置面板和独立的原生 Spine 桌面渲染层组成；第 6、7 节�
 | 功能 | 具体实现 | 状态 |
 |---|---|---|
 | 当前角色 | 显示所选角色名和当前 Skin；未选择时显示空状态 | 已实现 |
-| 动画 | 下拉框列出骨骼动画；选择后立即循环播放并保存为该角色的配置动画 | 已实现 |
+| Normal/Battle | 完整 Aim/Cover 角色可手动切换；启动及首次展示为 Normal，进入 Battle 默认 Cover；模式不持久化 | 已实现 |
+| Mode 联动选择 | Mode 与右侧选择框同一行；Normal 显示 standing 资源的真实动画名，选择后立即循环播放并保存；Battle 仅显示 `Cover`、`Aim`，继续使用现有 Battle 状态逻辑；无 Battle 资源时 Mode 禁用 | 已实现 |
 | Desktop frame rate | 提供 30、60、120 FPS 三档，标注为 `Global Setting`，立即应用并持久化 | 已实现 |
 | Allow dragging | iOS 风格开关，标注为 `Global Setting`；控制渲染模式是否允许拖动全部角色 | 已实现 |
 | Scale 基础比例 | 0%–100% 表示基础缩放范围 0–0.2，显示整数百分比 | 已实现 |
@@ -54,7 +55,8 @@ WPF 配置面板和独立的原生 Spine 桌面渲染层组成；第 6、7 节�
 |---|---|---|
 | 左键点击 | 命中角色且未形成拖动时，按 `action`、`click`、`touch` 等优先名称临时覆盖当前动画；播放结束后从头重放当前配置动画，未配置时重放默认待机动画，保证动作与待机状态完整衔接 | 已实现 |
 | 左键拖动 | 全局拖动开关开启后，超过系统拖动阈值即移动角色；释放时提交并保存新位置，动画播放保持连续 | 已实现 |
-| 右键角色 | 面板关闭时打开面板、必要时清除搜索，并选中且居中显示对应左侧条目；面板已打开时保存并关闭面板 | 已实现 |
+| 右键短按 | Normal、无 Battle 的角色，或 Battle 中未满 300ms 时，保持原面板打开/关闭与角色定位行为 | 已实现 |
+| Battle 右键长按 | Battle 中按住满 300ms 切 Aim，按 `to_aim -> aim_fire` 连续播放；松开或捕获丢失切 Cover，按 `to_cover -> 换弹 -> cover idle` 回落 | 已实现 |
 | 配置模式 | 面板开启期间渲染层进入配置模式；完成配置后隐藏面板并恢复桌面交互模式 | 已实现 |
 
 ## 5. 资源与应用入口
@@ -62,24 +64,28 @@ WPF 配置面板和独立的原生 Spine 桌面渲染层组成；第 6、7 节�
 | 功能 | 具体实现 | 状态 |
 |---|---|---|
 | Add | 文件选择器接受 `.skel` 或符合命名规则的 UnityFS bundle；导入 standing 资源后尝试自动补齐角色图标 | 已实现 |
-| Scan | 扫描 `res`，同步新增、删除和 Skin 变化；可见角色资源改变时尝试即时重载；连续扫描无变化时不保存、不通知也不移除渲染资源 | 已实现 |
+| DB | 输入精确 nikkedb 资源编号；standing 必须导入，Aim/Cover 仅在双方完整时成对导入 | 已实现 |
+| Scan | 扫描 `res`，按角色、Skin、状态同步；完整 Aim/Cover 自动补写 Battle，残缺或失效组合清除 Battle；连续扫描无变化时不保存、不通知也不移除渲染资源 | 已实现 |
 | 新卡默认配置 | Add 或 Scan 新建的角色卡默认保持 Hidden，不自动打开；Scale 基础比例为 100%，倍率为 1.0，对应最终缩放 0.2 | 已实现 |
 | Folder | 创建并打开当前生效的 `res` 资源目录 | 已实现 |
 | 托盘菜单 | 双击托盘图标打开面板；菜单提供 Open Panel、Show All、Hide All、Exit | 已实现 |
 | 重复启动 | 同一 EXE 目录只保留一个实例并激活已有面板；不同 EXE 目录使用不同互斥锁，可同时运行 | 已实现 |
 | 紧急退出 | 全局快捷键 Ctrl+Alt+Shift+F12 请求退出；界面线程失去响应时会强制结束进程 | 已实现 |
-| 状态持久化 | 保存角色显隐、位置、缩放分量、用户在 Animation 下拉框选择的常驻动画、速度，以及帧率、拖动和预览尺寸等全局设置；点击等临时动画不覆盖该选择 | 已实现 |
+| 状态持久化 | 保存角色显隐、位置、缩放分量、Normal 常驻动画、速度，以及帧率、拖动、预览尺寸和 Battle 资源规则；活动模式与 Cover/Aim 状态不持久化 | 已实现 |
 
 ## 6. 实现分层与渲染引擎边界
 
 - `Views/MainWindow.xaml`：布局、控件、绑定、视觉状态和无障碍文本。
 - `Views/MainWindow.xaml.cs`：视图装配、事件路由、属性绑定和窗口命中测试。
-- `Views/CharacterLibraryController.cs`：搜索、导入、扫描、显隐、Skin 切换和列表同步。
+- `Views/CharacterLibraryController.cs`：搜索、Add/DB 导入、扫描、显隐、
+  Skin 切换和列表同步。
 - `Views/CharacterSettingsController.cs`：动画、缩放、速度、位置和 Skin 删除。
 - `Views/CharacterPreviewNavigationController.cs`：选择、定位、滚动跟随与边界滚轮规则。
 - `Views/CharacterPanelActivationController.cs`：桌面角色右键打开/关闭面板的流程。
 - `Services/CharacterResourceCoordinator.cs`：以纯计算方式匹配资源并生成同步差异。
 - `Services/CharacterManager.cs`：应用角色状态差异、持久化并发送通知。
+- `Services/NikkeDbResourceImportService.cs`、`CharacterBattleConfigFactory.cs`：
+  精确编号导入、三状态归组、Battle 完整性和动画回退配置。
 - `Services/ConfigNormalizer.cs`、`ConfigFileCommitter.cs`：配置规范化、版本排序和原子磁盘提交。
 - `Rendering/Native/NativeCharacterRenderHost.cs`：保持 `ICharacterRenderHost` 的门面，
   负责 Dispatcher 线程边界、生命周期、事件转发和组件装配，不再直接承载全部渲染细节。
@@ -102,7 +108,8 @@ WPF 配置面板和独立的原生 Spine 桌面渲染层组成；第 6、7 节�
 
 上述新增类型均为 `internal`。依赖方向固定为“门面 → 协调组件 → 原生资源”，
 WPF 控件、配置服务和第三方 `SpineRuntime41` 不反向依赖渲染内部组件。公开的
-`ICharacterRenderHost`、管理器方法签名、渲染事件和导入冲突语义保持不变。
+渲染事件和导入冲突语义保持不变；`ICharacterRenderHost` 的资源状态切换
+必须返回实际成功结果，管理器和界面不得在渲染失败时提前提交显示状态。
 
 ## 7. 状态协调与生命周期
 
@@ -126,6 +133,18 @@ WPF 控件、配置服务和第三方 `SpineRuntime41` 不反向依赖渲染内�
   与轮廓缓存，最后释放原生窗口和图形资源。关闭后的回调及重复关闭均为空操作。
 - 配置同步与异步保存共用同一原子提交路径；旧版本不能覆盖新版本，相同内容
   不替换磁盘文件，成功提交后统一清除 `RequiresRewrite`。
+- Mode 与 Cover/Aim 是角色运行时状态。角色隐藏、移除、卸载或应用
+  重启时清除；再次展示仍从 Normal/standing 开始。
+- Battle 资源在首次进入时预加载。右键释放和 `WM_CAPTURECHANGED` 共用幂等
+  回 Cover 路径，避免 Aim 或连续开火卡住。
+- Normal/Battle 或 Cover/Aim 只有在渲染层已取得目标资源槽并完成交换后才
+  更新运行时状态。目标槽缺失、宿主关闭或资源不可用时，管理器保留最后一个
+  已渲染状态，界面同步回滚，不得显示虚假的 Normal 或 Battle。
+- 切回 Normal 时清除临时与附加动画轨，并从第 0 帧循环 standing 的
+  `ConfiguredAnimation`；配置无效时按 `idle -> idle* -> 第一动画` 回退。
+- 当前资源和 standing/aim/cover 非活动资源槽都属于存活资源。纹理清理必须
+  汇总全部槽位；若 GPU 缓存因设备或清理流程丢失，CPU 资源允许从原贴图重新
+  解码上传，不得因一次性像素缓存耗尽而让整条渲染帧永久失败。
 
 ## 8. 渲染热路径效率约束
 

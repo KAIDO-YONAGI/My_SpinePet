@@ -25,6 +25,7 @@ internal sealed class CharacterLibraryController
     private readonly CharacterManager _characterManager;
     private readonly CharacterResourceDiscoveryService _resourceDiscovery;
     private readonly UnityBundleImportService _bundleImporter;
+    private readonly NikkeDbResourceImportService _nikkeDbImporter;
     private readonly CharacterIconDownloadService _characterIconDownloader;
     private readonly ObservableCollection<CharacterViewModel> _characters;
     private readonly ICollectionView _characterView;
@@ -43,11 +44,13 @@ internal sealed class CharacterLibraryController
         new(StringComparer.Ordinal);
     private readonly Dictionary<string, CharacterResourceFiles> _knownResources =
         new(StringComparer.OrdinalIgnoreCase);
+    private IReadOnlyList<CharacterResourceFiles> _knownAllResources = [];
 
     public CharacterLibraryController(
         CharacterManager characterManager,
         CharacterResourceDiscoveryService resourceDiscovery,
         UnityBundleImportService bundleImporter,
+        NikkeDbResourceImportService nikkeDbImporter,
         CharacterIconDownloadService characterIconDownloader,
         ObservableCollection<CharacterViewModel> characters,
         ICollectionView characterView,
@@ -66,6 +69,7 @@ internal sealed class CharacterLibraryController
         _characterManager = characterManager;
         _resourceDiscovery = resourceDiscovery;
         _bundleImporter = bundleImporter;
+        _nikkeDbImporter = nikkeDbImporter;
         _characterIconDownloader = characterIconDownloader;
         _characters = characters;
         _characterView = characterView;
@@ -89,9 +93,14 @@ internal sealed class CharacterLibraryController
 
     public void RefreshKnownResources()
     {
+        _knownAllResources =
+            _resourceDiscovery.DiscoverAll(AppPaths.ResourceDirectory);
         Dictionary<string, CharacterResourceFiles> discovered =
-            _resourceDiscovery
-                .DiscoverAll(AppPaths.ResourceDirectory)
+            _knownAllResources
+                .Where(resource => string.Equals(
+                    resource.ResourceType,
+                    CharacterResourceTypes.Standing,
+                    StringComparison.OrdinalIgnoreCase))
                 .GroupBy(
                     resource => resource.Identity.ResourceName,
                     StringComparer.OrdinalIgnoreCase)
@@ -311,6 +320,52 @@ internal sealed class CharacterLibraryController
         }
     }
 
+    public void ImportFromNikkeDb()
+    {
+        string resourceId = Microsoft.VisualBasic.Interaction.InputBox(
+            "Enter the exact NikkeDB resource ID.",
+            "Import from NikkeDB",
+            string.Empty);
+        if (string.IsNullOrWhiteSpace(resourceId))
+            return;
+
+        try
+        {
+            NikkeDbImportResult result = _nikkeDbImporter.Import(
+                resourceId,
+                AppPaths.NikkeDbDirectory,
+                AppPaths.ResourceDirectory,
+                _lifetimeToken);
+            RefreshKnownResources();
+            SynchronizeKnownResources();
+            RefreshCharacterList();
+            string battleMessage = result.BattleImported
+                ? "Standing, Aim, and Cover were imported."
+                : "Standing was imported. Battle was skipped because Aim " +
+                  "and Cover were not both complete.";
+            MessageBox.Show(
+                _owner,
+                $"{battleMessage}{Environment.NewLine}" +
+                result.DestinationDirectory,
+                "NikkeDB Import Complete",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Write(
+                nameof(CharacterLibraryController),
+                $"nikkedb-import-failed id={resourceId} " +
+                $"message={exception.Message}");
+            MessageBox.Show(
+                _owner,
+                exception.Message,
+                "NikkeDB Import Failed",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+        }
+    }
+
     public async Task ScanResourcesAsync(Button? scanButton)
     {
         if (scanButton != null)
@@ -418,7 +473,7 @@ internal sealed class CharacterLibraryController
 
     public CharacterResourceSynchronizationResult SynchronizeKnownResources() =>
         _characterManager.SynchronizeResources(
-            _knownResources.Values,
+            _knownAllResources,
             AppPaths.ResourceDirectory);
 
     public void ImportSkeleton(string skeletonPath)

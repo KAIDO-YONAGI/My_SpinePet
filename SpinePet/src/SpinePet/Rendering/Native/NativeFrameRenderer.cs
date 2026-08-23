@@ -180,14 +180,42 @@ internal sealed class NativeFrameRenderer
         if (graphics == null)
             return;
 
-        HashSet<string> activePaths = new(
-            _scene.States
-                .Where(state => state.Resource != null)
-                .SelectMany(state =>
-                    state.Resource!.TextureLoader.Textures)
-                .Select(texture => texture.Path),
-            StringComparer.OrdinalIgnoreCase);
+        HashSet<string> activePaths =
+            CollectRetainedTexturePaths(_scene.States);
         graphics.PurgeTextures(activePaths);
+    }
+
+    internal static HashSet<string> CollectRetainedTexturePaths(
+        IEnumerable<NativeCharacterState> states)
+    {
+        HashSet<string> paths =
+            new(StringComparer.OrdinalIgnoreCase);
+        foreach (NativeCharacterState state in states)
+        {
+            if (state.Resource != null)
+            {
+                AddTexturePaths(paths, state.Resource);
+            }
+
+            foreach (NativeCharacterLoadResult slot in
+                     state.ResourceSlots.Values)
+            {
+                AddTexturePaths(paths, slot.Resource);
+            }
+        }
+
+        return paths;
+    }
+
+    private static void AddTexturePaths(
+        HashSet<string> paths,
+        NativeSpineResource resource)
+    {
+        foreach (NativeTextureSource texture in
+                 resource.TextureLoader.Textures)
+        {
+            paths.Add(texture.Path);
+        }
     }
 
     private static void UpdateScreenBounds(

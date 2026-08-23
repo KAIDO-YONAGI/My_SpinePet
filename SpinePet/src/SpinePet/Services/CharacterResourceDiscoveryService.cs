@@ -131,7 +131,7 @@ public sealed class CharacterResourceDiscoveryService
 
         return TryCreateForSkeleton(
             skeletonPath,
-            CharacterResourceTypes.Standing);
+            resolvedType);
     }
 
     private IEnumerable<string> EnumerateDirectories(string directory) =>
@@ -227,7 +227,7 @@ public sealed class CharacterResourceDiscoveryService
             atlasPath,
             texturePaths[0],
             texturePaths.Skip(1).ToArray(),
-            CharacterResourceTypes.Standing,
+            resourceType,
             identity);
     }
 
@@ -293,10 +293,12 @@ public sealed class CharacterResourceDiscoveryService
             return CharacterResourceTypes.Standing;
         }
 
-        // These retired directories can remain on disk, but must not be
-        // treated as standing resources when a user browses to a .skel file.
-        return directoryName.Equals("aim", StringComparison.OrdinalIgnoreCase) ||
-            directoryName.Equals("cover", StringComparison.OrdinalIgnoreCase)
+        return directoryName.Equals(
+                   CharacterResourceTypes.Aim,
+                   StringComparison.OrdinalIgnoreCase) ||
+            directoryName.Equals(
+                CharacterResourceTypes.Cover,
+                StringComparison.OrdinalIgnoreCase)
                 ? directoryName
                 : CharacterResourceTypes.Standing;
     }

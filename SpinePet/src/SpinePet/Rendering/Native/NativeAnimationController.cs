@@ -1,4 +1,5 @@
 using Spine;
+using SpinePet.Models;
 
 namespace SpinePet.Rendering.Native;
 
@@ -7,6 +8,9 @@ internal static class NativeAnimationController
 {
     public static void SelectModeAnimation(NativeCharacterState state)
     {
+        if (!ShouldSelectModeAnimation(state.ActiveResourceState))
+            return;
+
         NativeSpineResource? resource = state.Resource;
         if (resource == null)
             return;
@@ -31,6 +35,11 @@ internal static class NativeAnimationController
                 repeat: true);
         }
     }
+
+    internal static bool ShouldSelectModeAnimation(string resourceState) =>
+        resourceState.Equals(
+            CharacterDisplayModes.Normal,
+            StringComparison.OrdinalIgnoreCase);
 
     public static void PlayClickAnimation(NativeCharacterState state)
     {

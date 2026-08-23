@@ -43,4 +43,7 @@ public sealed class CharacterConfig
 
     public double AnimationSpeed { get; set; } = DefaultAnimationSpeed;
     public bool Visible { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CharacterBattleConfig? Battle { get; set; }
 }

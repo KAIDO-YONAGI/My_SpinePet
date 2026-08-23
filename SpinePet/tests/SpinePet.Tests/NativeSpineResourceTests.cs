@@ -160,7 +160,7 @@ public sealed class NativeSpineResourceTests
     }
 
     [Fact]
-    public void LoadStraightAlphaTexturePremultipliesGpuUploadOnlyOnce()
+    public void TexturePixelsCanBeRehydratedAfterGpuCacheEviction()
     {
         string path = Path.Combine(
             Path.GetTempPath(),
@@ -190,6 +190,12 @@ public sealed class NativeSpineResourceTests
                 new byte[] { 100, 50, 25, 128 },
                 straight.CopyBgraPixels());
             Assert.Equal(
+                new byte[] { 100, 50, 25, 128 },
+                straight.CopyBgraPixels());
+            Assert.Equal(
+                new byte[] { 200, 100, 50, 128 },
+                premultiplied.CopyBgraPixels());
+            Assert.Equal(
                 new byte[] { 200, 100, 50, 128 },
                 premultiplied.CopyBgraPixels());
         }
@@ -198,6 +204,58 @@ public sealed class NativeSpineResourceTests
             if (File.Exists(path))
                 File.Delete(path);
         }
+    }
+
+    [Fact]
+    public void TexturePurgeRetainsInactiveResourceSlots()
+    {
+        string repositoryRoot = FindRepositoryRoot();
+        string resourceRoot = Path.Combine(repositoryRoot, "res");
+        if (!Directory.Exists(resourceRoot))
+            return;
+
+        CharacterResourceFiles[] installedResources =
+            new CharacterResourceDiscoveryService()
+                .DiscoverAll(resourceRoot)
+                .Take(2)
+                .ToArray();
+        if (installedResources.Length < 2)
+            return;
+
+        CharacterConfig activeConfig = new()
+        {
+            AtlasPath = installedResources[0].AtlasPath,
+            SkeletonPath = installedResources[0].SkeletonPath
+        };
+        CharacterConfig retainedConfig = new()
+        {
+            AtlasPath = installedResources[1].AtlasPath,
+            SkeletonPath = installedResources[1].SkeletonPath
+        };
+        NativeSpineResource active =
+            NativeSpineResource.Load(activeConfig);
+        NativeSpineResource retained =
+            NativeSpineResource.Load(retainedConfig);
+        using NativeCharacterState state = new()
+        {
+            Config = activeConfig,
+            Resource = active
+        };
+        state.ResourceSlots[CharacterBattleStates.Cover] =
+            new NativeCharacterLoadResult(
+                retained,
+                NativeSpineBounds.Empty,
+                NativeSpineBounds.Empty);
+
+        HashSet<string> paths =
+            NativeFrameRenderer.CollectRetainedTexturePaths([state]);
+
+        Assert.All(
+            active.TextureLoader.Textures,
+            texture => Assert.Contains(texture.Path, paths));
+        Assert.All(
+            retained.TextureLoader.Textures,
+            texture => Assert.Contains(texture.Path, paths));
     }
 
     [Fact]
@@ -290,6 +348,152 @@ public sealed class NativeSpineResourceTests
         using NativeSpineResource resource = NativeSpineResource.Load(config);
 
         Assert.Equal(0, resource.AnimationStateData.DefaultMix);
+    }
+
+    [Fact]
+    public void CoverReloadSequenceRestoresLoopingCoverIdle()
+    {
+        string repositoryRoot = FindRepositoryRoot();
+        string coverDirectory = Path.Combine(
+            repositoryRoot,
+            "res",
+            "Anis Star",
+            "00",
+            CharacterResourceTypes.Cover);
+        string skeletonPath = Directory.Exists(coverDirectory)
+            ? Directory.EnumerateFiles(coverDirectory, "*.skel").FirstOrDefault()
+                ?? string.Empty
+            : string.Empty;
+        string atlasPath = Directory.Exists(coverDirectory)
+            ? Directory.EnumerateFiles(coverDirectory, "*.atlas").FirstOrDefault()
+                ?? string.Empty
+            : string.Empty;
+        if (!File.Exists(skeletonPath) || !File.Exists(atlasPath))
+            return;
+
+        using NativeSpineResource resource = NativeSpineResource.Load(
+            new CharacterConfig
+            {
+                AtlasPath = atlasPath,
+                SkeletonPath = skeletonPath
+            });
+        resource.SetAnimationSequence(
+            ["to_cover", "cover_reload"],
+            "cover_idle",
+            loopLast: false);
+
+        float sequenceDuration = resource.SkeletonData
+            .FindAnimation("to_cover")!.Duration +
+            resource.SkeletonData.FindAnimation("cover_reload")!.Duration;
+        for (float elapsed = 0;
+             elapsed < sequenceDuration + 0.5f;
+             elapsed += 1f / 60f)
+        {
+            resource.Update(1f / 60f);
+        }
+
+        TrackEntry current = Assert.IsType<TrackEntry>(
+            resource.AnimationState.GetCurrent(0));
+        Assert.Equal("cover_idle", current.Animation.Name);
+        Assert.True(current.Loop);
+        Assert.Null(current.Next);
+    }
+
+    [Fact]
+    public void AimFireEffectsStartAfterTransitionAndClearWithStateChange()
+    {
+        string repositoryRoot = FindRepositoryRoot();
+        string aimDirectory = Path.Combine(
+            repositoryRoot,
+            "res",
+            "Laplace Neo",
+            "00",
+            CharacterResourceTypes.Aim);
+        string skeletonPath = Path.Combine(
+            aimDirectory,
+            "c103_aim_00.skel");
+        string atlasPath = Path.Combine(
+            aimDirectory,
+            "c103_aim_00.atlas");
+        if (!File.Exists(skeletonPath) || !File.Exists(atlasPath))
+            return;
+
+        using NativeSpineResource resource = NativeSpineResource.Load(
+            new CharacterConfig
+            {
+                AtlasPath = atlasPath,
+                SkeletonPath = skeletonPath
+            });
+        resource.SetAnimationSequence(
+            ["to_aim", "aim_fire"],
+            restoreAnimation: null,
+            loopLast: true,
+            parallelAnimations: ["aim_fire_hair"]);
+
+        TrackEntry baseTrack = Assert.IsType<TrackEntry>(
+            resource.AnimationState.GetCurrent(0));
+        TrackEntry effectTrack = Assert.IsType<TrackEntry>(
+            resource.AnimationState.GetCurrent(1));
+        Assert.Equal("to_aim", baseTrack.Animation.Name);
+        Assert.Equal("aim_fire", baseTrack.Next?.Animation.Name);
+        Assert.Equal("aim_fire_hair", effectTrack.Animation.Name);
+        Assert.Equal(
+            resource.SkeletonData.FindAnimation("to_aim")!.Duration,
+            effectTrack.Delay,
+            precision: 3);
+        Assert.True(effectTrack.Loop);
+
+        resource.SetAnimation("aim_idle", true);
+
+        Assert.Equal(
+            "aim_idle",
+            resource.AnimationState.GetCurrent(0)?.Animation.Name);
+        Assert.Null(resource.AnimationState.GetCurrent(1));
+    }
+
+    [Fact]
+    public void ZeroDurationFireEffectRemainsOnLoopingOverlayTrack()
+    {
+        string repositoryRoot = FindRepositoryRoot();
+        string aimDirectory = Path.Combine(
+            repositoryRoot,
+            "res",
+            "Blanc - White Rabbit",
+            CharacterResourceTypes.Aim);
+        string skeletonPath = Path.Combine(
+            aimDirectory,
+            "c270_aim_01.skel");
+        string atlasPath = Path.Combine(
+            aimDirectory,
+            "c270_aim_01.atlas");
+        if (!File.Exists(skeletonPath) || !File.Exists(atlasPath))
+            return;
+
+        using NativeSpineResource resource = NativeSpineResource.Load(
+            new CharacterConfig
+            {
+                AtlasPath = atlasPath,
+                SkeletonPath = skeletonPath
+            });
+        Animation effect = Assert.IsType<Animation>(
+            resource.SkeletonData.FindAnimation("aim_fire_hair"));
+        Assert.Equal(0, effect.Duration);
+        Assert.NotEmpty(effect.Timelines);
+
+        resource.SetAnimationSequence(
+            ["to_aim", "aim_fire"],
+            restoreAnimation: null,
+            loopLast: true,
+            parallelAnimations: ["aim_fire_hair"]);
+        float transitionDuration = resource.SkeletonData
+            .FindAnimation("to_aim")!.Duration;
+        resource.Update(transitionDuration + 0.5f);
+
+        TrackEntry overlay = Assert.IsType<TrackEntry>(
+            resource.AnimationState.GetCurrent(1));
+        Assert.Equal("aim_fire_hair", overlay.Animation.Name);
+        Assert.True(overlay.Loop);
+        Assert.Equal(0, overlay.AnimationTime);
     }
 
     private static string FindRepositoryRoot()

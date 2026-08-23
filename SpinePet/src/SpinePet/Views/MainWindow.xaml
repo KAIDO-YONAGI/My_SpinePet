@@ -130,6 +130,17 @@
                                      </Button>
 
                                      <Button Style="{StaticResource QuietButtonStyle}"
+                                             MinWidth="34"
+                                             Height="24"
+                                             MinHeight="24"
+                                             Margin="4,0,0,0"
+                                             Padding="6,0"
+                                             x:Name="ImportNikkeDbButton"
+                                             Content="DB"
+                                             ToolTip="Import by exact NikkeDB resource ID"
+                                             AutomationProperties.Name="Import from NikkeDB by resource ID" />
+
+                                     <Button Style="{StaticResource QuietButtonStyle}"
                                              MinWidth="48"
                                              Height="24"
                                              MinHeight="24"
@@ -733,16 +744,31 @@
                                     </Grid>
                                 </Border>
 
-                                <TextBlock Text="ANIMATION"
+                                <TextBlock Text="MODE / ANIMATION"
                                            Margin="1,0,0,6"
                                            Style="{StaticResource EyebrowTextStyle}" />
-                                <ComboBox x:Name="AnimationCombo"
-                                          ItemsSource="{Binding SelectedAnimationNames}"
-                                          SelectedItem="{Binding SelectedAnimation, Mode=TwoWay}"
-                                          IsEnabled="{Binding HasSelectedCharacter}"
-                                          Height="32"
-                                          AutomationProperties.Name="Character animation"
-                                          Margin="0,0,0,6" />
+                                <Grid Margin="0,0,0,6">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="0.85*" />
+                                        <ColumnDefinition Width="1.15*" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox Grid.Column="0"
+                                              x:Name="DisplayModeCombo"
+                                              ItemsSource="{Binding DisplayModeOptions}"
+                                              SelectedItem="{Binding SelectedDisplayMode, Mode=TwoWay}"
+                                              IsEnabled="{Binding HasSelectedBattle}"
+                                              Height="32"
+                                              Margin="0,0,3,0"
+                                              AutomationProperties.Name="Character display mode" />
+                                    <ComboBox Grid.Column="1"
+                                              x:Name="AnimationCombo"
+                                              ItemsSource="{Binding DisplaySelectionOptions}"
+                                              SelectedItem="{Binding SelectedDisplaySelection, Mode=TwoWay}"
+                                              IsEnabled="{Binding IsDisplaySelectionEnabled}"
+                                              Height="32"
+                                              Margin="3,0,0,0"
+                                              AutomationProperties.Name="Character animation or battle state" />
+                                </Grid>
 
                                 <Border Style="{StaticResource ControlGroupStyle}"
                                         Margin="0,0,0,6">

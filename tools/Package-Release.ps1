@@ -88,11 +88,19 @@ try {
     #    Characters 留空——首启时应用会扫描 res 并自动填入默认角色。
     $configJson = @'
 {
-  "Version": "1.5",
+  "Version": "1.6",
   "Global": {
     "AllowRenderDrag": true,
     "TargetFrameRate": 60,
-    "LibraryThumbnailScalePercent": 100
+    "LibraryThumbnailScalePercent": 100,
+    "BattleRules": {
+      "StartupMode": "Normal",
+      "DefaultBattleState": "Cover",
+      "RightHoldThresholdMs": 300,
+      "ContinuousFireWhileHeld": true,
+      "ReloadOnRelease": true,
+      "ShortRightClickOpensPanel": true
+    }
   },
   "Characters": []
 }

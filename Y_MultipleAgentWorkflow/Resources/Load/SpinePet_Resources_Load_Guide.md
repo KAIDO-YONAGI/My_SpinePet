@@ -2,7 +2,7 @@
 
 > 文档 ID：`RES-LOAD-GUIDE`  
 > 状态：`Active`  
-> 最后核验：`2026-08-22`
+> 最后核验：`2026-08-23`
 
 本文是流程化规范：资源从拿到手到出现在 SpinePet 里，按
 **入库 → 判定 → 导入 → 验证** 四个阶段推进，每个阶段写明执行顺序和
@@ -20,12 +20,14 @@ zip 压缩包 ──┐
             ├─→ 阶段一 入库 ──→ 阶段二 判定 ──→ 阶段三 导入 ──→ 阶段四 验证
 文件夹/桌面 ─┘   resources\       选骨骼集/       SpinePet\res\     Scan
                 Characters\      分新ID/定名      <名>\<皮肤>\
-                                  standing\
+                                  standing|aim|cover\
 ```
 
 核心原则（全程适用）：
 
-1. 身份以**文件名前缀** `c<角色ID>_<皮肤ID>` 为准，不查外部编号库。
+1. 普通 Add/手工入库的身份以**文件名前缀**
+   `c<角色ID>_<皮肤ID>` 为准；应用 DB 入口则以 `rename-map.json`
+   中精确资源编号为准。
 2. 所有源资源先进入 `resources\Characters\`，`SpinePet\res\` 只放
    已确认可运行的最终资源；两者不混用。
 3. 导入 `res` 的文件**原样复制**：不改行尾、不加清理规则，
@@ -122,7 +124,8 @@ YYYY-MM-DD__名称 [cNNN_NN]  →  resources\Characters\名称
 ```
 
 - 同一次 Spine 4.1.x 导出，置于同一目录；
-- aim、cover 不可导入，忽略；
+- 普通 Add 只接受 standing；DB 编号导入会独立验证 aim、cover，并且只有
+  两者同时完整时才成对导入；
 - 不满足时资源停留在 `resources\`，不得进入 `res\`。
 
 ## 3. 阶段二：判定
@@ -192,6 +195,10 @@ SpinePet\res\<资源全名>\<皮肤ID>\
     c<角色ID>_<皮肤ID>.atlas
     <atlas 引用的全部纹理页>.png
     c<角色ID>_<皮肤ID>.attachments.exclude   （可选，清理时才有）
+  aim\                                             （完整战斗皮肤）
+    <Aim 骨骼、atlas、全部纹理页>
+  cover\                                           （完整战斗皮肤）
+    <Cover 骨骼、atlas、全部纹理页>
   icons\
     c<角色ID>_<皮肤ID>_icon.png              （可选）
 ```
@@ -231,7 +238,45 @@ SpinePet\res\<资源全名>\<皮肤ID>\
 目标目录中的同一文件，也不视为导入成功。事务不覆盖任何既有目标；失败或
 取消后，导入前已经存在的文件保持不变。
 
-### 4.2 图标（icon）配置
+### 4.2 按 nikkedb 资源编号导入
+
+配置面板的 **DB** 按钮接受精确资源编号，例如 `c017_01`。应用执行：
+
+1. 在 `resources\nikkedb\data\indexes\rename-map.json` 中不区分大小写
+   精确匹配 `id`，未知编号直接报错，不做模糊猜测；
+2. 沿 `currentRelativePath` 到 `resources\nikkedb\l2d` 查找 standing、
+   aim、cover；
+3. standing 不完整时整次失败；Aim/Cover 只有双方骨骼、atlas 和全部纹理页
+   都完整时才一起导入，任意一边缺失则两边都跳过；
+4. 目标统一创建 `standing/aim/cover/icons` 四个目录；
+5. 所有文件沿用 4.1 的冲突不覆盖、串行提交和失败回滚规则；
+6. 导入完成后扫描资源。完整 Aim/Cover 会自动写入角色 Battle 配置，
+   不完整组合不显示 Battle。
+
+普通 **Add** 不接受 aim 或 cover 单套资源。Aim/Cover 的现行配置与输入规则
+见 `..\StateSupport\Aim_Cover_Proposal.md`。
+
+### 4.3 全量审计 `resources\Characters`
+
+本地入库目录需要整体复核时，使用仓库内工具，不按目录名臆测战斗支持：
+
+```powershell
+dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- --audit resources\Characters
+dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- resources\Characters SpinePet\res
+```
+
+审计只识别精确命名的 `Standing`、`Aim`、`Cover` 状态目录；诸如
+`Aim (Chinese Censored Version)` 的变体目录不会混入主资源。每套资源还要
+通过 Spine 4.1 版本检查、骨骼实际解析、atlas 和全部纹理页检查。只有三状态
+完整且 Aim/Cover 均可读时才导入 Battle；已存在的同一套资源会报告
+AlreadyPresent，重复执行不会创建重复角色。无法映射到现有目标的完整资源会
+分配独立角色 ID，并同步重写资源前缀及 atlas 页名。
+
+2026-08-23 的基线审计结果：67 个顶层目录中 43 套可用 Battle 已全部导入；
+`Dolla Dark Rose` 虽有 Aim/Cover 文件，但其战斗骨骼为 Spine `4.0.47`，
+与当前 4.1 运行时不兼容，因此跳过。
+
+### 4.4 图标（icon）配置
 
 头像从本地 nikkedb 索引取，不要用部件贴图（纹理页 png）充当图标：
 
@@ -274,17 +319,17 @@ SpinePet\res\<资源全名>\<皮肤ID>\
   `<皮肤目录>\icons\<资源前缀>_icon.png` 覆盖错误图标；
   原错误图标可先备份。
 
-### 4.3 默认动画规则
+### 4.4 默认动画规则
 
 应用层默认动画逻辑（导入后无需配置即按此运行）：
 
 1. **每次导入完成时，卡片默认状态必须是 `idle`**——不预设 `action`
    等其他动画作为初值；
-2. 桌面待机默认播放 `idle`；
+2. 桌面启动和首次展示固定进入 Normal/standing，默认播放 `idle`；
 3. 骨骼中没有 `idle` 时，使用动画列表的第一个动画；
 4. 用户在配置模式选择的动画优先于默认值（配置保留到桌面模式）。
 
-### 4.4 缩放设置
+### 4.5 缩放设置
 
 导入后把第一个 Scale 基础滑条**拉满到 100**，第二个倍率保持 **1 倍**。
 用户配置中的对应值必须为 `ScaleBasePercent = 100`、
@@ -339,12 +384,14 @@ SpinePet\res\<资源全名>\<皮肤ID>\
 
 ### 6.3 UnityFS 导入
 
-应用 **Add** 支持 `.skel` 或 UnityFS bundle；bundle 文件名以
-`c<角色ID>_<皮肤ID>_<standing|icons>_` 开头。依赖：
+应用 **Add** 支持 standing `.skel` 或 UnityFS bundle；bundle 文件名以
+`c<角色ID>_<皮肤ID>_<standing|icons>_` 开头。Aim/Cover 使用 4.2 的
+本地 nikkedb 编号入口，不通过单文件 Add。依赖：
 `python -m pip install -r SpinePet\tools\requirements.txt`。
 两种导入都遵守 4.1 的事务、冲突不覆盖、失败回滚和临时目录清理规则。
 
 ### 6.4 aim / cover
 
-不可导入、不可渲染；限制说明见
+已支持成对导入和渲染。只有同一皮肤的 Aim、Cover 均完整时才生成 Battle；
+standing-only 或单边缺失仍作为普通 Normal 角色使用。完整规则见
 `..\StateSupport\Aim_Cover_Proposal.md`。

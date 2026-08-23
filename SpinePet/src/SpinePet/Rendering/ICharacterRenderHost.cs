@@ -9,7 +9,8 @@ public interface ICharacterRenderHost
     event Action<string>? CharacterLoadFailed;
     event Action? CharactersStateChanged;
     event Action<string, double, double>? CharacterPositionCommitted;
-    event Action<string>? CharacterRightClicked;
+    event Action<string>? CharacterRightPressed;
+    event Action<string>? CharacterRightReleased;
 
     bool IsCharacterLoading(string characterId);
     bool IsCharacterVisible(string characterId);
@@ -23,6 +24,17 @@ public interface ICharacterRenderHost
     void SetCharacterScale(string characterId, double scale);
     void SetCharacterSpeed(string characterId, double speed);
     void PlayCharacterAnimation(string characterId, string animation, bool repeat);
+    void PlayCharacterAnimationSequence(
+        string characterId,
+        IReadOnlyList<string> animations,
+        string? restoreAnimation,
+        bool loopLast,
+        IReadOnlyList<string>? parallelAnimations = null);
+    Task PreloadBattleResourcesAsync(CharacterConfig character);
+    bool SetCharacterResourceState(
+        string characterId,
+        string resourceState,
+        string? idleAnimation);
     void SetConfigMode(bool configMode);
     void SetRenderDragEnabled(bool enabled);
     void SetTargetFrameRate(int frameRate);

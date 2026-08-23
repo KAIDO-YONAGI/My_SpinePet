@@ -24,6 +24,8 @@ public sealed class CharacterManager
     private readonly object _showSync = new();
     private readonly Dictionary<string, ShowFlight> _showFlights =
         new(StringComparer.Ordinal);
+    private readonly Dictionary<string, CharacterBattleRuntimeState>
+        _battleRuntime = new(StringComparer.Ordinal);
     private bool _isConfigMode;
     private int _configModeVersion;
     private bool _closed;
@@ -56,7 +58,8 @@ public sealed class CharacterManager
         _renderHost.CharacterLoadFailed += OnCharacterLoadFailed;
         _renderHost.CharactersStateChanged += OnCharactersStateChanged;
         _renderHost.CharacterPositionCommitted += OnCharacterPositionCommitted;
-        _renderHost.CharacterRightClicked += OnCharacterRightClicked;
+        _renderHost.CharacterRightPressed += OnCharacterRightPressed;
+        _renderHost.CharacterRightReleased += OnCharacterRightReleased;
     }
 
     public IReadOnlyList<CharacterConfig> Characters => _config.Characters;
@@ -68,6 +71,8 @@ public sealed class CharacterManager
     public int LibraryThumbnailScalePercent =>
         _config.Global.LibraryThumbnailScalePercent;
 
+    public BattleRulesConfig BattleRules => _config.Global.BattleRules;
+
     public event Action? CharactersChanged;
 
     public event Action<string, double, double>? CharacterScaleChanged;
@@ -76,7 +81,106 @@ public sealed class CharacterManager
 
     public event Action<string>? CharacterRightClicked;
 
+    public event Action<string, string, string>? CharacterBattleStateChanged;
+
     public ICharacterRenderHost RenderHost => _renderHost;
+
+    public string GetCharacterDisplayMode(string characterId) =>
+        GetBattleRuntime(characterId).Mode;
+
+    public string GetCharacterBattleState(string characterId) =>
+        GetBattleRuntime(characterId).BattleState;
+
+    public async Task<bool> SetCharacterDisplayModeAsync(
+        CharacterConfig character,
+        string mode)
+    {
+        ArgumentNullException.ThrowIfNull(character);
+        CharacterBattleRuntimeState runtime =
+            GetBattleRuntime(character.Id);
+        CancelBattleHold(runtime);
+        int operationVersion = ++runtime.OperationVersion;
+        if (string.Equals(
+                mode,
+                CharacterDisplayModes.Battle,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            if (character.Battle == null)
+                return false;
+
+            await EnsureBattleReadyAsync(character);
+            if (operationVersion != runtime.OperationVersion)
+                return false;
+
+            if (!_renderHost.SetCharacterResourceState(
+                character.Id,
+                CharacterBattleStates.Cover,
+                character.Battle.Animations.CoverIdle))
+            {
+                NotifyBattleState(character.Id, runtime);
+                return false;
+            }
+
+            runtime.Mode = CharacterDisplayModes.Battle;
+            runtime.BattleState = CharacterBattleStates.Cover;
+        }
+        else
+        {
+            if (!_renderHost.SetCharacterResourceState(
+                character.Id,
+                CharacterDisplayModes.Normal,
+                character.ConfiguredAnimation))
+            {
+                NotifyBattleState(character.Id, runtime);
+                return false;
+            }
+
+            runtime.Mode = CharacterDisplayModes.Normal;
+            runtime.BattleState = CharacterBattleStates.Cover;
+        }
+
+        NotifyBattleState(character.Id, runtime);
+        return true;
+    }
+
+    public async Task<bool> SetCharacterBattleStateAsync(
+        CharacterConfig character,
+        string battleState)
+    {
+        ArgumentNullException.ThrowIfNull(character);
+        if (character.Battle == null)
+            return false;
+
+        CharacterBattleRuntimeState runtime =
+            GetBattleRuntime(character.Id);
+        CancelBattleHold(runtime);
+        int operationVersion = ++runtime.OperationVersion;
+        await EnsureBattleReadyAsync(character);
+        if (operationVersion != runtime.OperationVersion)
+            return false;
+
+        string targetState = battleState.Equals(
+            CharacterBattleStates.Aim,
+            StringComparison.OrdinalIgnoreCase)
+                ? CharacterBattleStates.Aim
+                : CharacterBattleStates.Cover;
+        string? idle = targetState == CharacterBattleStates.Aim
+            ? character.Battle.Animations.AimIdle
+            : character.Battle.Animations.CoverIdle;
+        if (!_renderHost.SetCharacterResourceState(
+            character.Id,
+            targetState,
+            idle))
+        {
+            NotifyBattleState(character.Id, runtime);
+            return false;
+        }
+
+        runtime.Mode = CharacterDisplayModes.Battle;
+        runtime.BattleState = targetState;
+        NotifyBattleState(character.Id, runtime);
+        return true;
+    }
 
     public void SetConfigMode(bool configMode)
     {
@@ -319,11 +423,12 @@ public sealed class CharacterManager
     {
         ArgumentNullException.ThrowIfNull(resources);
         ArgumentException.ThrowIfNullOrWhiteSpace(managedRoot);
+        CharacterResourceFiles[] resourceCatalog = resources.ToArray();
 
         CharacterResourceSynchronizationPlan plan =
             _resourceCoordinator.CalculateSynchronization(
                 _config.Characters,
-                resources,
+                resourceCatalog,
                 managedRoot);
         int addedCount = 0;
         int updatedCount = 0;
@@ -357,6 +462,30 @@ public sealed class CharacterManager
         {
             _config.Characters.Add(CreateCharacter(addition));
             addedCount++;
+        }
+
+        foreach (CharacterConfig character in _config.Characters)
+        {
+            CharacterResourceFiles? standing = resourceCatalog
+                .FirstOrDefault(resource =>
+                    string.Equals(
+                        resource.ResourceType,
+                        CharacterResourceTypes.Standing,
+                        StringComparison.OrdinalIgnoreCase) &&
+                    string.Equals(
+                        resource.SkeletonPath,
+                        character.SkeletonPath,
+                        StringComparison.OrdinalIgnoreCase));
+            CharacterBattleConfig? battle = standing == null
+                ? null
+                : CharacterBattleConfigFactory.TryCreate(
+                    standing,
+                    resourceCatalog);
+            if (!BattleProfilesMatch(character.Battle, battle))
+            {
+                character.Battle = battle;
+                updatedCount++;
+            }
         }
 
         CharacterResourceSynchronizationResult result = new(
@@ -504,6 +633,7 @@ public sealed class CharacterManager
         }
 
         character.Visible = false;
+        ResetBattleRuntime(character.Id);
         _renderHost.HideCharacter(character.Id);
         _configService.Save(_config);
         CharactersChanged?.Invoke();
@@ -516,6 +646,7 @@ public sealed class CharacterManager
         {
             return;
         }
+        ResetBattleRuntime(character.Id);
         _renderHost.RemoveCharacter(character.Id);
     }
 
@@ -528,6 +659,7 @@ public sealed class CharacterManager
         }
 
         character.Visible = false;
+        ResetBattleRuntime(character.Id);
         _renderHost.RemoveCharacter(character.Id);
         _config.Characters.Remove(character);
         _configService.Save(_config);
@@ -548,6 +680,7 @@ public sealed class CharacterManager
         foreach (CharacterConfig character in _config.Characters)
         {
             character.Visible = false;
+            ResetBattleRuntime(character.Id);
         }
 
         _renderHost.HideAll();
@@ -674,7 +807,13 @@ public sealed class CharacterManager
         _renderHost.CharacterLoadFailed -= OnCharacterLoadFailed;
         _renderHost.CharactersStateChanged -= OnCharactersStateChanged;
         _renderHost.CharacterPositionCommitted -= OnCharacterPositionCommitted;
-        _renderHost.CharacterRightClicked -= OnCharacterRightClicked;
+        _renderHost.CharacterRightPressed -= OnCharacterRightPressed;
+        _renderHost.CharacterRightReleased -= OnCharacterRightReleased;
+        foreach (CharacterBattleRuntimeState runtime in _battleRuntime.Values)
+        {
+            CancelBattleHold(runtime);
+        }
+        _battleRuntime.Clear();
         _renderHost.Close();
     }
 
@@ -771,14 +910,223 @@ public sealed class CharacterManager
         CharacterPositionChanged?.Invoke(characterId, left, top);
     }
 
-    private void OnCharacterRightClicked(string characterId)
+    private void OnCharacterRightPressed(string characterId)
     {
         if (_closed)
+            return;
+
+        CharacterConfig? character =
+            _config.Characters.FirstOrDefault(item => item.Id == characterId);
+        if (character == null)
+            return;
+
+        CharacterBattleRuntimeState runtime =
+            GetBattleRuntime(characterId);
+        CancelBattleHold(runtime);
+        int operationVersion = ++runtime.OperationVersion;
+        runtime.LongHoldTriggered = false;
+        runtime.HoldCancellation = new CancellationTokenSource();
+        if (character.Battle != null &&
+            runtime.Mode == CharacterDisplayModes.Battle)
         {
+            _ = TriggerBattleHoldAsync(
+                character,
+                runtime,
+                operationVersion,
+                runtime.HoldCancellation.Token);
+        }
+    }
+
+    private void OnCharacterRightReleased(string characterId)
+    {
+        if (_closed)
+            return;
+
+        CharacterConfig? character =
+            _config.Characters.FirstOrDefault(item => item.Id == characterId);
+        if (character == null)
+            return;
+
+        CharacterBattleRuntimeState runtime =
+            GetBattleRuntime(characterId);
+        bool wasLongHold = runtime.LongHoldTriggered;
+        CancelBattleHold(runtime);
+        int operationVersion = ++runtime.OperationVersion;
+        if (wasLongHold &&
+            character.Battle != null &&
+            runtime.Mode == CharacterDisplayModes.Battle)
+        {
+            _ = ReturnToCoverAsync(
+                character,
+                runtime,
+                operationVersion);
             return;
         }
 
-        CharacterRightClicked?.Invoke(characterId);
+        if (_config.Global.BattleRules.ShortRightClickOpensPanel)
+        {
+            CharacterRightClicked?.Invoke(characterId);
+        }
+    }
+
+    private async Task TriggerBattleHoldAsync(
+        CharacterConfig character,
+        CharacterBattleRuntimeState runtime,
+        int operationVersion,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(
+                _config.Global.BattleRules.RightHoldThresholdMs,
+                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            await EnsureBattleReadyAsync(character);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (operationVersion != runtime.OperationVersion ||
+                runtime.Mode != CharacterDisplayModes.Battle)
+            {
+                return;
+            }
+
+            CharacterBattleAnimationsConfig animations =
+                character.Battle!.Animations;
+            if (!_renderHost.SetCharacterResourceState(
+                character.Id,
+                CharacterBattleStates.Aim,
+                animations.AimIdle))
+            {
+                NotifyBattleState(character.Id, runtime);
+                return;
+            }
+
+            runtime.LongHoldTriggered = true;
+            runtime.BattleState = CharacterBattleStates.Aim;
+            List<string> sequence = [];
+            if (animations.ToAim != null)
+                sequence.Add(animations.ToAim);
+            if (animations.AimFire != null)
+                sequence.Add(animations.AimFire);
+            _renderHost.PlayCharacterAnimationSequence(
+                character.Id,
+                sequence,
+                animations.AimFire == null
+                    ? animations.AimIdle
+                    : null,
+                loopLast:
+                    animations.AimFire != null &&
+                    _config.Global.BattleRules.ContinuousFireWhileHeld,
+                parallelAnimations:
+                    animations.AimFire == null
+                        ? null
+                        : animations.AimFireEffects);
+            NotifyBattleState(character.Id, runtime);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Write(
+                nameof(CharacterManager),
+                $"battle-hold-failed id={character.Id} " +
+                $"message={exception.Message}");
+        }
+    }
+
+    private async Task ReturnToCoverAsync(
+        CharacterConfig character,
+        CharacterBattleRuntimeState runtime,
+        int operationVersion)
+    {
+        try
+        {
+            await EnsureBattleReadyAsync(character);
+            if (operationVersion != runtime.OperationVersion ||
+                runtime.Mode != CharacterDisplayModes.Battle)
+            {
+                return;
+            }
+
+            CharacterBattleAnimationsConfig animations =
+                character.Battle!.Animations;
+            if (!_renderHost.SetCharacterResourceState(
+                character.Id,
+                CharacterBattleStates.Cover,
+                animations.CoverIdle))
+            {
+                NotifyBattleState(character.Id, runtime);
+                return;
+            }
+
+            runtime.BattleState = CharacterBattleStates.Cover;
+            List<string> sequence = [];
+            if (animations.ToCover != null)
+                sequence.Add(animations.ToCover);
+            if (_config.Global.BattleRules.ReloadOnRelease)
+                sequence.AddRange(animations.ReloadSequence);
+            _renderHost.PlayCharacterAnimationSequence(
+                character.Id,
+                sequence,
+                animations.CoverIdle,
+                loopLast: false);
+            NotifyBattleState(character.Id, runtime);
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Write(
+                nameof(CharacterManager),
+                $"battle-cover-failed id={character.Id} " +
+                $"message={exception.Message}");
+        }
+    }
+
+    private async Task EnsureBattleReadyAsync(CharacterConfig character)
+    {
+        if (!character.Visible)
+        {
+            await ShowCharacterAsync(character);
+        }
+        await _renderHost.PreloadBattleResourcesAsync(character);
+    }
+
+    private CharacterBattleRuntimeState GetBattleRuntime(string characterId)
+    {
+        if (!_battleRuntime.TryGetValue(
+                characterId,
+                out CharacterBattleRuntimeState? runtime))
+        {
+            runtime = new CharacterBattleRuntimeState();
+            _battleRuntime[characterId] = runtime;
+        }
+        return runtime;
+    }
+
+    private void NotifyBattleState(
+        string characterId,
+        CharacterBattleRuntimeState runtime) =>
+        CharacterBattleStateChanged?.Invoke(
+            characterId,
+            runtime.Mode,
+            runtime.BattleState);
+
+    private void ResetBattleRuntime(string characterId)
+    {
+        if (_battleRuntime.Remove(
+                characterId,
+                out CharacterBattleRuntimeState? runtime))
+        {
+            CancelBattleHold(runtime);
+        }
+    }
+
+    private static void CancelBattleHold(
+        CharacterBattleRuntimeState runtime)
+    {
+        runtime.HoldCancellation?.Cancel();
+        runtime.HoldCancellation?.Dispose();
+        runtime.HoldCancellation = null;
+        runtime.LongHoldTriggered = false;
     }
 
     private void RemoveCharacterFromConfiguration(CharacterConfig character)
@@ -852,6 +1200,64 @@ public sealed class CharacterManager
         return changed;
     }
 
+    private static bool BattleProfilesMatch(
+        CharacterBattleConfig? left,
+        CharacterBattleConfig? right)
+    {
+        if (left == null || right == null)
+        {
+            return left == right;
+        }
+
+        return ResourceProfilesMatch(left.Aim, right.Aim) &&
+            ResourceProfilesMatch(left.Cover, right.Cover) &&
+            string.Equals(
+                left.Animations.AimIdle,
+                right.Animations.AimIdle,
+                StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(
+                left.Animations.ToAim,
+                right.Animations.ToAim,
+                StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(
+                left.Animations.AimFire,
+                right.Animations.AimFire,
+                StringComparison.OrdinalIgnoreCase) &&
+            (left.Animations.AimFireEffects ?? []).SequenceEqual(
+                right.Animations.AimFireEffects ?? [],
+                StringComparer.OrdinalIgnoreCase) &&
+            string.Equals(
+                left.Animations.CoverIdle,
+                right.Animations.CoverIdle,
+                StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(
+                left.Animations.ToCover,
+                right.Animations.ToCover,
+                StringComparison.OrdinalIgnoreCase) &&
+            left.Animations.ReloadSequence.SequenceEqual(
+                right.Animations.ReloadSequence,
+                StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool ResourceProfilesMatch(
+        CharacterBattleResourceConfig left,
+        CharacterBattleResourceConfig right) =>
+        string.Equals(
+            left.SkeletonPath,
+            right.SkeletonPath,
+            StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(
+            left.AtlasPath,
+            right.AtlasPath,
+            StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(
+            left.TexturePath,
+            right.TexturePath,
+            StringComparison.OrdinalIgnoreCase) &&
+        left.ExtraTexturePaths.SequenceEqual(
+            right.ExtraTexturePaths,
+            StringComparer.OrdinalIgnoreCase);
+
     private static void EnsureStandingResources(
         CharacterResourceFiles resources)
     {
@@ -894,4 +1300,14 @@ public sealed class CharacterManager
             }.Concat(character.AdditionalTexturePaths));
 
     private sealed record ShowFlight(string ResourceKey, Task<bool> Task);
+
+    private sealed class CharacterBattleRuntimeState
+    {
+        public string Mode { get; set; } = CharacterDisplayModes.Normal;
+        public string BattleState { get; set; } =
+            CharacterBattleStates.Cover;
+        public bool LongHoldTriggered { get; set; }
+        public CancellationTokenSource? HoldCancellation { get; set; }
+        public int OperationVersion { get; set; }
+    }
 }

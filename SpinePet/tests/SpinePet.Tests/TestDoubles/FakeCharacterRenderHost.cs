@@ -11,13 +11,27 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
         new(StringComparer.Ordinal);
     public HashSet<string> LoadingCharacterIds { get; } =
         new(StringComparer.Ordinal);
+    public List<(string CharacterId, string State, string? Idle)>
+        ResourceStateChanges { get; } = [];
+    public List<(
+        string CharacterId,
+        IReadOnlyList<string> Animations,
+        string? RestoreAnimation,
+        bool LoopLast,
+        IReadOnlyList<string> ParallelAnimations)> AnimationSequences
+        { get; } = [];
 
     public Func<CharacterConfig, Task>? ShowCharacterHandler { get; set; }
+    public Func<CharacterConfig, Task>? PreloadBattleResourcesHandler
+        { get; set; }
+    public Func<string, string, string?, bool>?
+        SetCharacterResourceStateHandler { get; set; }
     public Action<string, double>? SetCharacterScaleHandler { get; set; }
     public int HideCharacterCount { get; private set; }
     public int HideAllCount { get; private set; }
     public int ConfigModeSetCount { get; private set; }
     public int CloseCount { get; private set; }
+    public int BattlePreloadCount { get; private set; }
     public bool ConfigMode { get; private set; }
 
     public int TargetFrameRate { get; private set; } =
@@ -29,7 +43,8 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
     private Action<string>? _characterLoadFailed;
     private Action? _charactersStateChanged;
     private Action<string, double, double>? _characterPositionCommitted;
-    private Action<string>? _characterRightClicked;
+    private Action<string>? _characterRightPressed;
+    private Action<string>? _characterRightReleased;
 
     public int EventSubscriptionCount =>
         GetSubscriberCount(_characterScaleChanged) +
@@ -37,7 +52,8 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
         GetSubscriberCount(_characterLoadFailed) +
         GetSubscriberCount(_charactersStateChanged) +
         GetSubscriberCount(_characterPositionCommitted) +
-        GetSubscriberCount(_characterRightClicked);
+        GetSubscriberCount(_characterRightPressed) +
+        GetSubscriberCount(_characterRightReleased);
 
     public event Action<string, double, double>? CharacterScaleChanged
     {
@@ -64,10 +80,15 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
         add => _characterPositionCommitted += value;
         remove => _characterPositionCommitted -= value;
     }
-    public event Action<string>? CharacterRightClicked
+    public event Action<string>? CharacterRightPressed
     {
-        add => _characterRightClicked += value;
-        remove => _characterRightClicked -= value;
+        add => _characterRightPressed += value;
+        remove => _characterRightPressed -= value;
+    }
+    public event Action<string>? CharacterRightReleased
+    {
+        add => _characterRightReleased += value;
+        remove => _characterRightReleased -= value;
     }
 
     public bool IsCharacterLoading(string characterId) =>
@@ -118,6 +139,42 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
         string animation,
         bool repeat)
     { }
+    public void PlayCharacterAnimationSequence(
+        string characterId,
+        IReadOnlyList<string> animations,
+        string? restoreAnimation,
+        bool loopLast,
+        IReadOnlyList<string>? parallelAnimations = null)
+    {
+        AnimationSequences.Add((
+            characterId,
+            animations.ToArray(),
+            restoreAnimation,
+            loopLast,
+            parallelAnimations?.ToArray() ?? []));
+    }
+    public async Task PreloadBattleResourcesAsync(CharacterConfig character)
+    {
+        BattlePreloadCount++;
+        if (PreloadBattleResourcesHandler != null)
+        {
+            await PreloadBattleResourcesHandler(character);
+        }
+    }
+    public bool SetCharacterResourceState(
+        string characterId,
+        string resourceState,
+        string? idleAnimation)
+    {
+        ResourceStateChanges.Add((
+            characterId,
+            resourceState,
+            idleAnimation));
+        return SetCharacterResourceStateHandler?.Invoke(
+            characterId,
+            resourceState,
+            idleAnimation) ?? true;
+    }
     public void SetConfigMode(bool configMode)
     {
         ConfigMode = configMode;
@@ -169,8 +226,10 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
         double top) =>
         _characterPositionCommitted?.Invoke(characterId, left, top);
 
-    public void RaiseRightClicked(string characterId) =>
-        _characterRightClicked?.Invoke(characterId);
+    public void RaiseRightPressed(string characterId) =>
+        _characterRightPressed?.Invoke(characterId);
+    public void RaiseRightReleased(string characterId) =>
+        _characterRightReleased?.Invoke(characterId);
 
     private static int GetSubscriberCount(Delegate? handler) =>
         handler?.GetInvocationList().Length ?? 0;

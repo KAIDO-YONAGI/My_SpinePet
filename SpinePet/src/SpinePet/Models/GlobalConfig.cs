@@ -13,6 +13,8 @@ public sealed class GlobalConfig
 
     public int LibraryThumbnailScalePercent { get; set; } = 100;
 
+    public BattleRulesConfig BattleRules { get; set; } = new();
+
     public static int NormalizeTargetFrameRate(int frameRate) =>
         frameRate switch
         {

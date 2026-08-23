@@ -265,15 +265,138 @@ public sealed class ConfigServiceTests : IDisposable
         };
         AppConfig config = new()
         {
-            Version = "1.6",
+            Version = "1.8",
             Characters = [character]
         };
 
         ConfigService.Normalize(config);
 
-        Assert.Equal("1.6", config.Version);
+        Assert.Equal("1.8", config.Version);
         Assert.Equal(321, character.PositionX);
         Assert.Equal(654, character.PositionY);
+    }
+
+    [Fact]
+    public void LoadUpgradesVersion15AndAddsBattleRulesWithoutLosingSettings()
+    {
+        string configPath = Path.Combine(
+            _temporaryDirectory,
+            "version-15.json");
+        File.WriteAllText(
+            configPath,
+            """
+            {
+              "Version": "1.5",
+              "Global": {
+                "AllowRenderDrag": false,
+                "TargetFrameRate": 120
+              },
+              "Characters": [
+                {
+                  "Id": "legacy",
+                  "PositionX": 321,
+                  "PositionY": 654,
+                  "Scale": 0.7,
+                  "AnimationSpeed": 1.4,
+                  "CurrentAnimation": "idle",
+                  "Visible": true
+                }
+              ]
+            }
+            """);
+        ConfigService service = new(configPath, TestWorkArea);
+
+        AppConfig config = service.Load();
+
+        Assert.Equal(AppConfig.CurrentVersion, config.Version);
+        Assert.False(config.Global.AllowRenderDrag);
+        Assert.Equal(120, config.Global.TargetFrameRate);
+        Assert.Equal(CharacterDisplayModes.Normal,
+            config.Global.BattleRules.StartupMode);
+        Assert.Equal(CharacterBattleStates.Cover,
+            config.Global.BattleRules.DefaultBattleState);
+        Assert.Equal(300,
+            config.Global.BattleRules.RightHoldThresholdMs);
+        Assert.True(config.Global.BattleRules.ContinuousFireWhileHeld);
+        Assert.True(config.Global.BattleRules.ReloadOnRelease);
+        Assert.True(config.Global.BattleRules.ShortRightClickOpensPanel);
+        CharacterConfig character = Assert.Single(config.Characters);
+        Assert.Equal(321, character.PositionX);
+        Assert.Equal(654, character.PositionY);
+        Assert.Equal(0.7, character.Scale);
+        Assert.Equal(1.4, character.AnimationSpeed);
+        Assert.Equal("idle", character.ConfiguredAnimation);
+        Assert.True(character.Visible);
+    }
+
+    [Fact]
+    public void SaveOmitsMissingBattleAndKeepsCompleteBattle()
+    {
+        string configPath = Path.Combine(
+            _temporaryDirectory,
+            "battle-json.json");
+        ConfigService service = new(configPath, TestWorkArea);
+        CharacterConfig standingOnly = new()
+        {
+            Id = "standing-only",
+            Name = "Standing"
+        };
+        CharacterConfig complete = new()
+        {
+            Id = "complete",
+            Name = "Complete",
+            Battle = CreateBattleConfig("complete-battle")
+        };
+
+        service.Save(new AppConfig
+        {
+            Characters = [standingOnly, complete]
+        });
+        string json = File.ReadAllText(configPath);
+        AppConfig loaded = service.Load();
+
+        using JsonDocument document = JsonDocument.Parse(json);
+        JsonElement characters = document.RootElement.GetProperty(
+            "Characters");
+        Assert.False(characters[0].TryGetProperty("Battle", out _));
+        JsonElement battle = characters[1].GetProperty("Battle");
+        JsonElement effects = battle
+            .GetProperty("Animations")
+            .GetProperty("AimFireEffects");
+        Assert.Equal(
+            ["aim_fire_hair", "aim_fire_hip"],
+            effects.EnumerateArray()
+                .Select(item => item.GetString()!)
+                .ToArray());
+        Assert.Null(loaded.Characters[0].Battle);
+        Assert.Equal(
+            ["aim_fire_hair", "aim_fire_hip"],
+            Assert.IsType<CharacterBattleConfig>(
+                    loaded.Characters[1].Battle)
+                .Animations.AimFireEffects);
+    }
+
+    [Fact]
+    public void NormalizeRemovesIncompleteBattleAsOneUnit()
+    {
+        CharacterConfig character = new()
+        {
+            Battle = new CharacterBattleConfig
+            {
+                Aim = CreateBattleResource("aim-valid"),
+                Cover = new CharacterBattleResourceConfig()
+            }
+        };
+        AppConfig config = new()
+        {
+            Version = "1.5",
+            Characters = [character]
+        };
+
+        ConfigService.Normalize(config, TestWorkArea);
+
+        Assert.Null(character.Battle);
+        Assert.True(config.RequiresRewrite);
     }
 
     [Fact]
@@ -347,6 +470,46 @@ public sealed class ConfigServiceTests : IDisposable
 
         Assert.Equal("new", File.ReadAllText(configPath));
         Assert.Equal(1, committer.ReplacementCount);
+    }
+
+    private CharacterBattleConfig CreateBattleConfig(string directoryName) =>
+        new()
+        {
+            Aim = CreateBattleResource(Path.Combine(directoryName, "aim")),
+            Cover = CreateBattleResource(Path.Combine(directoryName, "cover")),
+            Animations = new CharacterBattleAnimationsConfig
+            {
+                AimIdle = "aim_idle",
+                ToAim = "to_aim",
+                AimFire = "aim_fire",
+                AimFireEffects =
+                    ["aim_fire_hair", "", "AIM_FIRE_HAIR",
+                        "aim_fire_hip"],
+                CoverIdle = "cover_idle",
+                ToCover = "to_cover",
+                ReloadSequence = ["cover_reload"]
+            }
+        };
+
+    private CharacterBattleResourceConfig CreateBattleResource(
+        string directoryName)
+    {
+        string directory = Path.Combine(
+            _temporaryDirectory,
+            directoryName);
+        Directory.CreateDirectory(directory);
+        string skeleton = Path.Combine(directory, "resource.skel");
+        string atlas = Path.Combine(directory, "resource.atlas");
+        string texture = Path.Combine(directory, "resource.png");
+        File.WriteAllBytes(skeleton, []);
+        File.WriteAllText(atlas, string.Empty);
+        File.WriteAllBytes(texture, []);
+        return new CharacterBattleResourceConfig
+        {
+            SkeletonPath = skeleton,
+            AtlasPath = atlas,
+            TexturePath = texture
+        };
     }
 
     public void Dispose()

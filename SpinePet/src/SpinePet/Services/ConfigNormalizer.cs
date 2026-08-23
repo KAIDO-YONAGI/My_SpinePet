@@ -27,6 +27,14 @@ internal static class ConfigNormalizer
         }
 
         config.Global ??= new GlobalConfig();
+        config.Global.BattleRules ??= new BattleRulesConfig();
+        config.Global.BattleRules.StartupMode = CharacterDisplayModes.Normal;
+        config.Global.BattleRules.DefaultBattleState =
+            CharacterBattleStates.Cover;
+        config.Global.BattleRules.RightHoldThresholdMs = Math.Clamp(
+            config.Global.BattleRules.RightHoldThresholdMs,
+            100,
+            2000);
         config.Global.TargetFrameRate =
             GlobalConfig.NormalizeTargetFrameRate(
                 config.Global.TargetFrameRate);
@@ -69,6 +77,7 @@ internal static class ConfigNormalizer
                 .Where(path => !string.IsNullOrWhiteSpace(path))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList() ?? [];
+            NormalizeBattle(character, preserveFutureVersion, config);
             if (character.LegacyResourceType != null &&
                 !preserveFutureVersion)
             {
@@ -140,6 +149,52 @@ internal static class ConfigNormalizer
             character.PositionY = feetY;
         }
     }
+
+    private static void NormalizeBattle(
+        CharacterConfig character,
+        bool preserveFutureVersion,
+        AppConfig config)
+    {
+        CharacterBattleConfig? battle = character.Battle;
+        if (battle == null)
+        {
+            return;
+        }
+
+        battle.Aim ??= new CharacterBattleResourceConfig();
+        battle.Cover ??= new CharacterBattleResourceConfig();
+        battle.Animations ??= new CharacterBattleAnimationsConfig();
+        battle.Aim.ExtraTexturePaths = NormalizePaths(
+            battle.Aim.ExtraTexturePaths);
+        battle.Cover.ExtraTexturePaths = NormalizePaths(
+            battle.Cover.ExtraTexturePaths);
+        battle.Animations.ReloadSequence = battle.Animations.ReloadSequence?
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+        List<string> aimFireEffects = battle.Animations.AimFireEffects?
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
+        battle.Animations.AimFireEffects = aimFireEffects.Count == 0
+            ? null
+            : aimFireEffects;
+
+        if (!battle.Aim.Exists() || !battle.Cover.Exists())
+        {
+            character.Battle = null;
+            if (!preserveFutureVersion)
+            {
+                config.RequiresRewrite = true;
+            }
+        }
+    }
+
+    private static List<string> NormalizePaths(IEnumerable<string>? paths) =>
+        paths?
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
 
     private static bool IsLegacyVersion(string version) =>
         version is "1.0" or "1.1" or "1.2" or "1.3";

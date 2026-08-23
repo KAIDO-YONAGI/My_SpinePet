@@ -81,6 +81,7 @@ internal sealed class NativeSpineResource : IDisposable
 
     public void SetAnimation(string? animationName, bool repeat)
     {
+        ClearOverlayTracks();
         string? selected = ResolveAnimationName(animationName);
 
         if (selected != null)
@@ -89,6 +90,7 @@ internal sealed class NativeSpineResource : IDisposable
 
     public void SetAnimationIfNeeded(string? animationName, bool repeat)
     {
+        ClearOverlayTracks();
         string? selected = ResolveAnimationName(animationName);
         if (selected == null)
             return;
@@ -103,6 +105,53 @@ internal sealed class NativeSpineResource : IDisposable
         }
 
         AnimationState.SetAnimation(0, selected, repeat);
+    }
+
+    public void SetAnimationSequence(
+        IReadOnlyList<string> animations,
+        string? restoreAnimation,
+        bool loopLast,
+        IReadOnlyList<string>? parallelAnimations = null)
+    {
+        ClearOverlayTracks();
+        Animation[] available = animations
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(SkeletonData.FindAnimation)
+            .Where(animation => animation != null)
+            .Cast<Animation>()
+            .ToArray();
+        Animation? restore = string.IsNullOrWhiteSpace(restoreAnimation)
+            ? null
+            : SkeletonData.FindAnimation(restoreAnimation);
+        if (available.Length == 0)
+        {
+            if (restore != null)
+            {
+                AnimationState.SetAnimation(0, restore, true);
+            }
+            return;
+        }
+
+        AnimationState.SetAnimation(
+            0,
+            available[0],
+            loopLast && available.Length == 1 && restore == null);
+        for (int index = 1; index < available.Length; index++)
+        {
+            bool loop = loopLast &&
+                index == available.Length - 1 &&
+                restore == null;
+            AnimationState.AddAnimation(0, available[index], loop, 0);
+        }
+        if (restore != null)
+        {
+            AnimationState.AddAnimation(0, restore, true, 0);
+        }
+
+        SetParallelAnimations(
+            parallelAnimations,
+            available,
+            loopLast);
     }
 
     public void Update(float elapsedSeconds)
@@ -126,6 +175,67 @@ internal sealed class NativeSpineResource : IDisposable
         }
 
         return AnimationNames.Count > 0 ? AnimationNames[0] : null;
+    }
+
+    private void SetParallelAnimations(
+        IReadOnlyList<string>? animationNames,
+        Animation[] baseAnimations,
+        bool loop)
+    {
+        if (animationNames == null ||
+            animationNames.Count == 0 ||
+            baseAnimations.Length == 0)
+        {
+            return;
+        }
+
+        float delay = baseAnimations
+            .Take(baseAnimations.Length - 1)
+            .Sum(animation => animation.Duration);
+        int trackIndex = 1;
+        foreach (string name in animationNames
+                     .Where(name => !string.IsNullOrWhiteSpace(name))
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            Animation? animation = SkeletonData.FindAnimation(name);
+            if (animation == null)
+                continue;
+
+            TrackEntry entry = AnimationState.SetAnimation(
+                trackIndex,
+                animation,
+                loop);
+            entry.Delay = delay;
+            entry.MixBlend = MixBlend.Replace;
+            if (!loop)
+            {
+                AnimationState.AddEmptyAnimation(
+                    trackIndex,
+                    mixDuration: 0,
+                    delay: 0);
+            }
+            trackIndex++;
+        }
+    }
+
+    private void ClearOverlayTracks()
+    {
+        bool cleared = false;
+        for (int trackIndex = AnimationState.Tracks.Count - 1;
+             trackIndex >= 1;
+             trackIndex--)
+        {
+            if (AnimationState.GetCurrent(trackIndex) == null)
+                continue;
+
+            AnimationState.ClearTrack(trackIndex);
+            cleared = true;
+        }
+
+        if (cleared)
+        {
+            Skeleton.SetToSetupPose();
+        }
     }
 
     private static SkeletonData LoadSkeletonData(string path, Atlas atlas)

@@ -1,5 +1,23 @@
 # Resources Load Developer Log
 
+## 2026-08-23：nikkedb 编号与三状态导入
+
+- 应用新增 DB 入口，按 `rename-map.json` 精确匹配资源编号并从本地
+  `resources\nikkedb\l2d` 导入。
+- 统一创建 `standing/aim/cover/icons` 布局；standing 必须完整，
+  Aim/Cover 只有双方完整时才成对复制，单边缺失时全部跳过。
+- 延续事务冲突不覆盖、失败回滚和多页 atlas 验证规则；普通 Add 继续只导入
+  standing。
+- 新增 `battle-catalog-importer`，完整重查 `resources\Characters` 的 67 个
+  顶层目录：44 套文件表面完整，43 套通过 Spine 4.1 兼容性和实际解析，
+  已全部导入；`Dolla Dark Rose` 的 Aim/Cover 为 Spine `4.0.47`，按规则跳过。
+- 实际 `SpinePet\res` 已归一为 63 套 standing、43 套 aim、43 套 cover，
+  用户配置同步为 63 个角色、43 个 Battle。重复导入结果为 43 套
+  AlreadyPresent，确认幂等。
+- 真实 `c017_01` 和未知编号、单边缺失、多页贴图、冲突测试通过；全量测试
+  `240/240`，Release Build、Publish、Run 验证通过。
+- 本次实际影响资源导入，维护计数：`2/5 -> 3/5`。
+
 ## 2026-08-22：导入事务与并发幂等
 
 - 将 Skeleton 和 UnityFS bundle 导入整理为发现与验证、冲突预检、提交、
