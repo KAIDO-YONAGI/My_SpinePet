@@ -9,6 +9,7 @@ using System.Windows.Threading;
 using Microsoft.Win32;
 using SpinePet.Infrastructure;
 using SpinePet.Models;
+using SpinePet.Rendering;
 using SpinePet.Services;
 using SpinePet.ViewModels;
 using Button = System.Windows.Controls.Button;
@@ -27,6 +28,7 @@ internal sealed class CharacterLibraryController
     private readonly UnityBundleImportService _bundleImporter;
     private readonly NikkeDbResourceImportService _nikkeDbImporter;
     private readonly CharacterIconDownloadService _characterIconDownloader;
+    private readonly CharacterThumbnailService _thumbnailService = new();
     private readonly ObservableCollection<CharacterViewModel> _characters;
     private readonly ICollectionView _characterView;
     private readonly ListBox _characterCards;
@@ -711,8 +713,16 @@ internal sealed class CharacterLibraryController
         viewModel.Name = character.Name;
         viewModel.SkinLabel = identity.SkinLabel;
         viewModel.UpdateSkins(identity.SkinCode, availableSkins);
-        viewModel.ThumbnailPath =
+        string thumbnailPath =
             _characterManager.GetCharacterThumbnailPath(character);
+        if (!string.Equals(
+                viewModel.ThumbnailPath,
+                thumbnailPath,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            viewModel.ThumbnailPath = thumbnailPath;
+            _ = LoadThumbnailAsync(viewModel, thumbnailPath);
+        }
         viewModel.Scale = scale;
         viewModel.MaxScale = maximumScale;
         viewModel.PositionX = (int)character.PositionX;
@@ -723,6 +733,57 @@ internal sealed class CharacterLibraryController
         viewModel.UpdateAnimationNames(animationNames);
         viewModel.ConfiguredAnimation = character.ConfiguredAnimation;
         viewModel.AnimationSpeed = character.AnimationSpeed;
+    }
+
+    internal void UpdateCharacterState(CharacterRenderSnapshot snapshot)
+    {
+        CharacterViewModel? viewModel = _characters.FirstOrDefault(
+            character => character.Id == snapshot.CharacterId);
+        if (viewModel == null)
+        {
+            return;
+        }
+
+        viewModel.IsLoading = snapshot.IsLoading;
+        viewModel.IsVisible = snapshot.IsVisible;
+        viewModel.MaxScale = snapshot.MaximumScale;
+        viewModel.Scale = snapshot.CurrentScale;
+        viewModel.UpdateAnimationNames(snapshot.AnimationNames);
+
+        CharacterConfig? config = _characterManager.Characters.FirstOrDefault(
+            character => character.Id == snapshot.CharacterId);
+        if (config != null)
+        {
+            viewModel.ConfiguredAnimation = config.ConfiguredAnimation;
+            viewModel.AnimationSpeed = config.AnimationSpeed;
+        }
+    }
+
+    private async Task LoadThumbnailAsync(
+        CharacterViewModel viewModel,
+        string thumbnailPath)
+    {
+        try
+        {
+            CharacterThumbnail thumbnail = await _thumbnailService.LoadAsync(
+                thumbnailPath,
+                _lifetimeToken);
+            viewModel.ApplyThumbnail(
+                thumbnailPath,
+                thumbnail.Image,
+                thumbnail.FrameWidth,
+                thumbnail.FrameHeight);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Write(
+                nameof(CharacterLibraryController),
+                $"thumbnail-load-failed id={viewModel.Id} " +
+                $"message={exception.Message}");
+        }
     }
 
     private async Task ToggleCharacterVisibilityAsync(

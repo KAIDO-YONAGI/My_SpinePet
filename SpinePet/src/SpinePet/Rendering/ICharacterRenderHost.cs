@@ -7,6 +7,7 @@ public interface ICharacterRenderHost
     event Action<string, double, double>? CharacterScaleChanged;
     event Action<string, IReadOnlyList<string>>? CharacterAnimationsLoaded;
     event Action<string>? CharacterLoadFailed;
+    event Action<CharacterRenderSnapshot>? CharacterStateChanged;
     event Action? CharactersStateChanged;
     event Action<string, double, double>? CharacterPositionCommitted;
     event Action<string>? CharacterRightPressed;
@@ -29,9 +30,9 @@ public interface ICharacterRenderHost
         IReadOnlyList<string> animations,
         string? restoreAnimation,
         bool loopLast,
-        IReadOnlyList<string>? parallelAnimations = null);
+        IReadOnlyList<CharacterBattleEffectConfig>? battleEffects = null);
     Task PreloadBattleResourcesAsync(CharacterConfig character);
-    bool SetCharacterResourceState(
+    Task<bool> SetCharacterResourceStateAsync(
         string characterId,
         string resourceState,
         string? idleAnimation);

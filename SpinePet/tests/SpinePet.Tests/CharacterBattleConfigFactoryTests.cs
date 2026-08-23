@@ -40,9 +40,7 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
         Assert.Equal("idle", single.AimIdle);
         Assert.Equal("to_aim", single.ToAim);
         Assert.Equal("fire", single.AimFire);
-        Assert.Equal(
-            ["aim_fire_hair", "aim_fire_hip"],
-            single.AimFireEffects);
+        Assert.Null(single.BattleEffects);
         Assert.Equal("idle", single.CoverIdle);
         Assert.Equal("to_cover", single.ToCover);
         Assert.Equal(["cover_reload"], single.ReloadSequence);
@@ -52,7 +50,7 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
     }
 
     [Fact]
-    public void ResolveAnimationsSkipsEmptyFireEffectPlaceholders()
+    public void ResolveAnimationsDoesNotGuessFireEffectsFromNames()
     {
         CharacterBattleAnimationsConfig animations =
             CharacterBattleConfigFactory.ResolveAnimations(
@@ -67,7 +65,7 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
                 ]);
 
         Assert.Equal("aim_fire", animations.AimFire);
-        Assert.Equal(["aim_fire_hip"], animations.AimFireEffects);
+        Assert.Null(animations.BattleEffects);
     }
 
     [Fact]
@@ -99,7 +97,7 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
         Assert.Equal("aim_idle", battle.Animations.AimIdle);
         Assert.Equal("to_aim", battle.Animations.ToAim);
         Assert.Equal("aim_fire", battle.Animations.AimFire);
-        Assert.Null(battle.Animations.AimFireEffects);
+        Assert.Null(battle.Animations.BattleEffects);
         Assert.Equal("cover_idle", battle.Animations.CoverIdle);
         Assert.Equal("to_cover", battle.Animations.ToCover);
         Assert.Equal(["cover_reload"], battle.Animations.ReloadSequence);
@@ -154,7 +152,7 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
     }
 
     [Fact]
-    public void InstalledResourcesDetectOnlyNonEmptyFireEffects()
+    public void InstalledResourcesUseOnlyAuditedDynamicFireEffects()
     {
         string repositoryRoot = FindRepositoryRoot();
         string resourceRoot = Path.Combine(repositoryRoot, "res");
@@ -164,7 +162,7 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
         IReadOnlyList<CharacterResourceFiles> resources =
             new CharacterResourceDiscoveryService()
                 .DiscoverAll(resourceRoot);
-        Dictionary<string, string[]> detected = resources
+        Dictionary<string, CharacterBattleEffectConfig[]> detected = resources
             .Where(resource =>
                 resource.ResourceType == CharacterResourceTypes.Standing)
             .Select(standing => new
@@ -175,31 +173,69 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
                     resources)
             })
             .Where(item =>
-                item.Battle?.Animations.AimFireEffects?.Count > 0)
+                item.Battle?.Animations.BattleEffects?.Count > 0)
             .ToDictionary(
                 item => item.Profile,
-                item => item.Battle!.Animations.AimFireEffects!.ToArray(),
+                item => item.Battle!.Animations.BattleEffects!.ToArray(),
                 StringComparer.OrdinalIgnoreCase);
 
-        Assert.Equal(6, detected.Count);
+        Assert.Equal(4, detected.Count);
+        AssertEffects(
+            detected[Path.Combine("Cinderella Crystal Wave", "00")],
+            "aim_fire_hair");
+        AssertEffects(
+            detected[Path.Combine("Laplace Neo", "00")],
+            "aim_fire_hair");
+        AssertEffects(
+            detected[Path.Combine("Laplace Neo Variant01", "01")],
+            "aim_fire_hair");
+        AssertEffects(
+            detected[Path.Combine("Sugar - Wild Backyard", "02")],
+            "aim_fire_hair",
+            "aim_fire_hip");
+        Assert.DoesNotContain("Blanc - White Rabbit", detected.Keys);
+        Assert.DoesNotContain(
+            Path.Combine("Blanc Variant 03", "03"),
+            detected.Keys);
+    }
+
+    [Fact]
+    public void LegacyEffectsMigrateOnlyForAuditedSkeletonProfiles()
+    {
+        List<CharacterBattleEffectConfig>? laplace =
+            CharacterBattleConfigFactory.ResolveLegacyBattleEffects(
+                @"C:\res\c103_aim_00.skel",
+                ["aim_fire_hair", "aim_fire_hip"]);
+        List<CharacterBattleEffectConfig>? blanc =
+            CharacterBattleConfigFactory.ResolveLegacyBattleEffects(
+                @"C:\res\c270_aim_01.skel",
+                ["aim_fire_hair"]);
+
+        CharacterBattleEffectConfig effect = Assert.Single(laplace!);
+        Assert.Equal("aim_fire_hair", effect.Animation);
+        Assert.Equal(CharacterBattleEffectBlendModes.Replace, effect.Blend);
+        Assert.Equal(1, effect.Alpha);
+        Assert.True(effect.Loop);
+        Assert.Null(blanc);
+    }
+
+    private static void AssertEffects(
+        IReadOnlyList<CharacterBattleEffectConfig> effects,
+        params string[] animationNames)
+    {
         Assert.Equal(
-            ["aim_fire_hair"],
-            detected["Blanc - White Rabbit"]);
-        Assert.Equal(
-            ["aim_fire_hair"],
-            detected[Path.Combine("Blanc Variant 03", "03")]);
-        Assert.Equal(
-            ["aim_fire_hair"],
-            detected[Path.Combine("Cinderella Crystal Wave", "00")]);
-        Assert.Equal(
-            ["aim_fire_hair"],
-            detected[Path.Combine("Laplace Neo", "00")]);
-        Assert.Equal(
-            ["aim_fire_hair"],
-            detected[Path.Combine("Laplace Neo Variant01", "01")]);
-        Assert.Equal(
-            ["aim_fire_hair", "aim_fire_hip"],
-            detected[Path.Combine("Sugar - Wild Backyard", "02")]);
+            animationNames,
+            effects.Select(effect => effect.Animation));
+        Assert.All(
+            effects,
+            effect =>
+            {
+                Assert.Equal(
+                    CharacterBattleEffectBlendModes.Replace,
+                    effect.Blend);
+                Assert.Equal(1, effect.Alpha);
+                Assert.True(effect.Loop);
+            });
     }
 
     private static string GetProfilePath(

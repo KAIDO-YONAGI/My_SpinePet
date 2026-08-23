@@ -429,7 +429,15 @@ public sealed class NativeSpineResourceTests
             ["to_aim", "aim_fire"],
             restoreAnimation: null,
             loopLast: true,
-            parallelAnimations: ["aim_fire_hair"]);
+            battleEffects:
+            [
+                new CharacterBattleEffectConfig
+                {
+                    Animation = "aim_fire_hair",
+                    Blend = CharacterBattleEffectBlendModes.Add,
+                    Alpha = 0.35f
+                }
+            ]);
 
         TrackEntry baseTrack = Assert.IsType<TrackEntry>(
             resource.AnimationState.GetCurrent(0));
@@ -443,6 +451,8 @@ public sealed class NativeSpineResourceTests
             effectTrack.Delay,
             precision: 3);
         Assert.True(effectTrack.Loop);
+        Assert.Equal(MixBlend.Add, effectTrack.MixBlend);
+        Assert.Equal(0.35f, effectTrack.Alpha);
 
         resource.SetAnimation("aim_idle", true);
 
@@ -453,7 +463,7 @@ public sealed class NativeSpineResourceTests
     }
 
     [Fact]
-    public void ZeroDurationFireEffectRemainsOnLoopingOverlayTrack()
+    public void ZeroDurationFireEffectCannotOverrideMainFireTrack()
     {
         string repositoryRoot = FindRepositoryRoot();
         string aimDirectory = Path.Combine(
@@ -485,16 +495,22 @@ public sealed class NativeSpineResourceTests
             ["to_aim", "aim_fire"],
             restoreAnimation: null,
             loopLast: true,
-            parallelAnimations: ["aim_fire_hair"]);
+            battleEffects:
+            [
+                new CharacterBattleEffectConfig
+                {
+                    Animation = "aim_fire_hair"
+                }
+            ]);
         float transitionDuration = resource.SkeletonData
             .FindAnimation("to_aim")!.Duration;
         resource.Update(transitionDuration + 0.5f);
 
-        TrackEntry overlay = Assert.IsType<TrackEntry>(
-            resource.AnimationState.GetCurrent(1));
-        Assert.Equal("aim_fire_hair", overlay.Animation.Name);
-        Assert.True(overlay.Loop);
-        Assert.Equal(0, overlay.AnimationTime);
+        TrackEntry main = Assert.IsType<TrackEntry>(
+            resource.AnimationState.GetCurrent(0));
+        Assert.Equal("to_aim", main.Animation.Name);
+        Assert.Equal("aim_fire", main.Next?.Animation.Name);
+        Assert.Null(resource.AnimationState.GetCurrent(1));
     }
 
     private static void AssertEveryAnimationProducesFiniteGeometry(

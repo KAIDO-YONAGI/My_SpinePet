@@ -65,7 +65,7 @@ dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporte
 43 套通过并已导入。`Dolla Dark Rose` 的 Aim/Cover 为 Spine `4.0.47`，
 不生成 Battle。
 
-## 3. 配置 1.7
+## 3. 配置 1.8
 
 `Global.BattleRules` 固定记录当前交互规则：
 
@@ -101,7 +101,14 @@ dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporte
       "AimIdle": "aim_idle",
       "ToAim": "to_aim",
       "AimFire": "aim_fire",
-      "AimFireEffects": ["aim_fire_hair", "aim_fire_hip"],
+      "BattleEffects": [
+        {
+          "Animation": "aim_fire_hair",
+          "Blend": "Replace",
+          "Alpha": 1,
+          "Loop": true
+        }
+      ],
       "CoverIdle": "cover_idle",
       "ToCover": "to_cover",
       "ReloadSequence": ["cover_reload"]
@@ -110,10 +117,18 @@ dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporte
 }
 ```
 
-可选动画名和 `AimFireEffects` 为 `null` 时不序列化；`ReloadSequence` 可为空。
-Aim/Cover 资源不完整时整个 `Battle` 省略。旧配置升级到 1.7 时保留位置、
+可选动画名和 `BattleEffects` 为 `null` 时不序列化；`ReloadSequence`
+可为空。每个附加效果显式配置动画、混合模式、透明度和循环语义：
+
+- `Blend` 支持 `Replace` 和 `Add`，未知值规范化为 `Replace`。
+- `Alpha` 规范化到 `0..1`；0 值效果删除。
+- `Loop` 决定附加轨是否循环。
+- 动画缺失、没有时间轴或时长为 0 时，运行时不建立附加轨。
+
+Aim/Cover 资源不完整时整个 `Battle` 省略。旧配置升级到 1.8 时保留位置、
 缩放、速度、可见性和 Normal 常驻动画，不从旧 aim/cover 路径拼装不完整
-Battle。
+Battle。1.7 的 `AimFireEffects` 仅通过已审计的骨骼档案迁移；未列入档案的
+旧效果会被删除，避免名字相同但时间轴用途不同的资源被误配。
 
 ## 4. 动画识别与回退
 
@@ -122,9 +137,9 @@ Aim：
 1. idle：`aim_idle`，再匹配同时含 `aim`、`idle`，最后任意 `idle`。
 2. 进入：`to_aim`，再匹配同时含 `to`、`aim`。
 3. 开火：`aim_fire`，再匹配同时含 `aim`、`fire`，最后任意 `fire`。
-4. 开火附加效果：收集名称以 `aim_fire_` 开头且至少含一个 Spine 时间轴的
-   动画。目前资源中的有效项为 `aim_fire_hair`、`aim_fire_hip`；同名空
-   占位不会写入配置，也不会误当成主开火动画。
+4. 开火附加效果：不做名称前缀自动识别。只有本指南第 6 节列出的骨骼文件
+   才写入显式 `BattleEffects`；同名空占位、零时长静态姿势和未审计资源
+   均不配置。
 
 Cover：
 
@@ -137,10 +152,11 @@ Cover：
 直接回到 Cover idle。
 
 主 `aim_fire` 自身包含的 bone、deform、attachment 等时间轴由 Spine 在
-主轨完整应用，无需拆成额外配置。独立的 `AimFireEffects` 从第 1 轨开始
+第 0 轨完整应用，不得被附加轨代替。独立的 `BattleEffects` 从第 1 轨开始
 并行播放，延迟量等于 `to_aim` 时长，并与连续开火一起循环。切换 Aim idle、
 Cover 或 Normal 时清除全部附加轨并恢复 setup pose，避免头发、臀部附件或
-静态形变残留。
+静态形变残留。当前四套档案均使用 `Replace + Alpha 1`，因为它们是作者
+独立制作的覆盖/附件轨；`Add` 和 Alpha 调整只用于后续逐资源视觉校准。
 
 Normal 的 `ConfiguredAnimation` 只允许应用到 standing 资源。配置面板显隐、
 Normal 动画刷新或角色常驻动画恢复不得重选 Aim/Cover 的动画轨道，否则缺少
@@ -177,10 +193,11 @@ standing、aim、cover 中当前未显示的资源仍保存在角色资源槽中
 
 | 情况 | 动画 | 资源情况 | 配置方案 |
 |---|---|---|---|
-| 开火主体 | `aim_fire` | 41/41；内部 bone/deform/attachment 直接生效 | 现有 `AimFire` 主轨 |
-| 开火附加 | `aim_fire_hair` | 名称 9 套，有效 6 套 | `AimFireEffects` 附加轨 |
-| 开火附加 | `aim_fire_hip` | 名称 9 套，有效仅 Sugar 1 套 | `AimFireEffects` 附加轨 |
-| 瞄准方向 | `aim_x`、`aim_y` | 41/41，时长约 1 秒 | 后续增加瞄准轴输入和独立混合轨，不绑定右键 |
+| 开火主体 | `aim_fire` | 41/41；40 套含动态时间轴，Rouge Variant 01 为零时长静态边界；Snow White Heavy Arms 运动量很小 | 保持 `AimFire` 第 0 主轨，完整应用 bone/deform/attachment |
+| 显式开火附加 | `aim_fire_hair` | 4 套动态档案 | `BattleEffects` 独立轨，逐骨骼配置 |
+| 显式开火附加 | `aim_fire_hip` | Sugar 唯一动态档案 | `BattleEffects` 独立轨，逐骨骼配置 |
+| 静态冲突附加 | `aim_fire_hair` | Blanc 两套有时间轴但时长为 0，并与主轨大量重叠 | 不配置；运行时也跳过零时长效果 |
+| 瞄准方向 | `aim_x`、`aim_y` | 41/41 均含 DeformTimeline，时长约 1 秒 | 后续由指针方向采样/混合，不作为循环射击附加轨 |
 | Aim 受击 | `aim_hit` | 41/41，约 0.4-0.667 秒 | 后续 `Hit.Aim` 一次性覆盖后恢复当前 Aim 状态 |
 | Cover 受击 | `cover_hit` | 41/41，约 0.433-0.833 秒 | 后续 `Hit.Cover` 一次性覆盖后恢复 Cover |
 | Cover 眩晕 | `cover_stun` | 41/41，约 0.033-0.067 秒，接近姿势保持 | 后续 `Stun.Cover` 循环或保持，解除时回 idle |
@@ -190,21 +207,84 @@ standing、aim、cover 中当前未显示的资源仍保存在角色资源槽中
 | 分段换弹 | `cover_reload_start/loop/end` | Sugar 1 套，同时存在 `cover_reload` | 保持单段优先；仅单段缺失时使用三段回退 |
 | 切换事件 | `SwitchToAimSkin`、`SwitchToCoverSkin` | 81/82 套 Aim/Cover 资源包含；Trony Sweet Step Cover 缺少 | 当前由资源槽切换完成，不重复绑定事件 |
 
-有效开火附加效果的实际位置：
+已写入显式开火附加档案的实际位置：
 
 ```text
-SpinePet\res\Blanc - White Rabbit\aim\c270_aim_01.skel
-SpinePet\res\Blanc Variant 03\03\aim\c27003_03_aim_00.skel
 SpinePet\res\Cinderella Crystal Wave\00\aim\c515_aim_00.skel
 SpinePet\res\Laplace Neo\00\aim\c103_aim_00.skel
 SpinePet\res\Laplace Neo Variant01\01\aim\c10301_01_aim_00.skel
 SpinePet\res\Sugar - Wild Backyard\02\aim\c14002_aim_02.skel
 ```
 
-Sugar 同时具有 `aim_fire_hair` 和 `aim_fire_hip`；其余五套只有有效 hair。
-Blanc 两套有效 hair 为时长 0 的静态时间轴，仍需在射击时应用。Liter
-Guardfish、Modernia Variant 80、Rouge Variant 01 的 hair，以及 Blanc、
-Laplace、Liter、Modernia、Noise、Rouge 的部分 hip 只有空动画名，已跳过。
+Sugar 同时配置 `aim_fire_hair` 和 `aim_fire_hip`，其余三套只配置 hair，
+共 4 个资源档案、5 条附加轨。Cinderella 的 hair 为持续动态形变；
+Laplace 两套主要切换火花附件；Sugar 的 hair/hip 分别提供上身和臀部动态。
+
+以下两套 Blanc 的 `aim_fire_hair` 虽有时间轴，但时长为 0，且和主
+`aim_fire` 的骨骼/槽位大量重叠。把它们放在高轨 `Replace` 会冻结或覆盖
+主射击中的身体、胸部和头发运动，因此明确不写入配置：
+
+```text
+SpinePet\res\Blanc - White Rabbit\aim\c270_aim_01.skel
+SpinePet\res\Blanc Variant 03\03\aim\c27003_03_aim_00.skel
+```
+
+Liter Guardfish、Modernia Variant 80、Rouge Variant 01 的 hair，以及
+Blanc、Laplace、Liter、Modernia、Noise、Rouge 的部分 hip 只有空动画名，
+同样跳过。
+
+### 6.1 武器和挂点
+
+41/41 套 Aim 骨骼都存在 `GunMountPoint`，但它是 Spine
+`PointAttachment`：只提供坐标和旋转锚点，本身不可绘制。资源包内已有的
+枪械 mesh/region 会随主 `aim_fire` 正常渲染；只有人体和挂点、没有枪械
+图片/mesh 的资源无法由动画配置补出武器。
+
+当前 `Battle` 配置没有“外部武器骨骼/atlas/贴图”字段，也没有把
+`GunMountPoint` 绑定到另一套渲染资源的合成逻辑。若后续补外部枪械，应新增
+可空 `Weapon` 资源配置，并在同一角色渲染帧中按挂点矩阵绘制，而不是把
+PointAttachment 当作丢失贴图。Anis Star、Snow White Heavy Arms 等资源的
+武器已经嵌入 Aim 骨骼；Blanc White Rabbit、Alice 等部分包则确实只有人体。
+
+### 6.2 其余动画的配置边界
+
+- `aim_x` / `aim_y` 是瞄准方向形变，需要输入轴和采样权重；不能简单循环。
+- `aim_hit`、`cover_hit` 是一次性受击状态，结束后恢复触发前 Aim/Cover。
+- `cover_stun` 更接近姿势保持，需要显式解除事件。
+- `cover_death` 只在有效资源中播放一次并停末帧。
+- `aim_skill_*` / `cover_skill_*` 需要技能命令和技能结束恢复规则。
+- `SwitchToAimSkin` / `SwitchToCoverSkin` 是资源动画事件；当前已有资源槽
+  切换，不再重复绑定，避免同一次切换执行两遍。
+
+### 6.3 逐资源配置技巧
+
+新增或修正资源时按以下顺序判断，不能只看动画名称：
+
+1. 先单独播放主 `aim_fire`。身体后坐、胸部/头发抖动、枪械、火花和 deform
+   已在主轨正常出现的内容，不要重复写入 `BattleEffects`。
+2. 再单独播放候选附加动画，并检查时长、时间轴类型、目标 bone/slot 和
+   attachment。只有主轨确实缺失、候选轨又具有动态内容时才建立档案。
+3. 对比候选轨与主轨的目标集合。大量重叠且候选时长为 0，通常是静态姿势
+   或导出占位，应跳过；否则高轨 Replace 会把主轨物理冻结。
+4. 只控制独立附件或作者明确拆出的覆盖轨时优先 `Replace`。只有确认时间轴
+   表示相对增量、叠加后不会产生双倍位移或颜色溢出时才使用 `Add`。
+5. `Alpha` 从 1 开始做视觉核验；效果过强时逐级降到 0.75、0.5、0.25。
+   不要用低 Alpha 掩盖错误目标或错误混合模式。
+6. 连续射击配套循环效果使用 `Loop = true`。一次性闪光、抛壳或短促后坐应
+   使用 `Loop = false`，并确认每次主射击循环是否需要重新触发。
+7. 档案键使用 Aim 骨骼文件名（不含扩展名），例如 `c515_aim_00`，不要用
+   显示名或目录名；显示名和皮肤目录可能变化或冲突。
+
+代码档案位于
+`CharacterBattleConfigFactory.AimFireEffectProfiles`。每次增加档案必须同时：
+
+- 用 Spine 解析结果确认候选动画 `Duration > 0` 且存在时间轴。
+- 在 `CharacterBattleConfigFactoryTests` 写入精确骨骼与预期效果。
+- 让资源扫描重写实际 `config.json`，确认只生成预期档案。
+- 分别观察单发、持续按住、松开换弹、切 Cover、切 Normal，确认没有姿势
+  残留、组件消失、双倍位移、过曝或动画暂停。
+- 若枪械缺失，先核对 atlas/attachment 是否真的含枪；只有
+  `GunMountPoint` 时应归类为外部武器资源缺失，不能添加假的动画效果补救。
 
 有效 `cover_death` 位于：
 
@@ -231,6 +311,7 @@ SpinePet\res\Sugar - Wild Backyard\02\cover\c14002_cover_02.skel
 真实基线资源为 `c017_01`。其 Aim 应识别 `aim_idle`、`to_aim`、
 `aim_fire`，Cover 应识别 `cover_idle`、`to_cover`、`cover_reload`。
 验证必须同时覆盖完整三状态、standing-only、单边缺失、多页纹理、冲突、
-配置迁移、扫描补齐/清除/幂等、空效果占位过滤、附加轨延迟与清理，以及
-Normal/Battle 输入边界。当前实际配置基线为 61 个角色，其中 41 个具有完整
-Battle；程序启动仍固定为 Normal。
+配置迁移、扫描补齐/清除/幂等、显式档案过滤、零时长保护、附加轨延迟与
+清理，以及 Normal/Battle 输入边界。当前资源扫描基线为 61 个角色，其中
+41 个具有完整 Battle；4 个资源档案具有 5 条 BattleEffects。程序启动仍
+固定为 Normal。

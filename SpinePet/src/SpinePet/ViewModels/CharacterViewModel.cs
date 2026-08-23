@@ -1,8 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.IO;
 using System.Runtime.CompilerServices;
-using System.Windows.Media.Imaging;
+using System.Windows.Media;
 using SpinePet.Models;
 
 namespace SpinePet.ViewModels;
@@ -10,12 +9,13 @@ namespace SpinePet.ViewModels;
 public sealed class CharacterViewModel : INotifyPropertyChanged
 {
     private const double ThumbnailBoxSize = 64;
-    private static readonly Dictionary<string, (double Width, double Height)>
-        FrameSizeCache = new(StringComparer.OrdinalIgnoreCase);
 
     private string _name = string.Empty;
     private string _skinLabel = string.Empty;
     private string _thumbnailPath = string.Empty;
+    private ImageSource? _thumbnailImage;
+    private double _thumbnailFrameWidth = ThumbnailBoxSize;
+    private double _thumbnailFrameHeight = ThumbnailBoxSize;
     private double _scale = 0.2;
     private double _maxScale = 1.35;
     private int _positionX = 200;
@@ -61,82 +61,53 @@ public sealed class CharacterViewModel : INotifyPropertyChanged
         {
             if (SetProperty(ref _thumbnailPath, value))
             {
-                OnPropertyChanged(nameof(ThumbnailFrameWidth));
-                OnPropertyChanged(nameof(ThumbnailFrameHeight));
+                ThumbnailImage = null;
+                SetThumbnailFrameSize(ThumbnailBoxSize, ThumbnailBoxSize);
             }
         }
     }
 
-    // 响应式缩略图框：图片在 64×64 方形边界内等比整体缩放——
-    // 超高的图按比例整体缩小（宽高一起变），不撑高条目。
-    public double ThumbnailFrameWidth =>
-        GetThumbnailFrameSize(ThumbnailPath).Width;
-
-    public double ThumbnailFrameHeight =>
-        GetThumbnailFrameSize(ThumbnailPath).Height;
-
-    private static (double Width, double Height) GetThumbnailFrameSize(
-        string? path)
+    public ImageSource? ThumbnailImage
     {
-        const double fallback = 64;
-        if (string.IsNullOrWhiteSpace(path))
+        get => _thumbnailImage;
+        private set => SetProperty(ref _thumbnailImage, value);
+    }
+
+    public double ThumbnailFrameWidth => _thumbnailFrameWidth;
+
+    public double ThumbnailFrameHeight => _thumbnailFrameHeight;
+
+    internal void ApplyThumbnail(
+        string expectedPath,
+        ImageSource? image,
+        double frameWidth,
+        double frameHeight)
+    {
+        if (!string.Equals(
+                ThumbnailPath,
+                expectedPath,
+                StringComparison.OrdinalIgnoreCase))
         {
-            return (fallback, fallback);
+            return;
         }
 
-        lock (FrameSizeCache)
+        ThumbnailImage = image;
+        SetThumbnailFrameSize(frameWidth, frameHeight);
+    }
+
+    private void SetThumbnailFrameSize(double width, double height)
+    {
+        if (Math.Abs(_thumbnailFrameWidth - width) > 0.001)
         {
-            if (FrameSizeCache.TryGetValue(path, out var cached))
-            {
-                return cached;
-            }
+            _thumbnailFrameWidth = width;
+            OnPropertyChanged(nameof(ThumbnailFrameWidth));
         }
 
-        double width = fallback;
-        double height = fallback;
-        try
+        if (Math.Abs(_thumbnailFrameHeight - height) > 0.001)
         {
-            if (File.Exists(path))
-            {
-                BitmapFrame frame = BitmapFrame.Create(
-                    new Uri(path),
-                    BitmapCreateOptions.DelayCreation,
-                    BitmapCacheOption.None);
-                if (frame.PixelWidth > 0 && frame.PixelHeight > 0)
-                {
-                    double aspect =
-                        frame.PixelHeight / (double)frame.PixelWidth;
-                    if (aspect >= 1)
-                    {
-                        height = ThumbnailBoxSize;
-                        width = Math.Clamp(
-                            ThumbnailBoxSize / aspect,
-                            20,
-                            ThumbnailBoxSize);
-                    }
-                    else
-                    {
-                        width = ThumbnailBoxSize;
-                        height = Math.Clamp(
-                            ThumbnailBoxSize * aspect,
-                            20,
-                            ThumbnailBoxSize);
-                    }
-                }
-            }
+            _thumbnailFrameHeight = height;
+            OnPropertyChanged(nameof(ThumbnailFrameHeight));
         }
-        catch
-        {
-            // 读不出尺寸就退回方形默认值。
-        }
-
-        var size = (width, height);
-        lock (FrameSizeCache)
-        {
-            FrameSizeCache[path] = size;
-        }
-
-        return size;
     }
 
     public double Scale

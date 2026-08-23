@@ -1,6 +1,6 @@
 # GUI Developer Log
 
-## 2026-08-23：特殊混合渲染管线与右键过曝修复
+## 2026-08-24：特殊混合渲染管线与右键过曝修复
 
 - 原生帧提交改为按 Spine draw order 生成有序计划，每个角色每帧统一上传一次
   几何；D3D11 管线、四种混合状态和可增长顶点/索引缓冲区由设备复用，并去重
@@ -20,7 +20,7 @@
 - 本次实际影响 GUI 原生渲染、动画交互和生命周期，维护计数：
   `1/5 -> 2/5`。
 
-## 2026-08-23：修复 Battle 返回 Normal 的状态分裂
+## 2026-08-24：修复 Battle 返回 Normal 的状态分裂
 
 - `ICharacterRenderHost.SetCharacterResourceState` 改为返回实际切换结果；
   管理器仅在资源槽交换成功后提交 Normal/Battle 与 Cover/Aim 运行时状态。
@@ -32,7 +32,7 @@
   Run 出现新的 `startup-complete` 且实例持续响应。
 - 本次实际影响 GUI 状态协调，维护计数：`0/5 -> 1/5`。
 
-## 2026-08-23：Aim/Cover 控件、输入与周期复核
+## 2026-08-24：Aim/Cover 控件、输入与周期复核
 
 - 右侧详情新增显式 Normal/Battle 模式选择，并在原动画下拉框右侧平行增加
   Cover/Aim 下拉框；Battle 仅对完整配置启用，默认 Cover。

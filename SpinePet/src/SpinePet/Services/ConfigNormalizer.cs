@@ -172,13 +172,23 @@ internal static class ConfigNormalizer
             .Where(name => !string.IsNullOrWhiteSpace(name))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList() ?? [];
-        List<string> aimFireEffects = battle.Animations.AimFireEffects?
-            .Where(name => !string.IsNullOrWhiteSpace(name))
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToList() ?? [];
-        battle.Animations.AimFireEffects = aimFireEffects.Count == 0
-            ? null
-            : aimFireEffects;
+        if (!preserveFutureVersion &&
+            battle.Animations.BattleEffects == null &&
+            battle.Animations.AimFireEffects?.Count > 0)
+        {
+            battle.Animations.BattleEffects =
+                CharacterBattleConfigFactory.ResolveLegacyBattleEffects(
+                    battle.Aim.SkeletonPath,
+                    battle.Animations.AimFireEffects);
+        }
+        if (battle.Animations.AimFireEffects != null &&
+            !preserveFutureVersion)
+        {
+            battle.Animations.AimFireEffects = null;
+            config.RequiresRewrite = true;
+        }
+        battle.Animations.BattleEffects = NormalizeBattleEffects(
+            battle.Animations.BattleEffects);
 
         if (!battle.Aim.Exists() || !battle.Cover.Exists())
         {
@@ -195,6 +205,37 @@ internal static class ConfigNormalizer
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList() ?? [];
+
+    private static List<CharacterBattleEffectConfig>? NormalizeBattleEffects(
+        IEnumerable<CharacterBattleEffectConfig>? effects)
+    {
+        if (effects == null)
+        {
+            return null;
+        }
+
+        List<CharacterBattleEffectConfig> normalized = effects
+            .Where(effect =>
+                effect != null &&
+                !string.IsNullOrWhiteSpace(effect.Animation))
+            .GroupBy(
+                effect => effect.Animation,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .Select(effect => new CharacterBattleEffectConfig
+            {
+                Animation = effect.Animation.Trim(),
+                Blend = CharacterBattleEffectBlendModes.Normalize(
+                    effect.Blend),
+                Alpha = float.IsFinite(effect.Alpha)
+                    ? Math.Clamp(effect.Alpha, 0, 1)
+                    : 1,
+                Loop = effect.Loop
+            })
+            .Where(effect => effect.Alpha > 0)
+            .ToList();
+        return normalized.Count == 0 ? null : normalized;
+    }
 
     private static bool IsLegacyVersion(string version) =>
         version is "1.0" or "1.1" or "1.2" or "1.3";

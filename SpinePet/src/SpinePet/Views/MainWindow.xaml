@@ -360,9 +360,11 @@
                                          ItemContainerStyle="{StaticResource CharacterCardItemStyle}"
                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                          ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                         ScrollViewer.CanContentScroll="False"
+                                         ScrollViewer.CanContentScroll="True"
                                          ScrollViewer.IsDeferredScrollingEnabled="False"
                                          ScrollViewer.PanningMode="VerticalOnly"
+                                         VirtualizingPanel.IsVirtualizing="True"
+                                         VirtualizingPanel.VirtualizationMode="Recycling"
                                          KeyboardNavigation.TabNavigation="Once"
                                          KeyboardNavigation.DirectionalNavigation="Contained"
                                          AutomationProperties.Name="Character library"
@@ -375,11 +377,12 @@
                                         <Style TargetType="ScrollBar"
                                                BasedOn="{StaticResource SlimScrollBarStyle}" />
                                     </ListBox.Resources>
-                                    <ListBox.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <UniformGrid Columns="2" />
-                                        </ItemsPanelTemplate>
-                                    </ListBox.ItemsPanel>
+                                     <ListBox.ItemsPanel>
+                                         <ItemsPanelTemplate>
+                                             <views:VirtualizingUniformGrid Columns="2"
+                                                                            ItemHeight="128" />
+                                         </ItemsPanelTemplate>
+                                     </ListBox.ItemsPanel>
                                     <ListBox.ItemTemplate>
                                         <DataTemplate>
                                             <Grid MinHeight="70"
@@ -410,7 +413,7 @@
                                                             <GradientStop Offset="1" Color="#FF171717" />
                                                         </RadialGradientBrush>
                                                     </Border.Background>
-                                                    <Image Source="{Binding ThumbnailPath}"
+                                                    <Image Source="{Binding ThumbnailImage}"
                                                            Margin="3"
                                                            Stretch="Uniform"
                                                            Focusable="False"

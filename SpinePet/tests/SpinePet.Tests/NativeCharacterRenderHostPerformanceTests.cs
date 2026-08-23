@@ -1,4 +1,5 @@
-using System.Reflection;
+using System.Diagnostics;
+using System.Windows.Threading;
 using Spine;
 using SpinePet.Models;
 using SpinePet.Rendering.Native;
@@ -49,8 +50,9 @@ public sealed class NativeCharacterRenderHostPerformanceTests
             AtlasPath = installed.AtlasPath,
             SkeletonPath = installed.SkeletonPath
         };
-        using NativeCharacterRenderHost renderHost = new();
-        NativeCharacterScene scene = GetScene(renderHost);
+        using NativeCharacterRenderEngine renderEngine =
+            new(Dispatcher.CurrentDispatcher);
+        NativeCharacterScene scene = renderEngine.Scene;
         NativeCharacterState state = scene.GetOrCreate(
             config,
             defaultScale: 0.2,
@@ -69,8 +71,8 @@ public sealed class NativeCharacterRenderHostPerformanceTests
         TrackEntry temporary = Assert.IsType<TrackEntry>(
             state.Resource.AnimationState.GetCurrent(0));
 
-        renderHost.SetConfigMode(true);
-        renderHost.SetConfigMode(false);
+        renderEngine.SetConfigMode(true);
+        renderEngine.SetConfigMode(false);
 
         Assert.Same(
             temporary,
@@ -80,17 +82,34 @@ public sealed class NativeCharacterRenderHostPerformanceTests
         Assert.Equal(0, state.TemporaryAnimationPlayback.RestoreCount);
     }
 
-    private static NativeCharacterScene GetScene(
-        NativeCharacterRenderHost renderHost)
+    [Fact]
+    public async Task GuiCommandsDoNotWaitForBusyRenderThread()
     {
-        FieldInfo field = typeof(NativeCharacterRenderHost).GetField(
-            "_scene",
-            BindingFlags.Instance | BindingFlags.NonPublic) ??
-            throw new MissingFieldException(
-                typeof(NativeCharacterRenderHost).FullName,
-                "_scene");
-        return Assert.IsType<NativeCharacterScene>(
-            field.GetValue(renderHost));
+        using NativeCharacterRenderHost renderHost = new();
+        using ManualResetEventSlim entered = new();
+        using ManualResetEventSlim release = new();
+        Task blocked = renderHost.ExecuteOnRenderThreadAsync(() =>
+        {
+            entered.Set();
+            release.Wait();
+        });
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(2)));
+
+        Stopwatch stopwatch = Stopwatch.StartNew();
+        renderHost.SetCharacterScale("missing", 1);
+        renderHost.MoveCharacter("missing", 10, 20);
+        renderHost.SetTargetFrameRate(60);
+        stopwatch.Stop();
+
+        Assert.NotEqual(
+            Environment.CurrentManagedThreadId,
+            renderHost.RenderThreadId);
+        Assert.True(
+            stopwatch.Elapsed < TimeSpan.FromMilliseconds(100),
+            $"GUI commands waited {stopwatch.Elapsed.TotalMilliseconds:F0} ms.");
+
+        release.Set();
+        await blocked.WaitAsync(TimeSpan.FromSeconds(2));
     }
 
     private static string FindRepositoryRoot()

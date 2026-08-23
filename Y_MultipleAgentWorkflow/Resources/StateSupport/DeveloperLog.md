@@ -1,5 +1,28 @@
 # Resources State Support Developer Log
 
+## 2026-08-23：按资源显式配置射击物理与附件轨
+
+- 配置升级到 1.8，把字符串 `AimFireEffects` 替换为结构化
+  `BattleEffects`，显式记录动画、Replace/Add 混合、Alpha 和循环语义；
+  旧 1.7 配置只通过已审计骨骼档案迁移。
+- 全量解析 41 套 Aim：主 `aim_fire` 保留在第 0 轨，身体、胸部、头发、
+  后坐、deform 和 attachment 时间轴由主轨完整应用；独立附加轨不再按
+  `aim_fire_*` 名称自动猜测。
+- 仅为 Cinderella、Laplace 两套和 Sugar 写入 4 个资源档案、5 条动态
+  BattleEffects。Sugar 配置 hair + hip，其余三套配置 hair。
+- Blanc 两套 hair 是时长 0 的静态姿势且与主射击大量重叠，已从配置档案
+  排除；运行时也跳过零时长效果，避免高轨 Replace 覆盖身体抖动。
+- 核验 41/41 的 `GunMountPoint` 均为不可绘制的 PointAttachment。嵌入
+  骨骼的武器会随主轨显示；只有人体和挂点的资源需要未来新增外部 Weapon
+  资源和挂点合成，无法靠动画名称补齐。
+- `aim_x/y` 的 DeformTimeline、受击、眩晕、死亡和技能资源继续保留为
+  独立状态方案，本次不擅自绑定输入。
+- 指南新增逐资源配置技巧：主轨/附加轨判定、目标重叠检查、Replace/Add、
+  Alpha、Loop、骨骼档案键和完整视觉验收流程。
+- Debug 全量自动化测试 `274/274` 通过；Release 和实际配置迁移待当前运行
+  实例释放文件锁后完成。
+- 本次实际影响状态支持，维护计数：`4/5 -> 5/5`。
+
 ## 2026-08-23：修复跨状态纹理回收与 Normal 恢复
 
 - 定位到纹理清理只统计当前资源，遗漏 standing/aim/cover 非活动资源槽；

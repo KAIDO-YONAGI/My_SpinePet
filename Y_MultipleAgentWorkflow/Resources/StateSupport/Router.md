@@ -2,7 +2,7 @@
 
 文档 ID：`RES-STATE-SUPPORT-ROUTER`  
 状态：`Active`
-维护计数：`4/5`
+维护计数：`5/5`
 最后更新：`2026-08-23`
 
 standing/aim/cover 多状态资源、Battle 配置、射击附加轨、动画回退和输入规则统一读取

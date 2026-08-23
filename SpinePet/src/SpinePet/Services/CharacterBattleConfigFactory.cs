@@ -7,6 +7,31 @@ namespace SpinePet.Services;
 
 internal static class CharacterBattleConfigFactory
 {
+    private static readonly Dictionary<
+        string,
+        CharacterBattleEffectConfig[]> AimFireEffectProfiles =
+        new Dictionary<string, CharacterBattleEffectConfig[]>(
+            StringComparer.OrdinalIgnoreCase)
+        {
+            ["c515_aim_00"] =
+            [
+                CreateEffect("aim_fire_hair")
+            ],
+            ["c103_aim_00"] =
+            [
+                CreateEffect("aim_fire_hair")
+            ],
+            ["c10301_01_aim_00"] =
+            [
+                CreateEffect("aim_fire_hair")
+            ],
+            ["c14002_aim_02"] =
+            [
+                CreateEffect("aim_fire_hair"),
+                CreateEffect("aim_fire_hip")
+            ]
+        };
+
     public static CharacterBattleConfig? TryCreate(
         CharacterResourceFiles standing,
         IEnumerable<CharacterResourceFiles> resources)
@@ -49,11 +74,18 @@ internal static class CharacterBattleConfigFactory
             return null;
         }
 
+        CharacterBattleAnimationsConfig animations = ResolveAnimations(
+            aimAnimations,
+            coverAnimations);
+        animations.BattleEffects = ResolveBattleEffects(
+            aim.SkeletonPath,
+            aimAnimations);
+
         return new CharacterBattleConfig
         {
             Aim = CreateResource(aim),
             Cover = CreateResource(cover),
-            Animations = ResolveAnimations(aimAnimations, coverAnimations)
+            Animations = animations
         };
     }
 
@@ -80,18 +112,6 @@ internal static class CharacterBattleConfigFactory
             .Where(animation => animation.HasTimelines)
             .Select(animation => animation.Name)
             .ToArray();
-        List<string> aimFireEffects = aimAnimations
-            .Where(animation =>
-                animation.HasTimelines &&
-                animation.Name.StartsWith(
-                    "aim_fire_",
-                    StringComparison.OrdinalIgnoreCase))
-            .Select(animation => animation.Name)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderBy(GetAimFireEffectOrder)
-            .ThenBy(name => name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
-
         return new CharacterBattleAnimationsConfig
         {
             AimIdle = FindPreferred(
@@ -120,9 +140,6 @@ internal static class CharacterBattleConfigFactory
                     !name.StartsWith(
                         "aim_fire_",
                         StringComparison.OrdinalIgnoreCase)),
-            AimFireEffects = aimFireEffects.Count == 0
-                ? null
-                : aimFireEffects,
             CoverIdle = FindPreferred(
                 usableCoverAnimations,
                 "cover_idle",
@@ -136,6 +153,24 @@ internal static class CharacterBattleConfigFactory
                 name => ContainsAll(name, "to", "cover")),
             ReloadSequence = FindReloadSequence(usableCoverAnimations)
         };
+    }
+
+    internal static List<CharacterBattleEffectConfig>?
+        ResolveLegacyBattleEffects(
+            string skeletonPath,
+            IReadOnlyList<string>? animationNames)
+    {
+        if (animationNames == null || animationNames.Count == 0)
+        {
+            return null;
+        }
+
+        HashSet<string> available = animationNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return ResolveBattleEffects(
+            skeletonPath,
+            name => available.Contains(name));
     }
 
     private static CharacterResourceFiles? FindState(
@@ -177,7 +212,8 @@ internal static class CharacterBattleConfigFactory
             return data.Animations
                 .Select(animation => new BattleAnimationMetadata(
                     animation.Name,
-                    animation.Timelines.Count > 0))
+                    animation.Timelines.Count > 0,
+                    animation.Duration))
                 .ToArray();
         }
         finally
@@ -225,16 +261,65 @@ internal static class CharacterBattleConfigFactory
         parts.All(part =>
             value.Contains(part, StringComparison.OrdinalIgnoreCase));
 
-    private static int GetAimFireEffectOrder(string name) =>
-        name.Equals(
-            "aim_fire_hair",
-            StringComparison.OrdinalIgnoreCase)
-                ? 0
-                : name.Equals(
-                    "aim_fire_hip",
-                    StringComparison.OrdinalIgnoreCase)
-                    ? 1
-                    : 2;
+    private static List<CharacterBattleEffectConfig>? ResolveBattleEffects(
+        string skeletonPath,
+        IReadOnlyList<BattleAnimationMetadata> animations)
+    {
+        Dictionary<string, BattleAnimationMetadata> available = animations
+            .Where(animation =>
+                animation.HasTimelines &&
+                animation.Duration > 0)
+            .GroupBy(
+                animation => animation.Name,
+                StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.First(),
+                StringComparer.OrdinalIgnoreCase);
+        return ResolveBattleEffects(
+            skeletonPath,
+            name => available.ContainsKey(name));
+    }
+
+    private static List<CharacterBattleEffectConfig>? ResolveBattleEffects(
+        string skeletonPath,
+        Func<string, bool> isAvailable)
+    {
+        string skeletonName = Path.GetFileNameWithoutExtension(skeletonPath);
+        if (!AimFireEffectProfiles.TryGetValue(
+                skeletonName,
+                out CharacterBattleEffectConfig[]? profile))
+        {
+            return null;
+        }
+
+        List<CharacterBattleEffectConfig> resolved = profile
+            .Where(effect => isAvailable(effect.Animation))
+            .Select(CloneEffect)
+            .ToList();
+        return resolved.Count == 0 ? null : resolved;
+    }
+
+    private static CharacterBattleEffectConfig CreateEffect(
+        string animation,
+        string blend = CharacterBattleEffectBlendModes.Replace,
+        float alpha = 1,
+        bool loop = true) =>
+        new()
+        {
+            Animation = animation,
+            Blend = blend,
+            Alpha = alpha,
+            Loop = loop
+        };
+
+    private static CharacterBattleEffectConfig CloneEffect(
+        CharacterBattleEffectConfig source) =>
+        CreateEffect(
+            source.Animation,
+            source.Blend,
+            source.Alpha,
+            source.Loop);
 
     private sealed class NoopTextureLoader : TextureLoader
     {
@@ -245,4 +330,5 @@ internal static class CharacterBattleConfigFactory
 
 internal readonly record struct BattleAnimationMetadata(
     string Name,
-    bool HasTimelines);
+    bool HasTimelines,
+    float Duration = 1);

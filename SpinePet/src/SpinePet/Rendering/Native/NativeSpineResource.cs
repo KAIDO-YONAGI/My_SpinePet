@@ -111,7 +111,7 @@ internal sealed class NativeSpineResource : IDisposable
         IReadOnlyList<string> animations,
         string? restoreAnimation,
         bool loopLast,
-        IReadOnlyList<string>? parallelAnimations = null)
+        IReadOnlyList<CharacterBattleEffectConfig>? battleEffects = null)
     {
         ClearOverlayTracks();
         Animation[] available = animations
@@ -148,8 +148,8 @@ internal sealed class NativeSpineResource : IDisposable
             AnimationState.AddAnimation(0, restore, true, 0);
         }
 
-        SetParallelAnimations(
-            parallelAnimations,
+        SetBattleEffects(
+            battleEffects,
             available,
             loopLast);
     }
@@ -177,13 +177,13 @@ internal sealed class NativeSpineResource : IDisposable
         return AnimationNames.Count > 0 ? AnimationNames[0] : null;
     }
 
-    private void SetParallelAnimations(
-        IReadOnlyList<string>? animationNames,
+    private void SetBattleEffects(
+        IReadOnlyList<CharacterBattleEffectConfig>? effects,
         Animation[] baseAnimations,
         bool loop)
     {
-        if (animationNames == null ||
-            animationNames.Count == 0 ||
+        if (effects == null ||
+            effects.Count == 0 ||
             baseAnimations.Length == 0)
         {
             return;
@@ -193,21 +193,35 @@ internal sealed class NativeSpineResource : IDisposable
             .Take(baseAnimations.Length - 1)
             .Sum(animation => animation.Duration);
         int trackIndex = 1;
-        foreach (string name in animationNames
-                     .Where(name => !string.IsNullOrWhiteSpace(name))
-                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        foreach (CharacterBattleEffectConfig effect in effects
+                     .Where(effect =>
+                         effect != null &&
+                         !string.IsNullOrWhiteSpace(effect.Animation) &&
+                         effect.Alpha > 0)
+                     .GroupBy(
+                         effect => effect.Animation,
+                         StringComparer.OrdinalIgnoreCase)
+                     .Select(group => group.First()))
         {
-            Animation? animation = SkeletonData.FindAnimation(name);
-            if (animation == null)
+            Animation? animation = SkeletonData.FindAnimation(
+                effect.Animation);
+            if (animation == null || animation.Duration <= 0)
                 continue;
 
+            bool effectLoop = loop && effect.Loop;
             TrackEntry entry = AnimationState.SetAnimation(
                 trackIndex,
                 animation,
-                loop);
+                effectLoop);
             entry.Delay = delay;
-            entry.MixBlend = MixBlend.Replace;
-            if (!loop)
+            entry.MixBlend = string.Equals(
+                effect.Blend,
+                CharacterBattleEffectBlendModes.Add,
+                StringComparison.OrdinalIgnoreCase)
+                    ? MixBlend.Add
+                    : MixBlend.Replace;
+            entry.Alpha = Math.Clamp(effect.Alpha, 0, 1);
+            if (!effectLoop)
             {
                 AnimationState.AddEmptyAnimation(
                     trackIndex,

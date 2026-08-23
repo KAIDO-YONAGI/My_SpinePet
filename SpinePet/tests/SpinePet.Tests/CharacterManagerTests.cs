@@ -2,6 +2,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows;
 using SpinePet.Models;
+using SpinePet.Rendering;
 using SpinePet.Services;
 using SpinePet.Tests.TestDoubles;
 
@@ -701,7 +702,7 @@ public sealed class CharacterManagerTests : IDisposable
 
         Assert.Single(renderHost.ShownSkeletonPaths);
         Assert.Equal(initialSaves + 1, configService.SaveRequestCount);
-        Assert.Equal(1, notifications);
+        Assert.Equal(0, notifications);
     }
 
     [Fact]
@@ -795,7 +796,7 @@ public sealed class CharacterManagerTests : IDisposable
 
         Assert.Single(renderHost.ShownSkeletonPaths);
         Assert.Equal(savesBeforeShow + 1, configService.SaveRequestCount);
-        Assert.Equal(1, notifications);
+        Assert.Equal(0, notifications);
     }
 
     [Fact]
@@ -949,6 +950,39 @@ public sealed class CharacterManagerTests : IDisposable
     }
 
     [Fact]
+    public void CharacterSnapshotUsesIncrementalNotificationOnly()
+    {
+        CharacterConfig character = CreateConfig(
+            Path.Combine(_temporaryDirectory, "snapshot.skel"),
+            CharacterResourceTypes.Standing,
+            visible: false,
+            id: "snapshot");
+        FakeCharacterRenderHost renderHost = new();
+        CharacterManager manager = CreateManager(
+            SaveConfig("snapshot.json", character),
+            renderHost);
+        int collectionNotifications = 0;
+        CharacterRenderSnapshot? received = null;
+        manager.CharactersChanged += () => collectionNotifications++;
+        manager.CharacterStateChanged += snapshot => received = snapshot;
+        CharacterRenderSnapshot expected = new(
+            character.Id,
+            IsLoading: false,
+            IsVisible: true,
+            AnimationNames: ["idle"],
+            MaximumScale: 1.5,
+            CurrentScale: 0.4);
+
+        renderHost.RaiseCharacterStateChanged(expected);
+
+        Assert.Same(expected, received);
+        Assert.Equal(0, collectionNotifications);
+        CharacterConfig updated = Assert.Single(manager.Characters);
+        Assert.True(updated.Visible);
+        Assert.Equal(0.4, updated.Scale);
+    }
+
+    [Fact]
     public async Task FailedResourceSwitchKeepsRuntimeOnLastRenderedState()
     {
         CharacterConfig character = CreateBattleCharacter(
@@ -1033,7 +1067,8 @@ public sealed class CharacterManagerTests : IDisposable
         Assert.True(renderHost.AnimationSequences[^1].LoopLast);
         Assert.Equal(
             ["aim_fire_hair", "aim_fire_hip"],
-            renderHost.AnimationSequences[^1].ParallelAnimations);
+            renderHost.AnimationSequences[^1].BattleEffects
+                .Select(effect => effect.Animation));
 
         renderHost.RaiseRightReleased(character.Id);
         await WaitUntilAsync(() =>
@@ -1048,7 +1083,7 @@ public sealed class CharacterManagerTests : IDisposable
             renderHost.AnimationSequences[^1].RestoreAnimation);
         Assert.False(renderHost.AnimationSequences[^1].LoopLast);
         Assert.Empty(
-            renderHost.AnimationSequences[^1].ParallelAnimations);
+            renderHost.AnimationSequences[^1].BattleEffects);
         Assert.Equal(
             CharacterBattleStates.Cover,
             manager.GetCharacterBattleState(character.Id));
@@ -1290,8 +1325,17 @@ public sealed class CharacterManagerTests : IDisposable
                     AimIdle = "aim_idle",
                     ToAim = "to_aim",
                     AimFire = "aim_fire",
-                    AimFireEffects =
-                        ["aim_fire_hair", "aim_fire_hip"],
+                    BattleEffects =
+                    [
+                        new CharacterBattleEffectConfig
+                        {
+                            Animation = "aim_fire_hair"
+                        },
+                        new CharacterBattleEffectConfig
+                        {
+                            Animation = "aim_fire_hip"
+                        }
+                    ],
                     CoverIdle = "cover_idle",
                     ToCover = "to_cover",
                     ReloadSequence = ["cover_reload"]

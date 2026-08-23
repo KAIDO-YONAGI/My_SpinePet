@@ -242,6 +242,8 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         _libraryController.RefreshCharacterList();
         _characterManager.CharactersChanged +=
             _libraryController.RefreshCharacterList;
+        _characterManager.CharacterStateChanged +=
+            _libraryController.UpdateCharacterState;
         _characterManager.CharacterScaleChanged +=
             _settingsController.HandleCharacterScaleChanged;
         _characterManager.CharacterPositionChanged +=
@@ -1025,8 +1027,10 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
     {
         _characterManager.CharactersChanged -=
             _libraryController.RefreshCharacterList;
+        _characterManager.CharacterStateChanged -=
+            _libraryController.UpdateCharacterState;
         _characterManager.CharacterScaleChanged -=
-            OnCharacterScaleChanged;
+            _settingsController.HandleCharacterScaleChanged;
         _characterManager.CharacterPositionChanged -=
             OnCharacterPositionChanged;
         _characterManager.CharacterRightClicked -=

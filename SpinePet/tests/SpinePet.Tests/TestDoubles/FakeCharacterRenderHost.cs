@@ -18,7 +18,8 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
         IReadOnlyList<string> Animations,
         string? RestoreAnimation,
         bool LoopLast,
-        IReadOnlyList<string> ParallelAnimations)> AnimationSequences
+        IReadOnlyList<CharacterBattleEffectConfig> BattleEffects)>
+        AnimationSequences
         { get; } = [];
 
     public Func<CharacterConfig, Task>? ShowCharacterHandler { get; set; }
@@ -41,6 +42,7 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
     private Action<string, double, double>? _characterScaleChanged;
     private Action<string, IReadOnlyList<string>>? _characterAnimationsLoaded;
     private Action<string>? _characterLoadFailed;
+    private Action<CharacterRenderSnapshot>? _characterStateChanged;
     private Action? _charactersStateChanged;
     private Action<string, double, double>? _characterPositionCommitted;
     private Action<string>? _characterRightPressed;
@@ -50,6 +52,7 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
         GetSubscriberCount(_characterScaleChanged) +
         GetSubscriberCount(_characterAnimationsLoaded) +
         GetSubscriberCount(_characterLoadFailed) +
+        GetSubscriberCount(_characterStateChanged) +
         GetSubscriberCount(_charactersStateChanged) +
         GetSubscriberCount(_characterPositionCommitted) +
         GetSubscriberCount(_characterRightPressed) +
@@ -69,6 +72,11 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
     {
         add => _characterLoadFailed += value;
         remove => _characterLoadFailed -= value;
+    }
+    public event Action<CharacterRenderSnapshot>? CharacterStateChanged
+    {
+        add => _characterStateChanged += value;
+        remove => _characterStateChanged -= value;
     }
     public event Action? CharactersStateChanged
     {
@@ -144,14 +152,14 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
         IReadOnlyList<string> animations,
         string? restoreAnimation,
         bool loopLast,
-        IReadOnlyList<string>? parallelAnimations = null)
+        IReadOnlyList<CharacterBattleEffectConfig>? battleEffects = null)
     {
         AnimationSequences.Add((
             characterId,
             animations.ToArray(),
             restoreAnimation,
             loopLast,
-            parallelAnimations?.ToArray() ?? []));
+            battleEffects?.ToArray() ?? []));
     }
     public async Task PreloadBattleResourcesAsync(CharacterConfig character)
     {
@@ -161,7 +169,7 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
             await PreloadBattleResourcesHandler(character);
         }
     }
-    public bool SetCharacterResourceState(
+    public Task<bool> SetCharacterResourceStateAsync(
         string characterId,
         string resourceState,
         string? idleAnimation)
@@ -170,10 +178,11 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
             characterId,
             resourceState,
             idleAnimation));
-        return SetCharacterResourceStateHandler?.Invoke(
-            characterId,
-            resourceState,
-            idleAnimation) ?? true;
+        return Task.FromResult(
+            SetCharacterResourceStateHandler?.Invoke(
+                characterId,
+                resourceState,
+                idleAnimation) ?? true);
     }
     public void SetConfigMode(bool configMode)
     {
@@ -219,6 +228,10 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
         _characterLoadFailed?.Invoke(characterId);
 
     public void RaiseStateChanged() => _charactersStateChanged?.Invoke();
+
+    public void RaiseCharacterStateChanged(
+        CharacterRenderSnapshot snapshot) =>
+        _characterStateChanged?.Invoke(snapshot);
 
     public void RaisePositionCommitted(
         string characterId,

@@ -56,7 +56,7 @@ public sealed class CharacterManager
         _renderHost.CharacterScaleChanged += OnCharacterScaleChanged;
         _renderHost.CharacterAnimationsLoaded += OnCharacterAnimationsLoaded;
         _renderHost.CharacterLoadFailed += OnCharacterLoadFailed;
-        _renderHost.CharactersStateChanged += OnCharactersStateChanged;
+        _renderHost.CharacterStateChanged += OnCharacterStateChanged;
         _renderHost.CharacterPositionCommitted += OnCharacterPositionCommitted;
         _renderHost.CharacterRightPressed += OnCharacterRightPressed;
         _renderHost.CharacterRightReleased += OnCharacterRightReleased;
@@ -76,6 +76,8 @@ public sealed class CharacterManager
     public event Action? CharactersChanged;
 
     public event Action<string, double, double>? CharacterScaleChanged;
+
+    public event Action<CharacterRenderSnapshot>? CharacterStateChanged;
 
     public event Action<string, double, double>? CharacterPositionChanged;
 
@@ -112,7 +114,7 @@ public sealed class CharacterManager
             if (operationVersion != runtime.OperationVersion)
                 return false;
 
-            if (!_renderHost.SetCharacterResourceState(
+            if (!await _renderHost.SetCharacterResourceStateAsync(
                 character.Id,
                 CharacterBattleStates.Cover,
                 character.Battle.Animations.CoverIdle))
@@ -126,7 +128,7 @@ public sealed class CharacterManager
         }
         else
         {
-            if (!_renderHost.SetCharacterResourceState(
+            if (!await _renderHost.SetCharacterResourceStateAsync(
                 character.Id,
                 CharacterDisplayModes.Normal,
                 character.ConfiguredAnimation))
@@ -167,7 +169,7 @@ public sealed class CharacterManager
         string? idle = targetState == CharacterBattleStates.Aim
             ? character.Battle.Animations.AimIdle
             : character.Battle.Animations.CoverIdle;
-        if (!_renderHost.SetCharacterResourceState(
+        if (!await _renderHost.SetCharacterResourceStateAsync(
             character.Id,
             targetState,
             idle))
@@ -316,7 +318,6 @@ public sealed class CharacterManager
         if (ownsSideEffects && changed && !_closed)
         {
             _configService.Save(_config);
-            CharactersChanged?.Invoke();
         }
     }
 
@@ -636,7 +637,6 @@ public sealed class CharacterManager
         ResetBattleRuntime(character.Id);
         _renderHost.HideCharacter(character.Id);
         _configService.Save(_config);
-        CharactersChanged?.Invoke();
     }
 
     public void UnloadCharacter(CharacterConfig character)
@@ -685,7 +685,6 @@ public sealed class CharacterManager
 
         _renderHost.HideAll();
         _configService.Save(_config);
-        CharactersChanged?.Invoke();
     }
 
     public async Task ShowAllAsync()
@@ -722,7 +721,6 @@ public sealed class CharacterManager
         if (changes.Any(changed => changed) && !_closed)
         {
             _configService.Save(_config);
-            CharactersChanged?.Invoke();
         }
     }
 
@@ -788,7 +786,6 @@ public sealed class CharacterManager
         await _renderHost.RestoreVisibleCharactersAsync(_config.Characters, configMode);
         _renderHost.SetConfigMode(
             modeVersion == _configModeVersion ? configMode : _isConfigMode);
-        CharactersChanged?.Invoke();
     }
 
     public bool IsCharacterLoading(string characterId) =>
@@ -805,7 +802,7 @@ public sealed class CharacterManager
         _renderHost.CharacterScaleChanged -= OnCharacterScaleChanged;
         _renderHost.CharacterAnimationsLoaded -= OnCharacterAnimationsLoaded;
         _renderHost.CharacterLoadFailed -= OnCharacterLoadFailed;
-        _renderHost.CharactersStateChanged -= OnCharactersStateChanged;
+        _renderHost.CharacterStateChanged -= OnCharacterStateChanged;
         _renderHost.CharacterPositionCommitted -= OnCharacterPositionCommitted;
         _renderHost.CharacterRightPressed -= OnCharacterRightPressed;
         _renderHost.CharacterRightReleased -= OnCharacterRightReleased;
@@ -857,7 +854,6 @@ public sealed class CharacterManager
                 ?? animations[0];
         }
 
-        CharactersChanged?.Invoke();
     }
 
     private void OnCharacterLoadFailed(string characterId)
@@ -874,17 +870,26 @@ public sealed class CharacterManager
             character.Visible = false;
         }
 
-        CharactersChanged?.Invoke();
     }
 
-    private void OnCharactersStateChanged()
+    private void OnCharacterStateChanged(
+        CharacterRenderSnapshot snapshot)
     {
         if (_closed)
         {
             return;
         }
 
-        CharactersChanged?.Invoke();
+        CharacterConfig? character =
+            _config.Characters.FirstOrDefault(
+                item => item.Id == snapshot.CharacterId);
+        if (character != null)
+        {
+            character.Visible = snapshot.IsVisible;
+            character.Scale = snapshot.CurrentScale;
+        }
+
+        CharacterStateChanged?.Invoke(snapshot);
     }
 
     private void OnCharacterPositionCommitted(
@@ -991,7 +996,7 @@ public sealed class CharacterManager
 
             CharacterBattleAnimationsConfig animations =
                 character.Battle!.Animations;
-            if (!_renderHost.SetCharacterResourceState(
+            if (!await _renderHost.SetCharacterResourceStateAsync(
                 character.Id,
                 CharacterBattleStates.Aim,
                 animations.AimIdle))
@@ -1016,10 +1021,10 @@ public sealed class CharacterManager
                 loopLast:
                     animations.AimFire != null &&
                     _config.Global.BattleRules.ContinuousFireWhileHeld,
-                parallelAnimations:
+                battleEffects:
                     animations.AimFire == null
                         ? null
-                        : animations.AimFireEffects);
+                        : animations.BattleEffects);
             NotifyBattleState(character.Id, runtime);
         }
         catch (OperationCanceledException)
@@ -1050,7 +1055,7 @@ public sealed class CharacterManager
 
             CharacterBattleAnimationsConfig animations =
                 character.Battle!.Animations;
-            if (!_renderHost.SetCharacterResourceState(
+            if (!await _renderHost.SetCharacterResourceStateAsync(
                 character.Id,
                 CharacterBattleStates.Cover,
                 animations.CoverIdle))
@@ -1223,9 +1228,9 @@ public sealed class CharacterManager
                 left.Animations.AimFire,
                 right.Animations.AimFire,
                 StringComparison.OrdinalIgnoreCase) &&
-            (left.Animations.AimFireEffects ?? []).SequenceEqual(
-                right.Animations.AimFireEffects ?? [],
-                StringComparer.OrdinalIgnoreCase) &&
+            BattleEffectsMatch(
+                left.Animations.BattleEffects,
+                right.Animations.BattleEffects) &&
             string.Equals(
                 left.Animations.CoverIdle,
                 right.Animations.CoverIdle,
@@ -1237,6 +1242,44 @@ public sealed class CharacterManager
             left.Animations.ReloadSequence.SequenceEqual(
                 right.Animations.ReloadSequence,
                 StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static bool BattleEffectsMatch(
+        IReadOnlyList<CharacterBattleEffectConfig>? left,
+        IReadOnlyList<CharacterBattleEffectConfig>? right)
+    {
+        IReadOnlyList<CharacterBattleEffectConfig> normalizedLeft =
+            left ?? [];
+        IReadOnlyList<CharacterBattleEffectConfig> normalizedRight =
+            right ?? [];
+        if (normalizedLeft.Count != normalizedRight.Count)
+        {
+            return false;
+        }
+
+        for (int index = 0; index < normalizedLeft.Count; index++)
+        {
+            CharacterBattleEffectConfig leftEffect = normalizedLeft[index];
+            CharacterBattleEffectConfig rightEffect =
+                normalizedRight[index];
+            if (!string.Equals(
+                    leftEffect.Animation,
+                    rightEffect.Animation,
+                    StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(
+                    CharacterBattleEffectBlendModes.Normalize(
+                        leftEffect.Blend),
+                    CharacterBattleEffectBlendModes.Normalize(
+                        rightEffect.Blend),
+                    StringComparison.Ordinal) ||
+                leftEffect.Alpha != rightEffect.Alpha ||
+                leftEffect.Loop != rightEffect.Loop)
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool ResourceProfilesMatch(

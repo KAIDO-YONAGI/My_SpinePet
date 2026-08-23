@@ -54,8 +54,30 @@ public sealed class CharacterBattleAnimationsConfig
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<string>? AimFireEffects { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<CharacterBattleEffectConfig>? BattleEffects { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? CoverIdle { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ToCover { get; set; }
     public List<string> ReloadSequence { get; set; } = [];
+}
+
+public sealed class CharacterBattleEffectConfig
+{
+    public string Animation { get; set; } = string.Empty;
+    public string Blend { get; set; } =
+        CharacterBattleEffectBlendModes.Replace;
+    public float Alpha { get; set; } = 1;
+    public bool Loop { get; set; } = true;
+}
+
+public static class CharacterBattleEffectBlendModes
+{
+    public const string Replace = "Replace";
+    public const string Add = "Add";
+
+    public static string Normalize(string? value) =>
+        string.Equals(value, Add, StringComparison.OrdinalIgnoreCase)
+            ? Add
+            : Replace;
 }

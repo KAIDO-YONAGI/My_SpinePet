@@ -6,7 +6,7 @@ namespace SpinePet.Tests;
 public sealed class CharacterLibraryLayoutTests
 {
     [Fact]
-    public void CharacterLibraryUsesExpandedPixelScrollingViewport()
+    public void CharacterLibraryUsesRecyclingTwoColumnViewport()
     {
         string xamlPath = Path.Combine(
             FindRepositoryRoot(),
@@ -33,13 +33,22 @@ public sealed class CharacterLibraryLayoutTests
             "False",
             (string?)characterCards.Attribute(
                 "ScrollViewer.IsDeferredScrollingEnabled"));
-        // 非虚拟化面板用像素滚动，滚动平滑。
         Assert.Equal(
-            "False",
+            "True",
             (string?)characterCards.Attribute("ScrollViewer.CanContentScroll"));
+        Assert.Equal(
+            "True",
+            (string?)characterCards.Attribute(
+                "VirtualizingPanel.IsVirtualizing"));
+        Assert.Equal(
+            "Recycling",
+            (string?)characterCards.Attribute(
+                "VirtualizingPanel.VirtualizationMode"));
+        XNamespace views = "clr-namespace:SpinePet.Views";
         XElement itemsPanel = Assert.Single(
-            characterCards.Descendants(presentation + "UniformGrid"));
+            characterCards.Descendants(views + "VirtualizingUniformGrid"));
         Assert.Equal("2", (string?)itemsPanel.Attribute("Columns"));
+        Assert.Equal("128", (string?)itemsPanel.Attribute("ItemHeight"));
         Assert.DoesNotContain(
             characterCards.Attributes(),
             attribute => attribute.Name.LocalName == "ScrollViewer.ScrollChanged");
