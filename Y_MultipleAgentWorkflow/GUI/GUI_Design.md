@@ -2,7 +2,7 @@
 
 > 文档 ID：`GUI-DESIGN`  
 > 状态：`Active`  
-> 最后核验：`2026-08-22`
+> 最后核验：`2026-08-23`
 
 本文档记录已实现的 GUI 行为，以及渲染引擎重构必须满足的目标边界。主界面由
 WPF 配置面板和独立的原生 Spine 桌面渲染层组成；第 6、7 节中的新组件边界是本次
@@ -63,6 +63,7 @@ WPF 配置面板和独立的原生 Spine 桌面渲染层组成；第 6、7 节�
 |---|---|---|
 | Add | 文件选择器接受 `.skel` 或符合命名规则的 UnityFS bundle；导入 standing 资源后尝试自动补齐角色图标 | 已实现 |
 | Scan | 扫描 `res`，同步新增、删除和 Skin 变化；可见角色资源改变时尝试即时重载；连续扫描无变化时不保存、不通知也不移除渲染资源 | 已实现 |
+| 新卡默认配置 | Add 或 Scan 新建的角色卡默认保持 Hidden，不自动打开；Scale 基础比例为 100%，倍率为 1.0，对应最终缩放 0.2 | 已实现 |
 | Folder | 创建并打开当前生效的 `res` 资源目录 | 已实现 |
 | 托盘菜单 | 双击托盘图标打开面板；菜单提供 Open Panel、Show All、Hide All、Exit | 已实现 |
 | 重复启动 | 同一 EXE 目录只保留一个实例并激活已有面板；不同 EXE 目录使用不同互斥锁，可同时运行 | 已实现 |
@@ -90,11 +91,13 @@ WPF 配置面板和独立的原生 Spine 桌面渲染层组成；第 6、7 节�
 - `Rendering/Native/NativeAnimationController.cs`：常驻动画选择、点击临时动画和模式切换。
 - `Rendering/Native/NativeFrameScheduler.cs` 负责帧节拍；
   `NativeFrameRenderer.cs` 负责 Spine 更新、几何/曲面绘制、提交和性能采样，
-  二者均不拥有 UI 或配置持久化职责。
+  二者均不拥有 UI 或配置持久化职责。Dispatcher 已有一帧等待执行时，调度器
+  丢弃后续过期节拍，不补跑积压帧；动画推进继续使用真实经过时间。
 - `Rendering/Native/NativePointerController.cs`、`NativeCharacterHitTester.cs`：
   鼠标点击、拖动、右键和几何命中。
 - `Rendering/Native/NativeInputRegionCoordinator.cs`、`NativeSilhouetteRasterizer.cs`：
-  可点击区域、轮廓缓存、工作区裁剪和屏幕坐标转换。
+  可点击区域、轮廓缓存、工作区裁剪和屏幕坐标转换；输入区域只在可见角色集合、
+  轮廓缓存版本、显示器工作区或拖拽结束发生变化时重新聚合。
 - `App.xaml.cs`、`TrayIconService.cs`：启动、托盘、单实例激活和退出。
 
 上述新增类型均为 `internal`。依赖方向固定为“门面 → 协调组件 → 原生资源”，
@@ -123,3 +126,19 @@ WPF 控件、配置服务和第三方 `SpineRuntime41` 不反向依赖渲染内�
   与轮廓缓存，最后释放原生窗口和图形资源。关闭后的回调及重复关闭均为空操作。
 - 配置同步与异步保存共用同一原子提交路径；旧版本不能覆盖新版本，相同内容
   不替换磁盘文件，成功提交后统一清除 `RequiresRewrite`。
+
+## 8. 渲染热路径效率约束
+
+- 每个角色每帧只遍历一次生成后的顶点坐标：`NativeSpineGeometry.Build()` 在写入
+  顶点缓冲时同步累计本帧边界，帧渲染和资源包络计算直接复用该结果，不再次扫描
+  Draw Batch 顶点。
+- `NativeCompositionSurface` 缓存上次锚点坐标；角色位置未变化时不重复写入
+  DirectComposition visual offset。交换链扩容或缩容会使缓存失效，并在下一次定位时
+  重新提交偏移，不能因去重造成角色位置漂移。
+- 输入轮廓仍按 100ms 上限刷新，并在位置或缩放改变时立即刷新；聚合后的 Win32
+  输入区域不再每帧清空、裁剪、排序和提交。拖拽期间延迟区域重建，释放后必须执行
+  一次刷新。
+- 帧调度最多保留一个 Dispatcher 待执行帧。UI 或渲染短暂繁忙时不得建立补帧队列，
+  恢复后从下一个正常节拍继续，以真实经过时间推进 Spine 状态。
+- 动画速度、曲面位置、输入区域等原生状态只在目标值变化时写入；这些去重不得改变
+  公开接口、角色显示状态、点击动画恢复、拖拽命中或关闭顺序。

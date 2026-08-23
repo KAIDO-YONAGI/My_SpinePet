@@ -2,8 +2,8 @@
 
 文档 ID：`RES-LOAD-ROUTER`  
 状态：`Active`  
-维护计数：`1/5`
-最后更新：`2026-08-22`
+维护计数：`2/5`
+最后更新：`2026-08-23`
 
 zip/文件夹入库、资源身份与新 ID、`res` 布局、图标、配置同步和导入验证，
 完整读取 `SpinePet_Resources_Load_Guide.md`。

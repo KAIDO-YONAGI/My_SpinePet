@@ -7,6 +7,8 @@
   "015": "Anis Sparkling Summer",
   "016": "Rapi Red Hood",
   "017": "Anis Star",
+  "0170": "Anis Star",
+  "01701": "Anis Star Variant 01",
   "018": "Neon Vision Eye",
   "020": "Delta",
   "022": "Signal",
@@ -35,6 +37,7 @@
   "080": "Centi",
   "081": "Acre",
   "082": "Liter",
+  "08201": "Liter Guardfish",
   "090": "Emma",
   "091": "Vesti",
   "092": "Eunhwa",
@@ -324,5 +327,14 @@
   "994": "Rapi R unit NPC",
   "9004": "Velvet",
   "9008": "Nayuta",
-  "9020": "Pretty"
+  "9020": "Pretty",
+  "103": "Laplace Neo",
+  "10301": "Laplace Neo Variant01",
+  "473": "Rapunzel Overload",
+  "872": "c872",
+  "58001": "Phantom Variant 01",
+  "572": "Blue Arkranger",
+  "571": "Red Arkranger",
+  "33002": "Crown Variant 02",
+  "47002": "Red Hood Variant 02"
 }

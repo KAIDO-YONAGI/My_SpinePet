@@ -359,14 +359,6 @@ public sealed class CharacterManager
             addedCount++;
         }
 
-        if (plan.SeedFirstCharacterVisible)
-        {
-            for (int index = 0; index < _config.Characters.Count; index++)
-            {
-                _config.Characters[index].Visible = index == 0;
-            }
-        }
-
         CharacterResourceSynchronizationResult result = new(
             addedCount,
             updatedCount,

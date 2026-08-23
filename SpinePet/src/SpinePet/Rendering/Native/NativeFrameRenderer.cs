@@ -95,8 +95,15 @@ internal sealed class NativeFrameRenderer
                     continue;
                 }
 
-                state.Resource.AnimationState.TimeScale =
+                float animationSpeed =
                     (float)state.Config.AnimationSpeed;
+                if (state.Resource.AnimationState.TimeScale !=
+                    animationSpeed)
+                {
+                    state.Resource.AnimationState.TimeScale =
+                        animationSpeed;
+                }
+
                 state.Resource.Update((float)elapsedSeconds);
                 IReadOnlyList<NativeSpineDrawBatch> batches =
                     state.Geometry.Build(state.Resource.Skeleton);
@@ -108,7 +115,11 @@ internal sealed class NativeFrameRenderer
                     state.PivotY,
                     pixelScale);
                 UpdateSurfacePosition(state);
-                UpdateScreenBounds(state, window, batches, pixelScale);
+                UpdateScreenBounds(
+                    state,
+                    window,
+                    state.Geometry.Bounds,
+                    pixelScale);
                 state.LastBatches = batches;
                 _pendingFrames.Add(new PendingFrame(
                     state,
@@ -182,11 +193,9 @@ internal sealed class NativeFrameRenderer
     private static void UpdateScreenBounds(
         NativeCharacterState state,
         NativeCompositionWindow window,
-        IReadOnlyList<NativeSpineDrawBatch> batches,
+        NativeSpineBounds bounds,
         float pixelScale)
     {
-        NativeSpineBounds bounds =
-            NativeSpineEnvelopeCalculator.GetBounds(batches);
         float anchorX =
             window.Left +
             NativeInputRegionCoordinator.ToClientPixelX(

@@ -11,7 +11,15 @@ internal sealed class NativeInputRegionCoordinator
 
     private readonly List<Rectangle> _inputRegions = [];
     private readonly List<Rectangle> _workingAreas = [];
+    private readonly List<Rectangle> _workingAreaBuffer = [];
+    private readonly List<NativeCharacterState> _visibleStates = [];
+    private readonly List<long> _silhouetteTimestamps = [];
+    private NativeCompositionWindow? _lastWindow;
+    private NativeInputWindow? _lastInputWindow;
     private long _workingAreasRefreshTimestamp;
+    private bool _refreshDeferred;
+
+    internal int RegionRebuildCount { get; private set; }
 
     public void Update(
         NativeRenderSession session,
@@ -20,12 +28,22 @@ internal sealed class NativeInputRegionCoordinator
     {
         NativeCompositionWindow? window = session.Window;
         NativeInputWindow? inputWindow = session.InputWindow;
-        if (window == null || inputWindow == null || pointerDragging)
+        if (window == null || inputWindow == null)
             return;
+        if (pointerDragging)
+        {
+            _refreshDeferred = true;
+            return;
+        }
 
-        _inputRegions.Clear();
-        RefreshWorkingAreas(inputWindow);
+        bool requiresRebuild =
+            _refreshDeferred ||
+            !ReferenceEquals(_lastWindow, window) ||
+            !ReferenceEquals(_lastInputWindow, inputWindow);
+        _refreshDeferred = false;
+        requiresRebuild |= RefreshWorkingAreas(inputWindow);
         long now = Stopwatch.GetTimestamp();
+        int visibleIndex = 0;
         foreach (NativeCharacterState state in states)
         {
             if (!state.IsVisible)
@@ -63,6 +81,52 @@ internal sealed class NativeInputRegionCoordinator
                 state.CachedSilhouetteTimestamp = now;
             }
 
+            if (visibleIndex >= _visibleStates.Count)
+            {
+                _visibleStates.Add(state);
+                _silhouetteTimestamps.Add(
+                    state.CachedSilhouetteTimestamp);
+                requiresRebuild = true;
+            }
+            else
+            {
+                if (!ReferenceEquals(
+                        _visibleStates[visibleIndex],
+                        state) ||
+                    _silhouetteTimestamps[visibleIndex] !=
+                        state.CachedSilhouetteTimestamp)
+                {
+                    requiresRebuild = true;
+                }
+
+                _visibleStates[visibleIndex] = state;
+                _silhouetteTimestamps[visibleIndex] =
+                    state.CachedSilhouetteTimestamp;
+            }
+
+            visibleIndex++;
+        }
+
+        if (_visibleStates.Count > visibleIndex)
+        {
+            _visibleStates.RemoveRange(
+                visibleIndex,
+                _visibleStates.Count - visibleIndex);
+            _silhouetteTimestamps.RemoveRange(
+                visibleIndex,
+                _silhouetteTimestamps.Count - visibleIndex);
+            requiresRebuild = true;
+        }
+
+        _lastWindow = window;
+        _lastInputWindow = inputWindow;
+        if (!requiresRebuild)
+            return;
+
+        RegionRebuildCount++;
+        _inputRegions.Clear();
+        foreach (NativeCharacterState state in _visibleStates)
+        {
             foreach (Rectangle run in state.CachedSilhouetteRuns)
                 ClipToWorkingAreas(_inputRegions, run, _workingAreas);
         }
@@ -164,7 +228,7 @@ internal sealed class NativeInputRegionCoordinator
         (float)((y - SystemParameters.VirtualScreenTop) *
                 window.DpiScale);
 
-    private void RefreshWorkingAreas(NativeInputWindow inputWindow)
+    private bool RefreshWorkingAreas(NativeInputWindow inputWindow)
     {
         long now = Stopwatch.GetTimestamp();
         if (_workingAreas.Count > 0 &&
@@ -172,19 +236,25 @@ internal sealed class NativeInputRegionCoordinator
                 _workingAreasRefreshTimestamp,
                 now) < WorkingAreaRefreshInterval)
         {
-            return;
+            return false;
         }
 
-        _workingAreas.Clear();
+        _workingAreaBuffer.Clear();
         foreach (System.Windows.Forms.Screen screen in
                  System.Windows.Forms.Screen.AllScreens)
         {
-            _workingAreas.Add(ToClientPixelRectangle(
+            _workingAreaBuffer.Add(ToClientPixelRectangle(
                 screen.WorkingArea,
                 inputWindow.Left,
                 inputWindow.Top));
         }
 
         _workingAreasRefreshTimestamp = now;
+        if (_workingAreas.SequenceEqual(_workingAreaBuffer))
+            return false;
+
+        _workingAreas.Clear();
+        _workingAreas.AddRange(_workingAreaBuffer);
+        return true;
     }
 }

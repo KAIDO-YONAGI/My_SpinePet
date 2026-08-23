@@ -150,9 +150,7 @@ internal sealed class CharacterResourceCoordinator(
         return new CharacterResourceSynchronizationPlan(
             removals,
             updates,
-            additions,
-            SeedFirstCharacterVisible:
-                characters.Count == 0 && additions.Count > 0);
+            additions);
     }
 
     public string GetGroupKey(CharacterConfig character) =>
@@ -304,8 +302,7 @@ internal sealed class CharacterResourceCoordinator(
 internal sealed record CharacterResourceSynchronizationPlan(
     IReadOnlyList<CharacterRemovalPlan> Removals,
     IReadOnlyList<CharacterUpdatePlan> Updates,
-    IReadOnlyList<CharacterResourceFiles> Additions,
-    bool SeedFirstCharacterVisible);
+    IReadOnlyList<CharacterResourceFiles> Additions);
 
 internal sealed record CharacterRemovalPlan(
     CharacterConfig Character,

@@ -14,6 +14,9 @@ internal sealed class NativeCompositionSurface : IDisposable
     private IDXGISwapChain1? _swapChain;
     private ID3D11Texture2D? _backBuffer;
     private bool _attached;
+    private bool _hasAnchorPosition;
+    private float _anchorPositionX;
+    private float _anchorPositionY;
     private bool _disposed;
 
     public NativeCompositionSurface(
@@ -30,6 +33,7 @@ internal sealed class NativeCompositionSurface : IDisposable
     public float CapacityScale { get; private set; }
     public float AnchorPixelX { get; private set; }
     public float AnchorPixelY { get; private set; }
+    internal int AnchorPositionApplyCount { get; private set; }
 
     public bool CanContainScale(float pixelScale) =>
         _swapChain != null && pixelScale <= CapacityScale;
@@ -99,8 +103,19 @@ internal sealed class NativeCompositionSurface : IDisposable
 
     public void SetAnchorPosition(float x, float y)
     {
+        if (_hasAnchorPosition &&
+            _anchorPositionX == x &&
+            _anchorPositionY == y)
+        {
+            return;
+        }
+
         _visual.SetOffsetX(x - AnchorPixelX).CheckError();
         _visual.SetOffsetY(y - AnchorPixelY).CheckError();
+        _anchorPositionX = x;
+        _anchorPositionY = y;
+        _hasAnchorPosition = true;
+        AnchorPositionApplyCount++;
     }
 
     public bool SetVisible(bool visible)
@@ -144,6 +159,7 @@ internal sealed class NativeCompositionSurface : IDisposable
         CapacityScale = capacityScale;
         AnchorPixelX = anchorPixelX;
         AnchorPixelY = anchorPixelY;
+        _hasAnchorPosition = false;
         _swapChain = nextSwapChain;
         _backBuffer = nextBackBuffer;
         RenderTarget = nextRenderTarget;

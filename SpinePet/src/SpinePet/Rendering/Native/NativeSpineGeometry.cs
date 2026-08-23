@@ -59,20 +59,54 @@ internal sealed class NativeSpineDrawBatch
         Vector4 light,
         Vector4 dark)
     {
+        return AppendVertices(
+            positions,
+            uvs,
+            positionsLength,
+            light,
+            dark,
+            out _);
+    }
+
+    public int AppendVertices(
+        float[] positions,
+        float[] uvs,
+        int positionsLength,
+        Vector4 light,
+        Vector4 dark,
+        out NativeSpineBounds appendedBounds)
+    {
         int sourceVertexCount = positionsLength / 2;
         int vertexOffset = VertexCount;
         EnsureVertexCapacity(vertexOffset + sourceVertexCount);
+        float left = float.PositiveInfinity;
+        float top = float.PositiveInfinity;
+        float right = float.NegativeInfinity;
+        float bottom = float.NegativeInfinity;
         for (int index = 0; index < sourceVertexCount; index++)
         {
             int source = index * 2;
+            float x = positions[source];
+            float y = positions[source + 1];
             _vertices[vertexOffset + index] = new NativeSpineVertex(
-                new Vector2(positions[source], positions[source + 1]),
+                new Vector2(x, y),
                 new Vector2(uvs[source], uvs[source + 1]),
                 light,
                 dark);
+            left = Math.Min(left, x);
+            top = Math.Min(top, y);
+            right = Math.Max(right, x);
+            bottom = Math.Max(bottom, y);
         }
 
         VertexCount += sourceVertexCount;
+        appendedBounds = sourceVertexCount == 0
+            ? NativeSpineBounds.Empty
+            : new NativeSpineBounds(
+                left,
+                top,
+                right + 0.001f,
+                bottom + 0.001f);
         return vertexOffset;
     }
 
@@ -132,9 +166,13 @@ internal sealed class NativeSpineGeometry
     private readonly List<NativeSpineDrawBatch> _batchPool = [];
     private float[] _worldVertices = new float[8];
 
+    public NativeSpineBounds Bounds { get; private set; } =
+        NativeSpineBounds.Empty;
+
     public IReadOnlyList<NativeSpineDrawBatch> Build(Skeleton skeleton)
     {
         _activeBatches.Clear();
+        Bounds = NativeSpineBounds.Empty;
         Slot[] slots = skeleton.DrawOrder.Items;
 
         for (int slotIndex = 0; slotIndex < skeleton.DrawOrder.Count; slotIndex++)
@@ -240,7 +278,9 @@ internal sealed class NativeSpineGeometry
                 uvs,
                 verticesLength,
                 light,
-                dark);
+                dark,
+                out NativeSpineBounds appendedBounds);
+            Bounds = Bounds.Union(appendedBounds);
             batch.AppendIndices(triangles, indexCount, vertexOffset);
             _clipper.ClipEnd(slot);
         }

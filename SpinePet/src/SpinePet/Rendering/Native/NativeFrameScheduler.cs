@@ -18,10 +18,9 @@ internal sealed class NativeFrameScheduler : IDisposable
     private readonly Action _tick;
     private readonly IntPtr _waitableTimer;
     private readonly Thread _thread;
+    private readonly NativeFrameDispatchGate _dispatchGate = new();
     private TimeSpan _interval;
     private int _scheduleVersion;
-    private int _dispatchPending;
-    private int _dispatchAgain;
     private bool _running;
     private bool _disposed;
 
@@ -102,7 +101,6 @@ internal sealed class NativeFrameScheduler : IDisposable
 
             _running = false;
             _scheduleVersion++;
-            Volatile.Write(ref _dispatchAgain, 0);
         }
     }
 
@@ -245,11 +243,8 @@ internal sealed class NativeFrameScheduler : IDisposable
 
     private void DispatchTick()
     {
-        if (Interlocked.Exchange(ref _dispatchPending, 1) != 0)
-        {
-            Volatile.Write(ref _dispatchAgain, 1);
+        if (!_dispatchGate.TryEnter())
             return;
-        }
 
         try
         {
@@ -266,21 +261,13 @@ internal sealed class NativeFrameScheduler : IDisposable
                     }
                     finally
                     {
-                        Volatile.Write(ref _dispatchPending, 0);
-                        if (Interlocked.Exchange(
-                                ref _dispatchAgain,
-                                0) != 0 &&
-                            IsRunning)
-                        {
-                            DispatchTick();
-                        }
+                        _dispatchGate.Exit();
                     }
                 });
         }
         catch (InvalidOperationException)
         {
-            Volatile.Write(ref _dispatchPending, 0);
-            Volatile.Write(ref _dispatchAgain, 0);
+            _dispatchGate.Exit();
         }
     }
 
@@ -313,4 +300,14 @@ internal sealed class NativeFrameScheduler : IDisposable
     [DllImport("kernel32.dll")]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CloseHandle(IntPtr handle);
+}
+
+internal sealed class NativeFrameDispatchGate
+{
+    private int _pending;
+
+    public bool TryEnter() =>
+        Interlocked.Exchange(ref _pending, 1) == 0;
+
+    public void Exit() => Volatile.Write(ref _pending, 0);
 }

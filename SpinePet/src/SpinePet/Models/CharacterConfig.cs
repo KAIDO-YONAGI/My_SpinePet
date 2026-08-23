@@ -31,16 +31,16 @@ public sealed class CharacterConfig
 
     public double PositionX { get; set; } = 200;
     public double PositionY { get; set; } = 200;
-    public double Scale { get; set; } = 0.1;
+    public double Scale { get; set; } = DefaultScale;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public double? ScaleBasePercent { get; set; }
+    public double? ScaleBasePercent { get; set; } = DefaultScaleBasePercent;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public double? ScaleMultiplier { get; set; }
+    public double? ScaleMultiplier { get; set; } = DefaultScaleMultiplier;
 
     // Keep the existing JSON key so installed configurations migrate without data loss.
     [JsonPropertyName("CurrentAnimation")]
     public string ConfiguredAnimation { get; set; } = string.Empty;
 
     public double AnimationSpeed { get; set; } = DefaultAnimationSpeed;
-    public bool Visible { get; set; } = true;
+    public bool Visible { get; set; }
 }

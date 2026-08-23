@@ -147,6 +147,14 @@ public sealed class CharacterManagerTests : IDisposable
         CharacterConfig character = Assert.Single(manager.Characters);
         Assert.Equal(skin00.SkeletonPath, character.SkeletonPath);
         Assert.Equal("00", manager.GetCharacterIdentity(character).SkinCode);
+        Assert.False(character.Visible);
+        Assert.Equal(CharacterConfig.DefaultScale, character.Scale);
+        Assert.Equal(
+            CharacterConfig.DefaultScaleBasePercent,
+            character.ScaleBasePercent);
+        Assert.Equal(
+            CharacterConfig.DefaultScaleMultiplier,
+            character.ScaleMultiplier);
     }
 
     [Fact]
@@ -235,6 +243,7 @@ public sealed class CharacterManagerTests : IDisposable
         CharacterManager manager = CreateManager(configService, renderHost);
         manager.AddCharacter(skin00);
         CharacterConfig character = Assert.Single(manager.Characters);
+        character.Visible = true;
         character.ConfiguredAnimation = "idle";
 
         InvalidDataException exception = await Assert.ThrowsAsync<InvalidDataException>(
@@ -278,6 +287,7 @@ public sealed class CharacterManagerTests : IDisposable
             renderHost);
         manager.AddCharacter(skin00);
         CharacterConfig character = Assert.Single(manager.Characters);
+        character.Visible = true;
 
         InvalidDataException exception = await Assert.ThrowsAsync<InvalidDataException>(
             () => manager.SwitchCharacterResourcesAsync(character, skin01));
@@ -305,6 +315,7 @@ public sealed class CharacterManagerTests : IDisposable
             renderHost);
         manager.AddCharacter(resources);
         CharacterConfig character = Assert.Single(manager.Characters);
+        character.Visible = true;
 
         manager.UnloadCharacter(character);
 
@@ -349,6 +360,14 @@ public sealed class CharacterManagerTests : IDisposable
         CharacterConfig character = Assert.Single(manager.Characters);
         Assert.Equal(skin00.SkeletonPath, character.SkeletonPath);
         Assert.False(character.RequiresStandingMigration);
+        Assert.False(character.Visible);
+        Assert.Equal(CharacterConfig.DefaultScale, character.Scale);
+        Assert.Equal(
+            CharacterConfig.DefaultScaleBasePercent,
+            character.ScaleBasePercent);
+        Assert.Equal(
+            CharacterConfig.DefaultScaleMultiplier,
+            character.ScaleMultiplier);
     }
 
     [Fact]

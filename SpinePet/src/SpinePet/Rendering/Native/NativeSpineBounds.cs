@@ -61,7 +61,8 @@ internal static class NativeSpineEnvelopeCalculator
         Skeleton setupSkeleton = new(data);
         setupSkeleton.SetToSetupPose();
         setupSkeleton.UpdateWorldTransform();
-        NativeSpineBounds setup = GetBounds(geometry.Build(setupSkeleton));
+        geometry.Build(setupSkeleton);
+        NativeSpineBounds setup = geometry.Bounds;
         if (setup.IsEmpty)
         {
             setup = new NativeSpineBounds(
@@ -97,8 +98,8 @@ internal static class NativeSpineEnvelopeCalculator
                 state.Apply(probe);
                 probe.UpdateWorldTransform();
                 previousTime = sampleTime;
-                envelope = envelope.Union(
-                    GetBounds(geometry.Build(probe)));
+                geometry.Build(probe);
+                envelope = envelope.Union(geometry.Bounds);
             }
         }
 
