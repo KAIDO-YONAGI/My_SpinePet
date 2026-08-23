@@ -19,8 +19,14 @@
   独立状态方案，本次不擅自绑定输入。
 - 指南新增逐资源配置技巧：主轨/附加轨判定、目标重叠检查、Replace/Add、
   Alpha、Loop、骨骼档案键和完整视觉验收流程。
-- Debug 全量自动化测试 `274/274` 通过；Release 和实际配置迁移待当前运行
-  实例释放文件锁后完成。
+- 实际 `config.json` 已迁移为 1.8：61 个角色、41 个完整 Battle、4 个
+  显式资源档案、5 条 BattleEffects，旧 `AimFireEffects` 为 0；Blanc
+  两套均未写入静态 hair 效果。
+- 合并 GUI/渲染线程解耦后的 Debug 全量自动化测试 `284/284` 通过；
+  Release Build 0 警告、0 错误，Publish 成功，产物目录为
+  `release/SpinePet-Release-2026-08-24-05 16 02`。Run 启动 PID 29088，
+  `Responding=True`，机器日志记录
+  `2026-08-24 05:16:22.342 [App] startup-complete`。
 - 本次实际影响状态支持，维护计数：`4/5 -> 5/5`。
 
 ## 2026-08-23：修复跨状态纹理回收与 Normal 恢复

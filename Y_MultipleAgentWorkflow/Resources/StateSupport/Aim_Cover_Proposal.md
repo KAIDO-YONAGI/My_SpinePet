@@ -315,3 +315,9 @@ SpinePet\res\Sugar - Wild Backyard\02\cover\c14002_cover_02.skel
 清理，以及 Normal/Battle 输入边界。当前资源扫描基线为 61 个角色，其中
 41 个具有完整 Battle；4 个资源档案具有 5 条 BattleEffects。程序启动仍
 固定为 Normal。
+
+实际 `config.json` 基线为 1.8，旧 `AimFireEffects` 数量为 0；显式档案
+仅包含 Cinderella Crystal Wave、Sugar - Wild Backyard、Laplace Neo 和
+Laplace Neo Variant01。合并 GUI/渲染线程解耦后，Debug 全量测试
+`284/284` 通过，Release Build 0 警告、0 错误，Publish/Run 通过；机器
+日志于 `2026-08-24 05:16:22.342` 记录 `startup-complete`。

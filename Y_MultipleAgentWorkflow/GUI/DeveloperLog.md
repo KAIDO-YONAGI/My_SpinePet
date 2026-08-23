@@ -1,5 +1,27 @@
 # GUI Developer Log
 
+## 2026-08-24：GUI 与原生渲染线程解耦
+
+- 新增独立 STA 原生渲染线程，由该线程创建并独占原生窗口、D3D 设备、场景、
+  Surface、帧调度器和纹理生命周期；WPF Dispatcher 不再执行资源安装、首次
+  纹理上传、mipmap 生成或持续帧循环。
+- `NativeCharacterRenderHost` 收敛为 UI 门面，以不可变
+  `CharacterRenderSnapshot` 提供无阻塞状态查询；语义命令保持 FIFO，高频缩放、
+  速度、位置和帧率命令按属性合并为 latest-wins。资源状态切换改为等待渲染线程
+  确认的异步结果，现有结构化 `BattleEffects` 参数保持不变。
+- 加载、显隐和动画状态按角色合并后投递回 WPF Dispatcher；
+  `CharacterLibraryController` 只增量更新对应卡片，角色集合或排序变化时才执行
+  全量刷新。Show 后立即 Hide/Remove、重复 Show、失败及关闭竞态继续由角色
+  generation 和取消状态阻止迟到结果复活角色。
+- 缩略图改为最多两个后台解码任务，按规范化路径、修改时间和文件长度缓存，
+  缓存最多 256 项；解码结果缩放并 `Freeze()` 后绑定。角色列表改为固定两列、
+  recycling 的 `VirtualizingUniformGrid`，只实现可视行和一行缓冲区。
+- 验证证据：针对性测试 `34/34`、Debug 全量测试 `284/284`；Release Build
+  0 警告、0 错误，Publish 成功，Run 写入新的 `startup-complete`，PID 29088
+  持续响应。
+- 本次实际影响 GUI 渲染线程边界、角色库刷新和缩略图加载，维护计数：
+  `2/5 -> 3/5`。
+
 ## 2026-08-24：特殊混合渲染管线与右键过曝修复
 
 - 原生帧提交改为按 Spine draw order 生成有序计划，每个角色每帧统一上传一次

@@ -2,7 +2,7 @@
 
 > 文档 ID：`GUI-DESIGN`  
 > 状态：`Active`  
-> 最后核验：`2026-08-23`
+> 最后核验：`2026-08-24`
 
 本文档记录已实现的 GUI 行为和渲染引擎边界。主界面由 WPF 配置面板和独立的
 原生 Spine 桌面渲染层组成；第 6 至 9 节记录当前实现必须持续满足的内部契约。
@@ -20,7 +20,7 @@
 
 | 功能 | 具体实现 | 状态 |
 |---|---|---|
-| 角色卡片 | 按角色名排序并以两列展示；缩略图在 64×64 边界内保持比例，高图或宽图不会撑高卡片 | 已实现 |
+| 角色卡片 | 按角色名排序并以 recycling 虚拟化两列展示，只实例化可视行和一行缓冲；缩略图在后台限流解码、缩放并冻结，在 64×64 边界内保持比例，高图或宽图不会撑高卡片 | 已实现 |
 | 预览尺寸 | 50%–150% 滑条整体缩放卡片列表，并反向补偿滚动条宽度；数值保存到全局配置 | 已实现 |
 | 显示状态 | Hidden、Visible、Loading 三种状态；角色已显示时 Show/Hide 按钮使用白色强调，加载期间禁止重复操作 | 已实现 |
 | Show/Hide | 显示或隐藏角色，并把该角色设为右侧详情对象；不会为了按钮操作强制滚动左侧列表 | 已实现 |
@@ -77,7 +77,9 @@
 - `Views/MainWindow.xaml`：布局、控件、绑定、视觉状态和无障碍文本。
 - `Views/MainWindow.xaml.cs`：视图装配、事件路由、属性绑定和窗口命中测试。
 - `Views/CharacterLibraryController.cs`：搜索、Add/DB 导入、扫描、显隐、
-  Skin 切换和列表同步。
+  Skin 切换和列表同步；角色状态快照只增量更新对应卡片。
+- `Views/CharacterThumbnailService.cs`、`VirtualizingUniformGrid.cs`：
+  有界后台缩略图解码、冻结结果缓存，以及固定两列的 recycling 虚拟化布局。
 - `Views/CharacterSettingsController.cs`：动画、缩放、速度、位置和 Skin 删除。
 - `Views/CharacterPreviewNavigationController.cs`：选择、定位、滚动跟随与边界滚轮规则。
 - `Views/CharacterPanelActivationController.cs`：桌面角色右键打开/关闭面板的流程。
@@ -87,7 +89,10 @@
   精确编号导入、三状态归组、Battle 完整性和动画回退配置。
 - `Services/ConfigNormalizer.cs`、`ConfigFileCommitter.cs`：配置规范化、版本排序和原子磁盘提交。
 - `Rendering/Native/NativeCharacterRenderHost.cs`：保持 `ICharacterRenderHost` 的门面，
-  负责 Dispatcher 线程边界、生命周期、事件转发和组件装配，不再直接承载全部渲染细节。
+  负责线程安全快照、命令入队、事件合并和生命周期，不直接拥有原生资源。
+- `Rendering/Native/NativeRenderThread.cs`、`NativeCharacterRenderEngine.cs`：
+  独立 STA Dispatcher 线程及线程封闭的原生渲染引擎。原生窗口、D3D、
+  DirectComposition、场景、Surface、帧调度和纹理生命周期均由该线程独占。
 - `Rendering/Native/NativeRenderSession.cs`：原生窗口、输入窗口、D3D11/DirectComposition
   资源的初始化、提交和释放。
 - `Rendering/Native/NativeCharacterScene.cs`：拥有角色状态集合与 z-order；
@@ -105,10 +110,12 @@
   轮廓缓存版本、显示器工作区或拖拽结束发生变化时重新聚合。
 - `App.xaml.cs`、`TrayIconService.cs`：启动、托盘、单实例激活和退出。
 
-上述新增类型均为 `internal`。依赖方向固定为“门面 → 协调组件 → 原生资源”，
+除公开不可变 `CharacterRenderSnapshot` 外，上述新增类型均为 `internal`。
+依赖方向固定为“门面 → 渲染线程引擎 → 协调组件 → 原生资源”，
 WPF 控件、配置服务和第三方 `SpineRuntime41` 不反向依赖渲染内部组件。公开的
-渲染事件和导入冲突语义保持不变；`ICharacterRenderHost` 的资源状态切换
-必须返回实际成功结果，管理器和界面不得在渲染失败时提前提交显示状态。
+角色级状态事件只携带不可变快照；集合级事件只表示结构变化。
+`ICharacterRenderHost` 的资源状态切换必须异步返回实际成功结果，管理器和界面
+不得在渲染失败时提前提交显示状态。
 
 ## 7. 状态协调与生命周期
 
@@ -126,6 +133,14 @@ WPF 控件、配置服务和第三方 `SpineRuntime41` 不反向依赖渲染内�
   未变化时直接完成；失败或取消后清理加载占位并允许重试。
 - 渲染帧只在渲染线程/Dispatcher 上推进状态。后台线程只负责可取消的资源解析，
   安装前必须再次确认角色版本、目标状态和宿主未关闭。
+- WPF Dispatcher 只处理控件、输入和轻量状态快照，不执行原生窗口创建、D3D
+  初始化、纹理上传、mipmap 生成、首帧渲染或持续帧循环。同步状态查询直接读取
+  门面的线程安全快照，不跨线程等待渲染器。
+- 动画、资源切换和显隐等语义命令按入队顺序执行；位置、缩放、速度和帧率等
+  高频命令按角色与属性合并为最新值，不能通过积压渲染命令反压 WPF Dispatcher。
+- 同一角色一轮内的加载、可见性和动画状态通知合并为一次 WPF 增量更新。
+  Show、Hide、Remove 和资源切换继续受角色 generation 与取消状态约束，
+  过期加载结果不得重新显示已隐藏或删除的角色。
 - 点击临时动画完成后，始终从第 0 帧开始循环当前有效的常驻动画；常驻动画无效时
   从第 0 帧开始循环默认待机动画。不得恢复点击前的旧播放进度。
 - 配置面板开启或关闭只切换交互模式并取消当前指针捕获，不得选择、清空或重启
@@ -160,6 +175,9 @@ WPF 控件、配置服务和第三方 `SpineRuntime41` 不反向依赖渲染内�
   一次刷新。
 - 帧调度最多保留一个 Dispatcher 待执行帧。UI 或渲染短暂繁忙时不得建立补帧队列，
   恢复后从下一个正常节拍继续，以真实经过时间推进 Spine 状态。
+- 缩略图文件不得从绑定 getter 或滚动路径同步读取。解码服务最多并行处理两个
+  文件，按规范化路径、修改时间和目标尺寸语义缓存冻结后的 `ImageSource`，
+  缓存条目有上限；缺失或损坏图片使用固定 64×64 占位状态。
 - 动画速度、曲面位置、输入区域等原生状态只在目标值变化时写入；这些去重不得改变
   公开接口、角色显示状态、点击动画恢复、拖拽命中或关闭顺序。
 
