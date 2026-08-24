@@ -1,5 +1,47 @@
 # GUI Developer Log
 
+## 2026-08-24：CharacterManager 按职责拆分为组合门面（重构阶段 1）
+
+- 按 `GUI_Refactor_Plan.md` 阶段 1 执行，行为零变化、公共 API 冻结：
+  `CharacterManager`（1358 行）收缩为组合门面（约 430 行），公共
+  6 属性 + 20 方法 + 6 事件与 internal 4 参构造全部保留为转发语义；
+  渲染事件订阅/退订与回写留在门面，Close 仍保证 7 个渲染事件全部退订。
+- 新增 internal 组件：`CharacterCatalog`（配置仓储——增删改、换肤回滚、
+  资源同步、全局设置、持久化与 `CharactersChanged`）、
+  `CharacterShowCoordinator`（显隐 single-flight——同资源复用、异资源
+  排队、完成后持久化）、`BattleInteractionController`（Normal/Battle
+  运行时状态机与右键长按/短按交互）。
+- 新增 `BattleInteractionControllerTests`（7 项）与
+  `CharacterShowCoordinatorTests`（7 项）；原 `CharacterManagerTests`
+  29 项断言未改动。
+- 验证证据：Debug 全量测试 `305/305`；Release Build 0 警告 0 错误；
+  Publish 成功（`SpinePet-Release-2026-08-24-18 35 57`）；新实例 PID
+  16456 于 18:36:12 写入 `startup-complete` 并持续运行。
+- 本次实际影响 GUI 服务层结构，维护计数：`0/5 -> 1/5`。
+
+## 2026-08-24：角色库滚轮逐项选择重做（wheel-picker）
+
+- 根因：滚轮自由滚动一整行（128px=双列 2 项），选择由已实例化容器几何
+  （`TranslatePoint`）+ 视口中线推导；边界滚轮 ±1 步进与 pending 队列绕过
+  中线计算后，下一次 `ScrollChanged` 把选择吸回视口几何中线，划出边界时
+  跳过 4-5 个条目；快速滚动时容器实现滞后使选择只在单列间跳变。
+- 重做为选择驱动滚动：每格滚轮按两列阅读顺序严格 ±1 项（delta 按 120
+  累积，快速滚动合并为整数步长，钳制 `[0, count-1]`），把选中条目槽位中心
+  （`i×H/2 + H/4`）对齐视口中线，头尾钳制到 `0/max` 不跳变；滚轮一律
+  `e.Handled`，面板不再自由滚动。
+- 外部滚动（滚动条拖动等）的反向跟随改为纯算术槽位公式；删除
+  `GetItemGeometries`、`FindCenterItemIndex`、`GetTraversalCenter`、
+  `FindBoundaryWheelSelectionIndex`、pending 队列与 `GetCenteredVerticalOffset`
+  全部几何/边界旧路径。点击/搜索/键盘 Reveal 居中统一复用同一算术居中；
+  自滚动用 Background 优先级清除的抑制标记，防止跟随与居中在钳制区打架。
+- 验证证据：`PreviewNavigationCoordinatorTests` 重写后全量 `291/291` 通过；
+  Release Build 0 警告 0 错误，Publish 成功；新实例 PID 20116 启动并持续
+  运行。
+- 本次实际影响 GUI 角色库滚轮交互，维护计数：`4/5 -> 5/5`。按规则复查
+  本周期 GUI 任务证据与 `GUI_Design.md`：§2 卡片/缩略图/搜索/键盘与
+  §4 点击动画恢复均与当前实现一致，本次已同步「滚动跟随」行，其余记录
+  `reviewed-no-change`，计数归零：`5/5 -> 0/5`。
+
 ## 2026-08-24（上海机器时间）：预览列表 recycling 回归修复
 
 - 修复 `VirtualizingUniformGrid` 在 recycling 模式下遗漏复用容器的问题：

@@ -2,8 +2,8 @@
 
 文档 ID：`ROOT-ROUTER`  
 状态：`Active`  
-最后更新：`2026-08-23`
-最后核验：`2026-08-23`
+最后更新：`2026-08-24`
+最后核验：`2026-08-24`
 
 本目录是 Codex、Claude、ZCode 共用的唯一权威文档入口。Agent 可以先做
 轻量只读探索以识别任务，但在详细分析、创建子 Agent 或首次修改前，必须
@@ -100,6 +100,7 @@ workflow:Resources.StateSupport
 | `WF-DISTRIBUTION` | `..\..\Y_MultipleAgentWorkflow` | 通用 Skill 源码、三客户端适配与发布工具 | 安装、分发、显式升级 | External | 2026-08-22 | 2026-08-22 | 原 `My_Tools` 位置与全局 `.agents` 实体 |
 | `WF-DESIGN-BASELINE` | `..\Y_MAW_DesignPlan.md` | 已落地架构与验证设计记录，不作为现行操作权威 | 审视工作流设计来源 | Reference | 2026-08-22 | 2026-08-22 | `Y_MAW_DesignPlan.txt` |
 | `GUI-DESIGN` | `GUI\GUI_Design.md` | 已实现 GUI 权威设计 | GUI | Active | 2026-08-23 | 2026-08-23 | `GUI_Design.md` |
+| `GUI-REFACTOR-PROPOSAL` | `GUI\GUI_Refactor_Plan.md` | 未实施的 GUI 结构重构分阶段计划 | GUI 结构重构 | Proposal | 2026-08-24 | 2026-08-24 | 无 |
 | `RES-LOAD-GUIDE` | `Resources\Load\SpinePet_Resources_Load_Guide.md` | 资源入库与导入流程 | 资源导入 | Active | 2026-08-23 | 2026-08-23 | `SpinePet-通用资源导入指南.md` |
 | `RES-MATCH-CLEAN-GUIDE` | `Resources\MatchClean\SpineResource_Match_Clean_Guide.md` | 资源匹配与清理流程 | 清理、动画排查 | Active | 2026-08-22 | 2026-08-22 | `Spine资源匹配与清理通用指南.md` |
 | `STATE-AIM-COVER-GUIDE` | `Resources\StateSupport\Aim_Cover_Proposal.md` | Aim/Cover 导入、逐时间轴射击层、公开物理证据、配置、动画回退与输入规则 | 状态支持 | Active | 2026-08-23 | 2026-08-23 | `SpinePet\AIM_COVER_SUPPORT_NOTES.md` |
@@ -113,7 +114,7 @@ workflow:Resources.StateSupport
 | 业务根 | 计数 | Router |
 |---|---:|---|
 | Workflow | `0/5` | `Workflow\Router.md` |
-| GUI | `2/5` | `GUI\Router.md` |
+| GUI | `1/5` | `GUI\Router.md` |
 | Resources.Load | `3/5` | `Resources\Load\Router.md` |
 | Resources.MatchClean | `1/5` | `Resources\MatchClean\Router.md` |
 | Resources.StateSupport | `0/5` | `Resources\StateSupport\Router.md` |

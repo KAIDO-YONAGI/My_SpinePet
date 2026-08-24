@@ -26,7 +26,7 @@
 | Show/Hide | 显示或隐藏角色，并把该角色设为右侧详情对象；不会为了按钮操作强制滚动左侧列表 | 已实现 |
 | Position | 将角色恢复到默认位置，同时切换右侧详情对象；不会强制滚动左侧列表 | 已实现 |
 | 卡片选择 | 点击卡片后更新右侧详情；普通选择会确保条目可见 | 已实现 |
-| 滚动跟随 | 用户滚动时，按两列阅读顺序和视口中心更新右侧详情；到达顶部或底部后继续滚轮可逐项切换边界条目 | 已实现 |
+| 滚动跟随 | 滚轮逐项选择：每格滚轮按两列阅读顺序移动一个条目并把选中条目槽位中心对齐视口中线；快速滚轮按格数合并为整数步长，不跳项、不丢列；顶部与底部钳制为首/末行不强行居中，划出边界不跳变。滚动条拖动等外部滚动按同一算术槽位与视口中线更新右侧详情 | 已实现 |
 | 搜索 | 按角色名、当前 Skin、可用 Skin 编号及资源名进行不区分大小写的多词过滤 | 已实现 |
 | 搜索快捷键 | Ctrl+F 聚焦搜索；Down/Enter 进入结果；Esc 清空；Clear 按钮仅在有输入时出现 | 已实现 |
 | 键盘操作 | 方向键选择卡片；Enter/Space 切换显示；Shift+F10 打开 Skin 菜单 | 已实现 |
@@ -84,7 +84,15 @@
 - `Views/CharacterPreviewNavigationController.cs`：选择、定位、滚动跟随与边界滚轮规则。
 - `Views/CharacterPanelActivationController.cs`：桌面角色右键打开/关闭面板的流程。
 - `Services/CharacterResourceCoordinator.cs`：以纯计算方式匹配资源并生成同步差异。
-- `Services/CharacterManager.cs`：应用角色状态差异、持久化并发送通知。
+- `Services/CharacterManager.cs`：组合门面——编排跨组件操作（显隐与战斗
+  运行时复位、移除、隐藏全部、关闭），转发渲染事件并回写配置；公共面为
+  纯转发语义。
+- `Services/CharacterCatalog.cs`：角色配置仓储——增删改、换肤失败回滚、
+  资源同步、全局设置、持久化，并以 `CharactersChanged` 通知结构变化。
+- `Services/CharacterShowCoordinator.cs`：显隐 single-flight 协调——同一
+  角色同一资源复用同一加载任务，不同资源按序排队，完成后再持久化。
+- `Services/BattleInteractionController.cs`：Normal/Battle 运行时状态机
+  与右键长按/短按交互。
 - `Services/NikkeDbResourceImportService.cs`、`CharacterBattleConfigFactory.cs`：
   精确编号导入、三状态归组、Battle 完整性和动画回退配置。
 - `Services/ConfigNormalizer.cs`、`ConfigFileCommitter.cs`：配置规范化、版本排序和原子磁盘提交。
