@@ -9,8 +9,8 @@ internal static class CharacterBattleConfigFactory
 {
     private static readonly Dictionary<
         string,
-        CharacterBattleEffectConfig[]> AimFireEffectProfiles =
-        new Dictionary<string, CharacterBattleEffectConfig[]>(
+        CharacterBattleLayerConfig[]> AimFireEffectProfiles =
+        new Dictionary<string, CharacterBattleLayerConfig[]>(
             StringComparer.OrdinalIgnoreCase)
         {
             ["c515_aim_00"] =
@@ -77,9 +77,12 @@ internal static class CharacterBattleConfigFactory
         CharacterBattleAnimationsConfig animations = ResolveAnimations(
             aimAnimations,
             coverAnimations);
-        animations.BattleEffects = ResolveBattleEffects(
+        animations.AimFireLayers = ResolveFireLayers(
             aim.SkeletonPath,
-            aimAnimations);
+            aimAnimations,
+            animations.AimIdle,
+            animations.AimFire);
+        animations.AimFire = null;
 
         return new CharacterBattleConfig
         {
@@ -173,6 +176,61 @@ internal static class CharacterBattleConfigFactory
             name => available.Contains(name));
     }
 
+    internal static List<CharacterBattleLayerConfig>?
+        ResolveLegacyFireLayers(
+            CharacterBattleResourceConfig aim,
+            CharacterBattleAnimationsConfig animations)
+    {
+        ArgumentNullException.ThrowIfNull(aim);
+        ArgumentNullException.ThrowIfNull(animations);
+
+        try
+        {
+            IReadOnlyList<BattleAnimationMetadata> metadata =
+                ReadAnimations(aim.SkeletonPath, aim.AtlasPath);
+            List<CharacterBattleLayerConfig>? resolved = ResolveFireLayers(
+                aim.SkeletonPath,
+                metadata,
+                animations.AimIdle,
+                animations.AimFire);
+            if (resolved != null)
+            {
+                AddLegacyEffects(
+                    resolved,
+                    metadata,
+                    animations.AimIdle,
+                    animations.BattleEffects);
+                return resolved;
+            }
+        }
+        catch (Exception exception)
+        {
+            AppLogger.Write(
+                nameof(CharacterBattleConfigFactory),
+                $"legacy-fire-layer-fallback path={aim.SkeletonPath} " +
+                $"message={exception.Message}");
+        }
+
+        List<CharacterBattleLayerConfig> fallback = [];
+        if (!string.IsNullOrWhiteSpace(animations.AimFire))
+        {
+            fallback.Add(CreateLayer(animations.AimFire));
+        }
+        if (animations.BattleEffects != null)
+        {
+            fallback.AddRange(animations.BattleEffects
+                .Where(effect =>
+                    effect != null &&
+                    !string.IsNullOrWhiteSpace(effect.Animation))
+                .Select(effect => CreateLayer(
+                    effect.Animation,
+                    effect.Blend,
+                    effect.Alpha,
+                    effect.Loop)));
+        }
+        return fallback.Count == 0 ? null : fallback;
+    }
+
     private static CharacterResourceFiles? FindState(
         IEnumerable<CharacterResourceFiles> resources,
         string skinDirectory,
@@ -201,19 +259,29 @@ internal static class CharacterBattleConfigFactory
 
     private static BattleAnimationMetadata[] ReadAnimations(
         CharacterResourceFiles resource)
+        => ReadAnimations(resource.SkeletonPath, resource.AtlasPath);
+
+    private static BattleAnimationMetadata[] ReadAnimations(
+        string skeletonPath,
+        string atlasPath)
     {
-        Atlas atlas = new(resource.AtlasPath, new NoopTextureLoader());
+        Atlas atlas = new(atlasPath, new NoopTextureLoader());
         try
         {
-            SkeletonData data = Path.GetExtension(resource.SkeletonPath)
+            SkeletonData data = Path.GetExtension(skeletonPath)
                 .Equals(".json", StringComparison.OrdinalIgnoreCase)
-                ? new SkeletonJson(atlas).ReadSkeletonData(resource.SkeletonPath)
-                : new SkeletonBinary(atlas).ReadSkeletonData(resource.SkeletonPath);
+                ? new SkeletonJson(atlas).ReadSkeletonData(skeletonPath)
+                : new SkeletonBinary(atlas).ReadSkeletonData(skeletonPath);
             return data.Animations
                 .Select(animation => new BattleAnimationMetadata(
                     animation.Name,
                     animation.Timelines.Count > 0,
-                    animation.Duration))
+                    animation.Duration,
+                    animation.Timelines
+                        .Select(timeline => new BattleTimelineMetadata(
+                            SpineTimelineKey.Resolve(timeline, data),
+                            timeline.FrameCount))
+                        .ToArray()))
                 .ToArray();
         }
         finally
@@ -288,19 +356,192 @@ internal static class CharacterBattleConfigFactory
         string skeletonName = Path.GetFileNameWithoutExtension(skeletonPath);
         if (!AimFireEffectProfiles.TryGetValue(
                 skeletonName,
-                out CharacterBattleEffectConfig[]? profile))
+                out CharacterBattleLayerConfig[]? profile))
         {
             return null;
         }
 
         List<CharacterBattleEffectConfig> resolved = profile
             .Where(effect => isAvailable(effect.Animation))
-            .Select(CloneEffect)
+            .Select(effect => new CharacterBattleEffectConfig
+            {
+                Animation = effect.Animation,
+                Blend = effect.Blend,
+                Alpha = effect.Alpha,
+                Loop = effect.Loop
+            })
             .ToList();
         return resolved.Count == 0 ? null : resolved;
     }
 
-    private static CharacterBattleEffectConfig CreateEffect(
+    private static List<CharacterBattleLayerConfig>? ResolveFireLayers(
+        string skeletonPath,
+        IReadOnlyList<BattleAnimationMetadata> animations,
+        string? aimIdle,
+        string? aimFire)
+    {
+        Dictionary<string, BattleAnimationMetadata> available = animations
+            .Where(animation =>
+                animation.HasTimelines &&
+                animation.Duration > 0)
+            .GroupBy(
+                animation => animation.Name,
+                StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.First(),
+                StringComparer.OrdinalIgnoreCase);
+        if (available.Count == 0)
+        {
+            return null;
+        }
+
+        HashSet<string> idleDynamicTimelines = ResolveDynamicTimelines(
+            available,
+            aimIdle);
+        List<CharacterBattleLayerConfig> layers = [];
+        AddLayer(
+            layers,
+            available,
+            aimFire,
+            idleDynamicTimelines);
+
+        string skeletonName = Path.GetFileNameWithoutExtension(skeletonPath);
+        if (AimFireEffectProfiles.TryGetValue(
+                skeletonName,
+                out CharacterBattleLayerConfig[]? profile))
+        {
+            foreach (CharacterBattleLayerConfig effect in profile)
+            {
+                AddLayer(
+                    layers,
+                    available,
+                    effect.Animation,
+                    idleDynamicTimelines,
+                    effect);
+            }
+        }
+
+        return layers.Count == 0 ? null : layers;
+    }
+
+    private static void AddLegacyEffects(
+        List<CharacterBattleLayerConfig> layers,
+        IReadOnlyList<BattleAnimationMetadata> animations,
+        string? aimIdle,
+        List<CharacterBattleEffectConfig>? effects)
+    {
+        if (effects == null || effects.Count == 0)
+        {
+            return;
+        }
+
+        Dictionary<string, BattleAnimationMetadata> available = animations
+            .Where(animation =>
+                animation.HasTimelines &&
+                animation.Duration > 0)
+            .GroupBy(
+                animation => animation.Name,
+                StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => group.First(),
+                StringComparer.OrdinalIgnoreCase);
+        HashSet<string> idleDynamicTimelines = ResolveDynamicTimelines(
+            available,
+            aimIdle);
+        HashSet<string> existing = layers
+            .Select(layer => layer.Animation)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (CharacterBattleEffectConfig effect in effects.Where(
+                     effect =>
+                         effect != null &&
+                         !string.IsNullOrWhiteSpace(effect.Animation) &&
+                         !existing.Contains(effect.Animation)))
+        {
+            AddLayer(
+                layers,
+                available,
+                effect.Animation,
+                idleDynamicTimelines,
+                CreateLayer(
+                    effect.Animation,
+                    effect.Blend,
+                    effect.Alpha,
+                    effect.Loop));
+        }
+    }
+
+    private static HashSet<string> ResolveDynamicTimelines(
+        Dictionary<string, BattleAnimationMetadata> animations,
+        string? animationName)
+    {
+        if (string.IsNullOrWhiteSpace(animationName) ||
+            !animations.TryGetValue(
+                animationName,
+                out BattleAnimationMetadata animation) ||
+            animation.Timelines == null)
+        {
+            return new HashSet<string>(StringComparer.Ordinal);
+        }
+
+        return animation.Timelines
+            .Where(timeline => timeline.FrameCount > 1)
+            .Select(timeline => timeline.Key)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static void AddLayer(
+        List<CharacterBattleLayerConfig> layers,
+        Dictionary<string, BattleAnimationMetadata> animations,
+        string? animationName,
+        HashSet<string> idleDynamicTimelines,
+        CharacterBattleLayerConfig? template = null)
+    {
+        if (string.IsNullOrWhiteSpace(animationName) ||
+            !animations.TryGetValue(
+                animationName,
+                out BattleAnimationMetadata animation))
+        {
+            return;
+        }
+
+        IReadOnlyList<BattleTimelineMetadata> timelines =
+            animation.Timelines ?? [];
+        List<string> exclusions = timelines
+            .Where(timeline =>
+                timeline.FrameCount <= 1 &&
+                idleDynamicTimelines.Contains(timeline.Key))
+            .Select(timeline => timeline.Key)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToList();
+        int remainingTimelineCount = timelines.Count == 0
+            ? 1
+            : timelines.Count(timeline =>
+                !exclusions.Contains(timeline.Key, StringComparer.Ordinal));
+        if (remainingTimelineCount == 0)
+        {
+            return;
+        }
+
+        CharacterBattleLayerConfig layer = template == null
+            ? CreateLayer(animationName)
+            : CloneLayer(template);
+        layer.ExcludeTimelines = exclusions.Count == 0
+            ? null
+            : exclusions;
+        layers.Add(layer);
+    }
+
+    private static CharacterBattleLayerConfig CreateEffect(
+        string animation,
+        string blend = CharacterBattleEffectBlendModes.Replace,
+        float alpha = 1,
+        bool loop = true) =>
+        CreateLayer(animation, blend, alpha, loop);
+
+    private static CharacterBattleLayerConfig CreateLayer(
         string animation,
         string blend = CharacterBattleEffectBlendModes.Replace,
         float alpha = 1,
@@ -313,9 +554,9 @@ internal static class CharacterBattleConfigFactory
             Loop = loop
         };
 
-    private static CharacterBattleEffectConfig CloneEffect(
-        CharacterBattleEffectConfig source) =>
-        CreateEffect(
+    private static CharacterBattleLayerConfig CloneLayer(
+        CharacterBattleLayerConfig source) =>
+        CreateLayer(
             source.Animation,
             source.Blend,
             source.Alpha,
@@ -331,4 +572,9 @@ internal static class CharacterBattleConfigFactory
 internal readonly record struct BattleAnimationMetadata(
     string Name,
     bool HasTimelines,
-    float Duration = 1);
+    float Duration = 1,
+    IReadOnlyList<BattleTimelineMetadata>? Timelines = null);
+
+internal readonly record struct BattleTimelineMetadata(
+    string Key,
+    int FrameCount);

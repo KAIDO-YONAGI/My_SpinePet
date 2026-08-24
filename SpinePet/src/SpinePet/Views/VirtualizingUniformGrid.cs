@@ -260,7 +260,11 @@ internal sealed class VirtualizingUniformGrid :
         {
             UIElement child =
                 (UIElement)generator.GenerateNext(out bool newlyRealized);
-            if (newlyRealized)
+            bool requiresVisualInsertion =
+                VirtualizingUniformGridLayout.RequiresVisualInsertion(
+                    newlyRealized,
+                    InternalChildren.Contains(child));
+            if (requiresVisualInsertion)
             {
                 if (childIndex >= InternalChildren.Count)
                 {
@@ -355,6 +359,11 @@ internal readonly record struct VirtualizedItemRange(
 
 internal static class VirtualizingUniformGridLayout
 {
+    public static bool RequiresVisualInsertion(
+        bool newlyRealized,
+        bool isAttached) =>
+        newlyRealized || !isAttached;
+
     public static VirtualizedItemRange CalculateRange(
         int itemCount,
         int columns,

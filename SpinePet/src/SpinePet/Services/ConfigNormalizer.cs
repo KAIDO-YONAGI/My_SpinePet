@@ -181,14 +181,34 @@ internal static class ConfigNormalizer
                     battle.Aim.SkeletonPath,
                     battle.Animations.AimFireEffects);
         }
-        if (battle.Animations.AimFireEffects != null &&
-            !preserveFutureVersion)
+        if (!preserveFutureVersion &&
+            battle.Animations.AimFireLayers == null &&
+            (!string.IsNullOrWhiteSpace(battle.Animations.AimFire) ||
+             battle.Animations.BattleEffects?.Count > 0))
         {
-            battle.Animations.AimFireEffects = null;
+            battle.Animations.AimFireLayers =
+                CharacterBattleConfigFactory.ResolveLegacyFireLayers(
+                    battle.Aim,
+                    battle.Animations);
             config.RequiresRewrite = true;
         }
-        battle.Animations.BattleEffects = NormalizeBattleEffects(
-            battle.Animations.BattleEffects);
+        if (!preserveFutureVersion &&
+            (battle.Animations.AimFire != null ||
+             battle.Animations.AimFireEffects != null ||
+             battle.Animations.BattleEffects != null))
+        {
+            battle.Animations.AimFire = null;
+            battle.Animations.AimFireEffects = null;
+            battle.Animations.BattleEffects = null;
+            config.RequiresRewrite = true;
+        }
+        if (preserveFutureVersion)
+        {
+            battle.Animations.BattleEffects = NormalizeBattleEffects(
+                battle.Animations.BattleEffects);
+        }
+        battle.Animations.AimFireLayers = NormalizeBattleLayers(
+            battle.Animations.AimFireLayers);
 
         if (!battle.Aim.Exists() || !battle.Cover.Exists())
         {
@@ -233,6 +253,58 @@ internal static class ConfigNormalizer
                 Loop = effect.Loop
             })
             .Where(effect => effect.Alpha > 0)
+            .ToList();
+        return normalized.Count == 0 ? null : normalized;
+    }
+
+    private static List<CharacterBattleLayerConfig>? NormalizeBattleLayers(
+        IEnumerable<CharacterBattleLayerConfig>? layers)
+    {
+        if (layers == null)
+        {
+            return null;
+        }
+
+        List<CharacterBattleLayerConfig> normalized = layers
+            .Where(layer =>
+                layer != null &&
+                !string.IsNullOrWhiteSpace(layer.Animation))
+            .GroupBy(
+                layer => layer.Animation,
+                StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .Select(layer => new CharacterBattleLayerConfig
+            {
+                Animation = layer.Animation.Trim(),
+                Blend = CharacterBattleEffectBlendModes.Normalize(
+                    layer.Blend),
+                Alpha = float.IsFinite(layer.Alpha)
+                    ? Math.Clamp(layer.Alpha, 0, 1)
+                    : 1,
+                Loop = layer.Loop,
+                IncludeTimelines = NormalizeTimelineKeys(
+                    layer.IncludeTimelines),
+                ExcludeTimelines = NormalizeTimelineKeys(
+                    layer.ExcludeTimelines)
+            })
+            .Where(layer => layer.Alpha > 0)
+            .ToList();
+        return normalized.Count == 0 ? null : normalized;
+    }
+
+    private static List<string>? NormalizeTimelineKeys(
+        IEnumerable<string>? keys)
+    {
+        if (keys == null)
+        {
+            return null;
+        }
+
+        List<string> normalized = keys
+            .Where(key => !string.IsNullOrWhiteSpace(key))
+            .Select(key => key.Trim())
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
             .ToList();
         return normalized.Count == 0 ? null : normalized;
     }

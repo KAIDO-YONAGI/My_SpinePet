@@ -1062,12 +1062,15 @@ public sealed class CharacterManagerTests : IDisposable
                 change.State == CharacterBattleStates.Aim));
 
         Assert.Equal(
-            ["to_aim", "aim_fire"],
+            ["to_aim"],
             renderHost.AnimationSequences[^1].Animations);
         Assert.True(renderHost.AnimationSequences[^1].LoopLast);
         Assert.Equal(
-            ["aim_fire_hair", "aim_fire_hip"],
-            renderHost.AnimationSequences[^1].BattleEffects
+            "aim_idle",
+            renderHost.AnimationSequences[^1].RestoreAnimation);
+        Assert.Equal(
+            ["aim_fire", "aim_fire_hair", "aim_fire_hip"],
+            renderHost.AnimationSequences[^1].BattleLayers
                 .Select(effect => effect.Animation));
 
         renderHost.RaiseRightReleased(character.Id);
@@ -1083,7 +1086,7 @@ public sealed class CharacterManagerTests : IDisposable
             renderHost.AnimationSequences[^1].RestoreAnimation);
         Assert.False(renderHost.AnimationSequences[^1].LoopLast);
         Assert.Empty(
-            renderHost.AnimationSequences[^1].BattleEffects);
+            renderHost.AnimationSequences[^1].BattleLayers);
         Assert.Equal(
             CharacterBattleStates.Cover,
             manager.GetCharacterBattleState(character.Id));
@@ -1324,14 +1327,17 @@ public sealed class CharacterManagerTests : IDisposable
                 {
                     AimIdle = "aim_idle",
                     ToAim = "to_aim",
-                    AimFire = "aim_fire",
-                    BattleEffects =
+                    AimFireLayers =
                     [
-                        new CharacterBattleEffectConfig
+                        new CharacterBattleLayerConfig
+                        {
+                            Animation = "aim_fire"
+                        },
+                        new CharacterBattleLayerConfig
                         {
                             Animation = "aim_fire_hair"
                         },
-                        new CharacterBattleEffectConfig
+                        new CharacterBattleLayerConfig
                         {
                             Animation = "aim_fire_hip"
                         }

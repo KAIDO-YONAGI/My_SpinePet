@@ -102,7 +102,7 @@ workflow:Resources.StateSupport
 | `GUI-DESIGN` | `GUI\GUI_Design.md` | 已实现 GUI 权威设计 | GUI | Active | 2026-08-23 | 2026-08-23 | `GUI_Design.md` |
 | `RES-LOAD-GUIDE` | `Resources\Load\SpinePet_Resources_Load_Guide.md` | 资源入库与导入流程 | 资源导入 | Active | 2026-08-23 | 2026-08-23 | `SpinePet-通用资源导入指南.md` |
 | `RES-MATCH-CLEAN-GUIDE` | `Resources\MatchClean\SpineResource_Match_Clean_Guide.md` | 资源匹配与清理流程 | 清理、动画排查 | Active | 2026-08-22 | 2026-08-22 | `Spine资源匹配与清理通用指南.md` |
-| `STATE-AIM-COVER-GUIDE` | `Resources\StateSupport\Aim_Cover_Proposal.md` | Aim/Cover 导入、射击附加轨、配置、动画回退与输入规则 | 状态支持 | Active | 2026-08-23 | 2026-08-23 | `SpinePet\AIM_COVER_SUPPORT_NOTES.md` |
+| `STATE-AIM-COVER-GUIDE` | `Resources\StateSupport\Aim_Cover_Proposal.md` | Aim/Cover 导入、逐时间轴射击层、公开物理证据、配置、动画回退与输入规则 | 状态支持 | Active | 2026-08-23 | 2026-08-23 | `SpinePet\AIM_COVER_SUPPORT_NOTES.md` |
 | `NIKKEDB-README` | `resources\nikkedb\README.md` | 外部证据库结构入口 | 资源证据查询 | External | 2026-08-20 | 2026-08-21 | 无 |
 | `NIKKEDB-COSTUME-INDEX` | `resources\nikkedb\NIKKE服装ID对照表.md` | 现行服装名与上游 ID | 身份反查、图标 | External | 动态维护 | 2026-08-21 | 无 |
 | `NIKKEDB-DATE-INDEX` | `resources\nikkedb\NIKKE资源日期索引.md` | 日期与结构化索引入口 | 资源日期、归类 | External | 2026-08-20 | 2026-08-21 | 无 |
@@ -116,4 +116,4 @@ workflow:Resources.StateSupport
 | GUI | `2/5` | `GUI\Router.md` |
 | Resources.Load | `3/5` | `Resources\Load\Router.md` |
 | Resources.MatchClean | `1/5` | `Resources\MatchClean\Router.md` |
-| Resources.StateSupport | `4/5` | `Resources\StateSupport\Router.md` |
+| Resources.StateSupport | `0/5` | `Resources\StateSupport\Router.md` |

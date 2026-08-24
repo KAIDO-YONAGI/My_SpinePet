@@ -1010,21 +1010,14 @@ public sealed class CharacterManager
             List<string> sequence = [];
             if (animations.ToAim != null)
                 sequence.Add(animations.ToAim);
-            if (animations.AimFire != null)
-                sequence.Add(animations.AimFire);
             _renderHost.PlayCharacterAnimationSequence(
                 character.Id,
                 sequence,
-                animations.AimFire == null
-                    ? animations.AimIdle
-                    : null,
+                animations.AimIdle,
                 loopLast:
-                    animations.AimFire != null &&
+                    animations.AimFireLayers?.Count > 0 &&
                     _config.Global.BattleRules.ContinuousFireWhileHeld,
-                battleEffects:
-                    animations.AimFire == null
-                        ? null
-                        : animations.BattleEffects);
+                battleLayers: animations.AimFireLayers);
             NotifyBattleState(character.Id, runtime);
         }
         catch (OperationCanceledException)
@@ -1224,13 +1217,9 @@ public sealed class CharacterManager
                 left.Animations.ToAim,
                 right.Animations.ToAim,
                 StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(
-                left.Animations.AimFire,
-                right.Animations.AimFire,
-                StringComparison.OrdinalIgnoreCase) &&
-            BattleEffectsMatch(
-                left.Animations.BattleEffects,
-                right.Animations.BattleEffects) &&
+            BattleLayersMatch(
+                left.Animations.AimFireLayers,
+                right.Animations.AimFireLayers) &&
             string.Equals(
                 left.Animations.CoverIdle,
                 right.Animations.CoverIdle,
@@ -1244,13 +1233,13 @@ public sealed class CharacterManager
                 StringComparer.OrdinalIgnoreCase);
     }
 
-    private static bool BattleEffectsMatch(
-        IReadOnlyList<CharacterBattleEffectConfig>? left,
-        IReadOnlyList<CharacterBattleEffectConfig>? right)
+    private static bool BattleLayersMatch(
+        IReadOnlyList<CharacterBattleLayerConfig>? left,
+        IReadOnlyList<CharacterBattleLayerConfig>? right)
     {
-        IReadOnlyList<CharacterBattleEffectConfig> normalizedLeft =
+        IReadOnlyList<CharacterBattleLayerConfig> normalizedLeft =
             left ?? [];
-        IReadOnlyList<CharacterBattleEffectConfig> normalizedRight =
+        IReadOnlyList<CharacterBattleLayerConfig> normalizedRight =
             right ?? [];
         if (normalizedLeft.Count != normalizedRight.Count)
         {
@@ -1259,8 +1248,8 @@ public sealed class CharacterManager
 
         for (int index = 0; index < normalizedLeft.Count; index++)
         {
-            CharacterBattleEffectConfig leftEffect = normalizedLeft[index];
-            CharacterBattleEffectConfig rightEffect =
+            CharacterBattleLayerConfig leftEffect = normalizedLeft[index];
+            CharacterBattleLayerConfig rightEffect =
                 normalizedRight[index];
             if (!string.Equals(
                     leftEffect.Animation,
@@ -1273,7 +1262,13 @@ public sealed class CharacterManager
                         rightEffect.Blend),
                     StringComparison.Ordinal) ||
                 leftEffect.Alpha != rightEffect.Alpha ||
-                leftEffect.Loop != rightEffect.Loop)
+                leftEffect.Loop != rightEffect.Loop ||
+                !TimelineKeysMatch(
+                    leftEffect.IncludeTimelines,
+                    rightEffect.IncludeTimelines) ||
+                !TimelineKeysMatch(
+                    leftEffect.ExcludeTimelines,
+                    rightEffect.ExcludeTimelines))
             {
                 return false;
             }
@@ -1281,6 +1276,13 @@ public sealed class CharacterManager
 
         return true;
     }
+
+    private static bool TimelineKeysMatch(
+        IReadOnlyList<string>? left,
+        IReadOnlyList<string>? right) =>
+        (left ?? []).SequenceEqual(
+            right ?? [],
+            StringComparer.Ordinal);
 
     private static bool ResourceProfilesMatch(
         CharacterBattleResourceConfig left,

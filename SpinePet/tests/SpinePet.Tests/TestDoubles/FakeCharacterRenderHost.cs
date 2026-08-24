@@ -18,7 +18,7 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
         IReadOnlyList<string> Animations,
         string? RestoreAnimation,
         bool LoopLast,
-        IReadOnlyList<CharacterBattleEffectConfig> BattleEffects)>
+        IReadOnlyList<CharacterBattleLayerConfig> BattleLayers)>
         AnimationSequences
         { get; } = [];
 
@@ -152,14 +152,14 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
         IReadOnlyList<string> animations,
         string? restoreAnimation,
         bool loopLast,
-        IReadOnlyList<CharacterBattleEffectConfig>? battleEffects = null)
+        IReadOnlyList<CharacterBattleLayerConfig>? battleLayers = null)
     {
         AnimationSequences.Add((
             characterId,
             animations.ToArray(),
             restoreAnimation,
             loopLast,
-            battleEffects?.ToArray() ?? []));
+            battleLayers?.ToArray() ?? []));
     }
     public async Task PreloadBattleResourcesAsync(CharacterConfig character)
     {

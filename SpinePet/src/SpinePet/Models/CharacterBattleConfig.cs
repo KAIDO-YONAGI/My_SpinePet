@@ -56,6 +56,8 @@ public sealed class CharacterBattleAnimationsConfig
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<CharacterBattleEffectConfig>? BattleEffects { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<CharacterBattleLayerConfig>? AimFireLayers { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? CoverIdle { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ToCover { get; set; }
@@ -69,6 +71,19 @@ public sealed class CharacterBattleEffectConfig
         CharacterBattleEffectBlendModes.Replace;
     public float Alpha { get; set; } = 1;
     public bool Loop { get; set; } = true;
+}
+
+public sealed class CharacterBattleLayerConfig
+{
+    public string Animation { get; set; } = string.Empty;
+    public string Blend { get; set; } =
+        CharacterBattleEffectBlendModes.Replace;
+    public float Alpha { get; set; } = 1;
+    public bool Loop { get; set; } = true;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? IncludeTimelines { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<string>? ExcludeTimelines { get; set; }
 }
 
 public static class CharacterBattleEffectBlendModes

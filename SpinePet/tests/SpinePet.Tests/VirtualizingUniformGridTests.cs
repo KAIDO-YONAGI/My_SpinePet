@@ -4,6 +4,22 @@ namespace SpinePet.Tests;
 
 public sealed class VirtualizingUniformGridTests
 {
+    [Theory]
+    [InlineData(true, false, true)]
+    [InlineData(false, false, true)]
+    [InlineData(false, true, false)]
+    public void DetachedRecycledContainersAreInsertedBackIntoVisualTree(
+        bool newlyRealized,
+        bool isAttached,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            VirtualizingUniformGridLayout.RequiresVisualInsertion(
+                newlyRealized,
+                isAttached));
+    }
+
     [Fact]
     public void LargeLibraryCalculatesOnlyViewportAndBufferRows()
     {

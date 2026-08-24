@@ -1,6 +1,7 @@
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Spine;
+using SpinePet.Infrastructure;
 using SpinePet.Models;
 using SpinePet.Rendering.Native;
 using SpinePet.Services;
@@ -426,12 +427,16 @@ public sealed class NativeSpineResourceTests
                 SkeletonPath = skeletonPath
             });
         resource.SetAnimationSequence(
-            ["to_aim", "aim_fire"],
-            restoreAnimation: null,
+            ["to_aim"],
+            restoreAnimation: "aim_idle",
             loopLast: true,
-            battleEffects:
+            battleLayers:
             [
-                new CharacterBattleEffectConfig
+                new CharacterBattleLayerConfig
+                {
+                    Animation = "aim_fire"
+                },
+                new CharacterBattleLayerConfig
                 {
                     Animation = "aim_fire_hair",
                     Blend = CharacterBattleEffectBlendModes.Add,
@@ -441,15 +446,23 @@ public sealed class NativeSpineResourceTests
 
         TrackEntry baseTrack = Assert.IsType<TrackEntry>(
             resource.AnimationState.GetCurrent(0));
-        TrackEntry effectTrack = Assert.IsType<TrackEntry>(
+        TrackEntry fireTrack = Assert.IsType<TrackEntry>(
             resource.AnimationState.GetCurrent(1));
+        TrackEntry effectTrack = Assert.IsType<TrackEntry>(
+            resource.AnimationState.GetCurrent(2));
         Assert.Equal("to_aim", baseTrack.Animation.Name);
-        Assert.Equal("aim_fire", baseTrack.Next?.Animation.Name);
+        Assert.Equal("aim_idle", baseTrack.Next?.Animation.Name);
+        Assert.Equal("aim_fire", fireTrack.Animation.Name);
         Assert.Equal("aim_fire_hair", effectTrack.Animation.Name);
+        Assert.Equal(
+            resource.SkeletonData.FindAnimation("to_aim")!.Duration,
+            fireTrack.Delay,
+            precision: 3);
         Assert.Equal(
             resource.SkeletonData.FindAnimation("to_aim")!.Duration,
             effectTrack.Delay,
             precision: 3);
+        Assert.True(fireTrack.Loop);
         Assert.True(effectTrack.Loop);
         Assert.Equal(MixBlend.Add, effectTrack.MixBlend);
         Assert.Equal(0.35f, effectTrack.Alpha);
@@ -460,6 +473,7 @@ public sealed class NativeSpineResourceTests
             "aim_idle",
             resource.AnimationState.GetCurrent(0)?.Animation.Name);
         Assert.Null(resource.AnimationState.GetCurrent(1));
+        Assert.Null(resource.AnimationState.GetCurrent(2));
     }
 
     [Fact]
@@ -492,12 +506,16 @@ public sealed class NativeSpineResourceTests
         Assert.NotEmpty(effect.Timelines);
 
         resource.SetAnimationSequence(
-            ["to_aim", "aim_fire"],
-            restoreAnimation: null,
+            ["to_aim"],
+            restoreAnimation: "aim_idle",
             loopLast: true,
-            battleEffects:
+            battleLayers:
             [
-                new CharacterBattleEffectConfig
+                new CharacterBattleLayerConfig
+                {
+                    Animation = "aim_fire"
+                },
+                new CharacterBattleLayerConfig
                 {
                     Animation = "aim_fire_hair"
                 }
@@ -509,8 +527,82 @@ public sealed class NativeSpineResourceTests
         TrackEntry main = Assert.IsType<TrackEntry>(
             resource.AnimationState.GetCurrent(0));
         Assert.Equal("to_aim", main.Animation.Name);
-        Assert.Equal("aim_fire", main.Next?.Animation.Name);
-        Assert.Null(resource.AnimationState.GetCurrent(1));
+        Assert.Equal("aim_idle", main.Next?.Animation.Name);
+        Assert.Equal(
+            "aim_fire",
+            resource.AnimationState.GetCurrent(1)?.Animation.Name);
+        Assert.Null(resource.AnimationState.GetCurrent(2));
+    }
+
+    [Fact]
+    public void FilteredFireLayerLeavesDynamicIdleTimelineOnBaseTrack()
+    {
+        string repositoryRoot = FindRepositoryRoot();
+        string aimDirectory = Path.Combine(
+            repositoryRoot,
+            "res",
+            "Anis Star Variant 01",
+            "01",
+            CharacterResourceTypes.Aim);
+        string skeletonPath = Path.Combine(
+            aimDirectory,
+            "c01701_01_aim_00.skel");
+        string atlasPath = Path.Combine(
+            aimDirectory,
+            "c01701_01_aim_00.atlas");
+        if (!File.Exists(skeletonPath) || !File.Exists(atlasPath))
+            return;
+
+        using NativeSpineResource resource = NativeSpineResource.Load(
+            new CharacterConfig
+            {
+                AtlasPath = atlasPath,
+                SkeletonPath = skeletonPath
+            });
+        const string gunColor = "RGBATimeline@slot:gun_8";
+        Animation idle = Assert.IsType<Animation>(
+            resource.SkeletonData.FindAnimation("aim_idle"));
+        Animation fire = Assert.IsType<Animation>(
+            resource.SkeletonData.FindAnimation("aim_fire"));
+        Assert.Contains(
+            idle.Timelines,
+            timeline =>
+                SpineTimelineKey.Resolve(
+                    timeline,
+                    resource.SkeletonData) == gunColor &&
+                timeline.FrameCount > 1);
+        Assert.Contains(
+            fire.Timelines,
+            timeline =>
+                SpineTimelineKey.Resolve(
+                    timeline,
+                    resource.SkeletonData) == gunColor &&
+                timeline.FrameCount == 1);
+
+        resource.SetAnimationSequence(
+            [],
+            restoreAnimation: "aim_idle",
+            loopLast: true,
+            battleLayers:
+            [
+                new CharacterBattleLayerConfig
+                {
+                    Animation = "aim_fire",
+                    ExcludeTimelines = [gunColor]
+                }
+            ]);
+
+        Assert.Equal(
+            "aim_idle",
+            resource.AnimationState.GetCurrent(0)?.Animation.Name);
+        TrackEntry fireTrack = Assert.IsType<TrackEntry>(
+            resource.AnimationState.GetCurrent(1));
+        Assert.DoesNotContain(
+            fireTrack.Animation.Timelines,
+            timeline =>
+                SpineTimelineKey.Resolve(
+                    timeline,
+                    resource.SkeletonData) == gunColor);
     }
 
     private static void AssertEveryAnimationProducesFiniteGeometry(

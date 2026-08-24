@@ -265,13 +265,13 @@ public sealed class ConfigServiceTests : IDisposable
         };
         AppConfig config = new()
         {
-            Version = "1.9",
+            Version = "2.0",
             Characters = [character]
         };
 
         ConfigService.Normalize(config);
 
-        Assert.Equal("1.9", config.Version);
+        Assert.Equal("2.0", config.Version);
         Assert.Equal(321, character.PositionX);
         Assert.Equal(654, character.PositionY);
     }
@@ -285,7 +285,7 @@ public sealed class ConfigServiceTests : IDisposable
         battle.Animations.AimFireEffects = ["future_fire_effect"];
         AppConfig config = new()
         {
-            Version = "1.9",
+            Version = "2.0",
             Characters =
             [
                 new CharacterConfig
@@ -297,7 +297,7 @@ public sealed class ConfigServiceTests : IDisposable
 
         ConfigService.Normalize(config, TestWorkArea);
 
-        Assert.Equal("1.9", config.Version);
+        Assert.Equal("2.0", config.Version);
         Assert.Equal(
             ["future_fire_effect"],
             battle.Animations.AimFireEffects);
@@ -388,21 +388,28 @@ public sealed class ConfigServiceTests : IDisposable
             "Characters");
         Assert.False(characters[0].TryGetProperty("Battle", out _));
         JsonElement battle = characters[1].GetProperty("Battle");
-        JsonElement effects = battle
+        JsonElement layers = battle
             .GetProperty("Animations")
-            .GetProperty("BattleEffects");
+            .GetProperty("AimFireLayers");
         Assert.Equal(
-            ["aim_fire_hair", "aim_fire_hip"],
-            effects.EnumerateArray()
+            ["aim_fire", "aim_fire_hair", "aim_fire_hip"],
+            layers.EnumerateArray()
                 .Select(item => item.GetProperty("Animation").GetString()!)
+                .ToArray());
+        Assert.Equal(
+            ["RotateTimeline@bone:body"],
+            layers[0]
+                .GetProperty("ExcludeTimelines")
+                .EnumerateArray()
+                .Select(item => item.GetString()!)
                 .ToArray());
         Assert.Null(loaded.Characters[0].Battle);
         Assert.Equal(
-            ["aim_fire_hair", "aim_fire_hip"],
+            ["aim_fire", "aim_fire_hair", "aim_fire_hip"],
             Assert.IsType<CharacterBattleConfig>(
                     loaded.Characters[1].Battle)
-                .Animations.BattleEffects!
-                .Select(effect => effect.Animation));
+                .Animations.AimFireLayers!
+                .Select(layer => layer.Animation));
     }
 
     [Fact]
@@ -439,6 +446,8 @@ public sealed class ConfigServiceTests : IDisposable
             "c103_aim_00.skel");
         File.Move(legacySkeleton, auditedSkeleton);
         battle.Aim.SkeletonPath = auditedSkeleton;
+        battle.Animations.AimFireLayers = null;
+        battle.Animations.AimFire = "aim_fire";
         battle.Animations.BattleEffects = null;
         battle.Animations.AimFireEffects =
             ["aim_fire_hair", "aim_fire_hip"];
@@ -458,13 +467,18 @@ public sealed class ConfigServiceTests : IDisposable
 
         CharacterBattleAnimationsConfig animations =
             Assert.Single(config.Characters).Battle!.Animations;
-        CharacterBattleEffectConfig effect = Assert.Single(
-            animations.BattleEffects!);
-        Assert.Equal("aim_fire_hair", effect.Animation);
+        Assert.Equal(
+            ["aim_fire", "aim_fire_hair"],
+            animations.AimFireLayers!
+                .Select(layer => layer.Animation));
+        CharacterBattleLayerConfig effect =
+            animations.AimFireLayers![1];
         Assert.Equal(
             CharacterBattleEffectBlendModes.Replace,
             effect.Blend);
+        Assert.Null(animations.AimFire);
         Assert.Null(animations.AimFireEffects);
+        Assert.Null(animations.BattleEffects);
         Assert.True(config.RequiresRewrite);
     }
 
@@ -550,27 +564,36 @@ public sealed class ConfigServiceTests : IDisposable
             {
                 AimIdle = "aim_idle",
                 ToAim = "to_aim",
-                AimFire = "aim_fire",
-                BattleEffects =
+                AimFireLayers =
                 [
-                    new CharacterBattleEffectConfig
+                    new CharacterBattleLayerConfig
+                    {
+                        Animation = "aim_fire",
+                        ExcludeTimelines =
+                        [
+                            "",
+                            "RotateTimeline@bone:body",
+                            "RotateTimeline@bone:body"
+                        ]
+                    },
+                    new CharacterBattleLayerConfig
                     {
                         Animation = "aim_fire_hair",
                         Blend = "invalid",
                         Alpha = 2
                     },
-                    new CharacterBattleEffectConfig
+                    new CharacterBattleLayerConfig
                     {
                         Animation = "",
                         Alpha = 1
                     },
-                    new CharacterBattleEffectConfig
+                    new CharacterBattleLayerConfig
                     {
                         Animation = "AIM_FIRE_HAIR",
                         Blend = CharacterBattleEffectBlendModes.Add,
                         Alpha = 0.25f
                     },
-                    new CharacterBattleEffectConfig
+                    new CharacterBattleLayerConfig
                     {
                         Animation = "aim_fire_hip",
                         Blend = CharacterBattleEffectBlendModes.Add,

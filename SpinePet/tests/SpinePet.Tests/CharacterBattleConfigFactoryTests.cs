@@ -96,8 +96,12 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
         Assert.NotNull(battle);
         Assert.Equal("aim_idle", battle.Animations.AimIdle);
         Assert.Equal("to_aim", battle.Animations.ToAim);
-        Assert.Equal("aim_fire", battle.Animations.AimFire);
+        Assert.Null(battle.Animations.AimFire);
         Assert.Null(battle.Animations.BattleEffects);
+        CharacterBattleLayerConfig fireLayer = Assert.Single(
+            battle.Animations.AimFireLayers!);
+        Assert.Equal("aim_fire", fireLayer.Animation);
+        Assert.Equal(73, fireLayer.ExcludeTimelines?.Count);
         Assert.Equal("cover_idle", battle.Animations.CoverIdle);
         Assert.Equal("to_cover", battle.Animations.ToCover);
         Assert.Equal(["cover_reload"], battle.Animations.ReloadSequence);
@@ -152,7 +156,7 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
     }
 
     [Fact]
-    public void InstalledResourcesUseOnlyAuditedDynamicFireEffects()
+    public void InstalledResourcesProduceCompleteAuditedFireLayerProfiles()
     {
         string repositoryRoot = FindRepositoryRoot();
         string resourceRoot = Path.Combine(repositoryRoot, "res");
@@ -162,7 +166,7 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
         IReadOnlyList<CharacterResourceFiles> resources =
             new CharacterResourceDiscoveryService()
                 .DiscoverAll(resourceRoot);
-        Dictionary<string, CharacterBattleEffectConfig[]> detected = resources
+        Dictionary<string, CharacterBattleConfig> profiles = resources
             .Where(resource =>
                 resource.ResourceType == CharacterResourceTypes.Standing)
             .Select(standing => new
@@ -172,31 +176,117 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
                     standing,
                     resources)
             })
-            .Where(item =>
-                item.Battle?.Animations.BattleEffects?.Count > 0)
+            .Where(item => item.Battle != null)
             .ToDictionary(
                 item => item.Profile,
-                item => item.Battle!.Animations.BattleEffects!.ToArray(),
+                item => item.Battle!,
                 StringComparer.OrdinalIgnoreCase);
 
-        Assert.Equal(4, detected.Count);
-        AssertEffects(
-            detected[Path.Combine("Cinderella Crystal Wave", "00")],
+        Assert.Equal(41, profiles.Count);
+        CharacterBattleConfig[] configured = profiles.Values
+            .Where(profile =>
+                profile.Animations.AimFireLayers?.Count > 0)
+            .ToArray();
+        Assert.Equal(40, configured.Length);
+        Assert.Equal(
+            45,
+            configured.Sum(profile =>
+                profile.Animations.AimFireLayers!.Count));
+
+        CharacterBattleConfig[] filtered = configured
+            .Where(profile => profile.Animations.AimFireLayers!.Any(layer =>
+                layer.ExcludeTimelines?.Count > 0))
+            .ToArray();
+        Assert.Equal(18, filtered.Length);
+        Assert.Equal(
+            350,
+            filtered.Sum(profile =>
+                profile.Animations.AimFireLayers!.Sum(layer =>
+                    layer.ExcludeTimelines?.Count ?? 0)));
+        Assert.All(
+            configured.SelectMany(profile =>
+                profile.Animations.AimFireLayers!),
+            layer =>
+            {
+                Assert.False(string.IsNullOrWhiteSpace(layer.Animation));
+                Assert.Equal(
+                    CharacterBattleEffectBlendModes.Replace,
+                    layer.Blend);
+                Assert.Equal(1, layer.Alpha);
+                Assert.True(layer.Loop);
+                if (layer.ExcludeTimelines != null)
+                {
+                    Assert.Equal(
+                        layer.ExcludeTimelines.Order(
+                            StringComparer.Ordinal),
+                        layer.ExcludeTimelines);
+                }
+            });
+        Assert.DoesNotContain(
+            configured
+                .SelectMany(profile => profile.Animations.AimFireLayers!)
+                .SelectMany(layer => layer.ExcludeTimelines ?? []),
+            timeline =>
+                timeline.StartsWith(
+                    "AttachmentTimeline@",
+                    StringComparison.Ordinal) ||
+                timeline.StartsWith(
+                    "DrawOrderTimeline@",
+                    StringComparison.Ordinal));
+
+        AssertLayers(
+            profiles[Path.Combine("Cinderella Crystal Wave", "00")],
+            "aim_fire",
             "aim_fire_hair");
-        AssertEffects(
-            detected[Path.Combine("Laplace Neo", "00")],
+        AssertLayers(
+            profiles[Path.Combine("Laplace Neo", "00")],
+            "aim_fire",
             "aim_fire_hair");
-        AssertEffects(
-            detected[Path.Combine("Laplace Neo Variant01", "01")],
+        AssertLayers(
+            profiles[Path.Combine("Laplace Neo Variant01", "01")],
+            "aim_fire",
             "aim_fire_hair");
-        AssertEffects(
-            detected[Path.Combine("Sugar - Wild Backyard", "02")],
+        AssertLayers(
+            profiles[Path.Combine("Sugar - Wild Backyard", "02")],
+            "aim_fire",
             "aim_fire_hair",
             "aim_fire_hip");
-        Assert.DoesNotContain("Blanc - White Rabbit", detected.Keys);
+
+        CharacterBattleAnimationsConfig sugar =
+            profiles[Path.Combine("Sugar - Wild Backyard", "02")]
+                .Animations;
+        Assert.Equal(
+            13,
+            sugar.AimFireLayers!
+                .Single(layer => layer.Animation == "aim_fire_hair")
+                .ExcludeTimelines!
+                .Count);
+        Assert.Equal(
+            14,
+            sugar.AimFireLayers!
+                .Single(layer => layer.Animation == "aim_fire_hip")
+                .ExcludeTimelines!
+                .Count);
         Assert.DoesNotContain(
-            Path.Combine("Blanc Variant 03", "03"),
-            detected.Keys);
+            "RotateTimeline@bone:aim_holster",
+            sugar.AimFireLayers!
+                .Single(layer => layer.Animation == "aim_fire_hair")
+                .ExcludeTimelines!);
+        Assert.DoesNotContain(
+            "ScaleTimeline@bone:aim_body_12",
+            sugar.AimFireLayers!
+                .Single(layer => layer.Animation == "aim_fire_hip")
+                .ExcludeTimelines!);
+        Assert.DoesNotContain(
+            "TranslateTimeline@bone:aim_body_12",
+            sugar.AimFireLayers!
+                .Single(layer => layer.Animation == "aim_fire_hip")
+                .ExcludeTimelines!);
+
+        Assert.Null(
+            profiles[Path.Combine("Rouge Variant 01", "01")]
+                .Animations
+                .AimFireLayers);
     }
 
     [Fact]
@@ -219,23 +309,14 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
         Assert.Null(blanc);
     }
 
-    private static void AssertEffects(
-        IReadOnlyList<CharacterBattleEffectConfig> effects,
+    private static void AssertLayers(
+        CharacterBattleConfig battle,
         params string[] animationNames)
     {
         Assert.Equal(
             animationNames,
-            effects.Select(effect => effect.Animation));
-        Assert.All(
-            effects,
-            effect =>
-            {
-                Assert.Equal(
-                    CharacterBattleEffectBlendModes.Replace,
-                    effect.Blend);
-                Assert.Equal(1, effect.Alpha);
-                Assert.True(effect.Loop);
-            });
+            battle.Animations.AimFireLayers!
+                .Select(layer => layer.Animation));
     }
 
     private static string GetProfilePath(

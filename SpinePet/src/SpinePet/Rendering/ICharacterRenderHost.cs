@@ -30,7 +30,7 @@ public interface ICharacterRenderHost
         IReadOnlyList<string> animations,
         string? restoreAnimation,
         bool loopLast,
-        IReadOnlyList<CharacterBattleEffectConfig>? battleEffects = null);
+        IReadOnlyList<CharacterBattleLayerConfig>? battleLayers = null);
     Task PreloadBattleResourcesAsync(CharacterConfig character);
     Task<bool> SetCharacterResourceStateAsync(
         string characterId,

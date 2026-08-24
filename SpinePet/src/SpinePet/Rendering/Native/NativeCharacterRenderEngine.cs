@@ -366,7 +366,7 @@ internal sealed class NativeCharacterRenderEngine : IDisposable
         IReadOnlyList<string> animations,
         string? restoreAnimation,
         bool loopLast,
-        IReadOnlyList<CharacterBattleEffectConfig>? battleEffects = null)
+        IReadOnlyList<CharacterBattleLayerConfig>? battleLayers = null)
     {
         if (_closed ||
             !_scene.TryGet(characterId, out NativeCharacterState? state) ||
@@ -380,7 +380,7 @@ internal sealed class NativeCharacterRenderEngine : IDisposable
             animations,
             restoreAnimation,
             loopLast,
-            battleEffects);
+            battleLayers);
     }
 
     public async Task PreloadBattleResourcesAsync(CharacterConfig character)

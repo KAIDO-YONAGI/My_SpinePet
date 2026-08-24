@@ -111,16 +111,16 @@ public sealed class NativeCharacterRenderHost :
         IReadOnlyList<string> animations,
         string? restoreAnimation,
         bool loopLast,
-        IReadOnlyList<CharacterBattleEffectConfig>? battleEffects = null)
+        IReadOnlyList<CharacterBattleLayerConfig>? battleLayers = null)
     {
         string[] sequence = animations.ToArray();
-        CharacterBattleEffectConfig[]? effects = battleEffects?.ToArray();
+        CharacterBattleLayerConfig[]? layers = battleLayers?.ToArray();
         Post(engine => engine.PlayCharacterAnimationSequence(
             characterId,
             sequence,
             restoreAnimation,
             loopLast,
-            effects));
+            layers));
     }
 
     public Task PreloadBattleResourcesAsync(CharacterConfig character) =>

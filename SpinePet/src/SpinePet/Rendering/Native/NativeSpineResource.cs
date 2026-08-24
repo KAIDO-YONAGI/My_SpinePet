@@ -1,5 +1,6 @@
 using System.IO;
 using Spine;
+using SpinePet.Infrastructure;
 using SpinePet.Infrastructure.Import;
 using SpinePet.Models;
 
@@ -111,7 +112,7 @@ internal sealed class NativeSpineResource : IDisposable
         IReadOnlyList<string> animations,
         string? restoreAnimation,
         bool loopLast,
-        IReadOnlyList<CharacterBattleEffectConfig>? battleEffects = null)
+        IReadOnlyList<CharacterBattleLayerConfig>? battleLayers = null)
     {
         ClearOverlayTracks();
         Animation[] available = animations
@@ -123,34 +124,32 @@ internal sealed class NativeSpineResource : IDisposable
         Animation? restore = string.IsNullOrWhiteSpace(restoreAnimation)
             ? null
             : SkeletonData.FindAnimation(restoreAnimation);
-        if (available.Length == 0)
+        if (available.Length > 0)
         {
+            AnimationState.SetAnimation(
+                0,
+                available[0],
+                loopLast && available.Length == 1 && restore == null);
+            for (int index = 1; index < available.Length; index++)
+            {
+                bool loop = loopLast &&
+                    index == available.Length - 1 &&
+                    restore == null;
+                AnimationState.AddAnimation(0, available[index], loop, 0);
+            }
             if (restore != null)
             {
-                AnimationState.SetAnimation(0, restore, true);
+                AnimationState.AddAnimation(0, restore, true, 0);
             }
-            return;
+        }
+        else if (restore != null)
+        {
+            AnimationState.SetAnimation(0, restore, true);
         }
 
-        AnimationState.SetAnimation(
-            0,
-            available[0],
-            loopLast && available.Length == 1 && restore == null);
-        for (int index = 1; index < available.Length; index++)
-        {
-            bool loop = loopLast &&
-                index == available.Length - 1 &&
-                restore == null;
-            AnimationState.AddAnimation(0, available[index], loop, 0);
-        }
-        if (restore != null)
-        {
-            AnimationState.AddAnimation(0, restore, true, 0);
-        }
-
-        SetBattleEffects(
-            battleEffects,
-            available,
+        SetBattleLayers(
+            battleLayers,
+            available.Sum(animation => animation.Duration),
             loopLast);
     }
 
@@ -177,50 +176,39 @@ internal sealed class NativeSpineResource : IDisposable
         return AnimationNames.Count > 0 ? AnimationNames[0] : null;
     }
 
-    private void SetBattleEffects(
-        IReadOnlyList<CharacterBattleEffectConfig>? effects,
-        Animation[] baseAnimations,
+    private void SetBattleLayers(
+        IReadOnlyList<CharacterBattleLayerConfig>? layers,
+        float delay,
         bool loop)
     {
-        if (effects == null ||
-            effects.Count == 0 ||
-            baseAnimations.Length == 0)
+        if (layers == null || layers.Count == 0)
         {
             return;
         }
 
-        float delay = baseAnimations
-            .Take(baseAnimations.Length - 1)
-            .Sum(animation => animation.Duration);
         int trackIndex = 1;
-        foreach (CharacterBattleEffectConfig effect in effects
-                     .Where(effect =>
-                         effect != null &&
-                         !string.IsNullOrWhiteSpace(effect.Animation) &&
-                         effect.Alpha > 0)
-                     .GroupBy(
-                         effect => effect.Animation,
-                         StringComparer.OrdinalIgnoreCase)
-                     .Select(group => group.First()))
+        foreach (CharacterBattleLayerConfig layer in layers.Where(layer =>
+                     layer != null &&
+                     !string.IsNullOrWhiteSpace(layer.Animation) &&
+                     layer.Alpha > 0))
         {
-            Animation? animation = SkeletonData.FindAnimation(
-                effect.Animation);
+            Animation? animation = ResolveLayerAnimation(layer);
             if (animation == null || animation.Duration <= 0)
                 continue;
 
-            bool effectLoop = loop && effect.Loop;
+            bool effectLoop = loop && layer.Loop;
             TrackEntry entry = AnimationState.SetAnimation(
                 trackIndex,
                 animation,
                 effectLoop);
             entry.Delay = delay;
             entry.MixBlend = string.Equals(
-                effect.Blend,
+                layer.Blend,
                 CharacterBattleEffectBlendModes.Add,
                 StringComparison.OrdinalIgnoreCase)
                     ? MixBlend.Add
                     : MixBlend.Replace;
-            entry.Alpha = Math.Clamp(effect.Alpha, 0, 1);
+            entry.Alpha = Math.Clamp(layer.Alpha, 0, 1);
             if (!effectLoop)
             {
                 AnimationState.AddEmptyAnimation(
@@ -230,6 +218,42 @@ internal sealed class NativeSpineResource : IDisposable
             }
             trackIndex++;
         }
+    }
+
+    private Animation? ResolveLayerAnimation(
+        CharacterBattleLayerConfig layer)
+    {
+        Animation? source = SkeletonData.FindAnimation(layer.Animation);
+        if (source == null)
+        {
+            return null;
+        }
+
+        HashSet<string> includes = (layer.IncludeTimelines ?? [])
+            .ToHashSet(StringComparer.Ordinal);
+        HashSet<string> excludes = (layer.ExcludeTimelines ?? [])
+            .ToHashSet(StringComparer.Ordinal);
+        if (includes.Count == 0 && excludes.Count == 0)
+        {
+            return source;
+        }
+
+        Timeline[] selected = source.Timelines
+            .Where(timeline =>
+            {
+                string key = SpineTimelineKey.Resolve(
+                    timeline,
+                    SkeletonData);
+                return (includes.Count == 0 || includes.Contains(key)) &&
+                    !excludes.Contains(key);
+            })
+            .ToArray();
+        return selected.Length == 0
+            ? null
+            : new Animation(
+                source.Name,
+                new ExposedList<Timeline>(selected),
+                source.Duration);
     }
 
     private void ClearOverlayTracks()

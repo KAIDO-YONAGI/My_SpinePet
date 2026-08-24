@@ -1,5 +1,36 @@
 # Resources State Support Developer Log
 
+## 2026-08-23：配置 1.9 全量射击层与公开物理取证
+
+- 配置升级到 1.9，新增 `AimFireLayers`。Aim 的第 0 轨保持
+  `to_aim -> aim_idle(loop)`，主 `aim_fire` 和已审计 hair/hip 效果从
+  第 1 轨起并行播放，解决高轨 Replace 把基础身体抖动冻结的问题。
+- 逐个解析 41 套完整 Aim 骨骼，按精确 `TimelineType@Target` 比较
+  `aim_idle` 与每条射击层。射击层单帧、idle 同键多帧时持久化到
+  `ExcludeTimelines`，而不是按 body/hair 名称猜测。
+- 40 个角色生成 45 条有效射击层；18 个角色写入 350 个精确排除键。
+  Rouge Variant 01 的零时长主射击层整层跳过。Sugar 的 hair/hip 分别只
+  保留 `aim_holster` 与 `aim_body_12` 的动态键。
+- 自动规则没有排除任何 `AttachmentTimeline` 或 `DrawOrderTimeline`。
+  Anis 枪械 RGBA 的静态高轨覆盖有真实回归，底层 idle 动态保持；Laplace
+  火花附件、Scarlet/Cinderella attachment 和 deform 等射击组件继续保留。
+- 旧 `AimFire`、`AimFireEffects`、`BattleEffects` 可从真实骨骼迁移后
+  清除。实际 `config.json` 已升级为 1.9：61 个角色、41 个 Battle、
+  40 个有效射击档案、45 条射击层、18 个过滤档案、350 个排除键，旧字段
+  和 attachment/draw-order 误排除均为 0。
+- GitHub 只读审计没有找到 Shift Up 官方公开客户端源码或可信原版反编译
+  状态机。公开社区资源存在逐角色 `aim`、`aim-shooting`、`cover` 弹簧
+  物理 JSON，证明胸部、髋部、头发、衣物等不能只靠通用脚本猜测；当前
+  C# 渲染器尚无该求解器，指南明确列为后续能力，未写入无法执行的假配置。
+- Debug 全量测试 `288/288` 通过；Release Build 0 警告、0 错误。
+  发布脚本受机器时钟影响生成未来日期目录
+  `release/SpinePet-Release-2026-08-24-06 13 00`，zip 76.7 MB。
+  按指南设置缺失的 `WINDIR` 后，Run 启动 PID 32632，`Responding=True`；
+  同一机器时钟记录未来日期日志
+  `2026-08-24 06:14:13.240 [App] startup-complete`。
+- 完成 StateSupport `5/5` 周期复查：配置、扫描、渲染、输入、迁移、
+  实际配置和权威指南与本周期证据一致，维护计数重置为 `0/5`。
+
 ## 2026-08-23：按资源显式配置射击物理与附件轨
 
 - 配置升级到 1.8，把字符串 `AimFireEffects` 替换为结构化
