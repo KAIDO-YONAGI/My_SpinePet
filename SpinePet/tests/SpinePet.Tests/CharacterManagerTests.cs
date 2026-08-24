@@ -154,6 +154,57 @@ public sealed class CharacterManagerTests : IDisposable
     }
 
     [Fact]
+    public void ResetAllSettingsUsesMergedIdleForFavoriteCharacter()
+    {
+        CharacterConfig character = new()
+        {
+            Id = "favorite-reset",
+            Name = "Diesel Favorite",
+            ConfiguredAnimation = "custom"
+        };
+        ConfigService configService = SaveConfig(
+            "favorite-reset.json",
+            character);
+        FakeCharacterRenderHost renderHost = new();
+        renderHost.AnimationNamesByCharacterId[character.Id] =
+            ["idle", "idle_merged", "expression_merged"];
+        CharacterManager manager = CreateManager(
+            configService,
+            renderHost);
+
+        manager.ResetAllSettings();
+
+        Assert.Equal(
+            "idle_merged",
+            Assert.Single(manager.Characters).ConfiguredAnimation);
+    }
+
+    [Fact]
+    public void LoadedFavoriteCharacterRegistersMergedIdleByDefault()
+    {
+        CharacterConfig character = new()
+        {
+            Id = "favorite-load",
+            Name = "Diesel Favorite"
+        };
+        ConfigService configService = SaveConfig(
+            "favorite-load.json",
+            character);
+        FakeCharacterRenderHost renderHost = new();
+        CharacterManager manager = CreateManager(
+            configService,
+            renderHost);
+
+        renderHost.RaiseAnimationsLoaded(
+            character.Id,
+            ["idle", "idle_merged", "expression_merged"]);
+
+        Assert.Equal(
+            "idle_merged",
+            Assert.Single(manager.Characters).ConfiguredAnimation);
+    }
+
+    [Fact]
     public void ResetAllSettingsUsesMetadataDefaultIdempotentlyWhenUnloaded()
     {
         CharacterConfig character = new()

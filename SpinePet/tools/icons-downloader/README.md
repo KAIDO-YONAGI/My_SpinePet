@@ -1,15 +1,12 @@
 # Character icon downloader
 
-cd E:\SpinePet\tools\icons-downloader
-.\Update-CharacterIcons.ps1
-
 
 `Update-CharacterIcons.ps1` matches local standing Spine resources such as
 `c017_00.skel` to the corresponding `icons-char-mi(hd)` bundle in
 `internal_ids.json`. It then:
 
 1. reads the latest `dp` BaseUri from the NIKKE `Player.log`;
-2. downloads only icons required by the current `res` directory;
+2. downloads the icon for one explicitly selected Skin;
 3. decrypts each bundle with `NikkeAssetUnpacker`;
 4. extracts the matching Unity sprite with UnityPy;
 5. writes the PNG into the matching skin's `icons` directory.
@@ -52,36 +49,10 @@ Install the Python dependencies:
 python -m pip install -r ..\requirements.txt
 ```
 
-Preview the matches without downloading:
-
-```powershell
-.\Update-CharacterIcons.ps1 -ListOnly
-```
-
-Download missing icons:
-
-```powershell
-.\Update-CharacterIcons.ps1
-```
-
-Download or preview only selected skins by passing their resource IDs. A single
-ID, a PowerShell array, and a comma-separated list are supported:
-
-```powershell
-.\Update-CharacterIcons.ps1 -ResourceId c010_02
-.\Update-CharacterIcons.ps1 -ResourceId c010_01,c010_02 -ListOnly
-.\Update-CharacterIcons.ps1 -ResourceId @('c010_01', 'c010_02')
-```
-
-The filter is exact: only the requested skins enter the download plan. The
-script stops with an error if a requested ID has no local `standing` skeleton
-or no matching HD icon bundle in `internal_ids.json`. Omitting `-ResourceId`
-keeps the existing behavior and processes every local standing skin.
-
-Application integrations should also bind the request to its exact Skin
-directory. `-TargetSkinDirectory` requires exactly one `-ResourceId`, scans
-only that directory's direct `standing` files, and refuses paths outside `res`
-or paths containing junctions or symbolic links:
+Every invocation must bind exactly one resource ID to its exact Skin directory.
+The script never discovers or processes the whole `res` tree. It scans only the
+selected directory's direct `standing` files and refuses paths outside `res` or
+paths containing junctions or symbolic links:
 
 ```powershell
 .\Update-CharacterIcons.ps1 `
@@ -89,14 +60,17 @@ or paths containing junctions or symbolic links:
     -TargetSkinDirectory E:\SpinePet\res\Rapi\02
 ```
 
-The target form prevents another directory containing the same resource ID
-from receiving the downloaded icon. The manual `-ResourceId` form without a
-target remains available for deliberate multi-Skin updates.
+Add `-ListOnly` to preview that one exact match without downloading. For a
+selected batch, invoke the command once per selected Skin; omission of either
+selection argument is an error.
 
 Replace existing cached icons:
 
 ```powershell
-.\Update-CharacterIcons.ps1 -Force
+.\Update-CharacterIcons.ps1 `
+    -ResourceId c010_02 `
+    -TargetSkinDirectory E:\SpinePet\res\Rapi\02 `
+    -Force
 ```
 
 Exit SpinePet before using `-Force` so WPF is not displaying the files being
@@ -107,7 +81,10 @@ The BaseUri normally comes from the latest matching line in `Player.log`. It can
 also be supplied explicitly after a game update:
 
 ```powershell
-.\Update-CharacterIcons.ps1 -BaseUri 'https://cloud.nikke-kr.com/.../pck/dp/.../'
+.\Update-CharacterIcons.ps1 `
+    -ResourceId c010_02 `
+    -TargetSkinDirectory E:\SpinePet\res\Rapi\02 `
+    -BaseUri 'https://cloud.nikke-kr.com/.../pck/dp/.../'
 ```
 
 `internal_ids.json`, the unpacker package, downloaded bundles, decrypted bundles,

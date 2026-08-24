@@ -34,34 +34,24 @@ SpinePet\res\<角色或资源名>\<皮肤>\
 单边缺失、文件损坏或动画解析失败时，整个 `Battle` 字段省略；已有失效字段
 会在扫描或配置规范化时清除。
 
-## 2. nikkedb 编号导入
+## 2. 指定清单导入
 
-应用的 **DB** 入口接收资源编号，例如 `c017_01`。编号以不区分大小写的
-精确值匹配：
+应用内已无 DB/nikkedb 导入入口。普通 **Add** 的 Skeleton/UnityFS 导入只
+接受 standing，避免把单套战斗资源写成可用 Battle。离线自动化可以把
+nikkedb 当只读证据源，但应用运行时不得定位或扫描它。
 
-```text
-resources\nikkedb\data\indexes\rename-map.json
-```
-
-命中后沿 `currentRelativePath` 到 `resources\nikkedb\l2d` 定位资源。
-standing 始终导入；aim 和 cover 只有双方完整时才一起导入，否则双方均跳过。
-目标已存在时整次导入失败且不覆盖，失败产生的文件和空目录会回滚。
-
-普通 **Add** 的 Skeleton/UnityFS 导入仍只接受 standing，避免把单套战斗
-资源写成可用 Battle。
-
-### 2.1 `resources\Characters` 全量导入
-
-已经入库的角色目录使用 `SpinePet\tools\battle-catalog-importer` 统一审计：
+已经入库的角色目录使用 `SpinePet\tools\battle-catalog-importer` 按明确清单
+审计：
 
 ```powershell
-dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- --audit resources\Characters
-dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- resources\Characters SpinePet\res
+dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- --audit resources\Characters "<资源目录名>" "<另一个资源目录名>"
+dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- resources\Characters SpinePet\res "<资源目录名>" "<另一个资源目录名>"
 ```
 
 工具只把精确 `Standing`、`Aim`、`Cover` 目录视为主状态，且三套资源都必须
 通过 Spine 4.1 兼容性、骨骼实际解析、atlas 和全部纹理页验证。完整资源映射
-到现有角色或分配独立 ID；重复运行保持幂等。2026-08-23 实际审计 67 个目录，
+到现有角色或分配独立 ID；重复运行保持幂等。目录清单必填，工具不提供默认
+全库扫描。2026-08-23 历史审计曾检查 67 个目录，
 43 套通过并已导入。`Dolla Dark Rose` 的 Aim/Cover 为 Spine `4.0.47`，
 不生成 Battle。
 

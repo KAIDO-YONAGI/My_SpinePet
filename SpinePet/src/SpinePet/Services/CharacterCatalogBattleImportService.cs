@@ -47,6 +47,7 @@ public sealed class CharacterCatalogBattleImportService
     public CharacterCatalogBattleImportResult Import(
         string sourceRoot,
         string destinationRoot,
+        IReadOnlyCollection<string> sourceNames,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceRoot);
@@ -61,7 +62,7 @@ public sealed class CharacterCatalogBattleImportService
         }
 
         Directory.CreateDirectory(resolvedDestinationRoot);
-        CharacterCatalogAudit audit = Audit(resolvedSourceRoot);
+        CharacterCatalogAudit audit = Audit(resolvedSourceRoot, sourceNames);
         CharacterResourceFiles[] targetStanding =
             DiscoverTargetStanding(resolvedDestinationRoot);
 
@@ -176,9 +177,19 @@ public sealed class CharacterCatalogBattleImportService
             skipped);
     }
 
-    public CharacterCatalogAudit Audit(string sourceRoot)
+    public CharacterCatalogAudit Audit(
+        string sourceRoot,
+        IReadOnlyCollection<string> sourceNames)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sourceRoot);
+        ArgumentNullException.ThrowIfNull(sourceNames);
+        if (sourceNames.Count == 0)
+        {
+            throw new ArgumentException(
+                "At least one source directory must be specified.",
+                nameof(sourceNames));
+        }
+
         string resolvedSourceRoot = Path.GetFullPath(sourceRoot);
         if (!Directory.Exists(resolvedSourceRoot))
         {
@@ -186,10 +197,9 @@ public sealed class CharacterCatalogBattleImportService
                 $"Character catalog was not found: {resolvedSourceRoot}");
         }
 
-        string[] sourceDirectories = Directory
-            .EnumerateDirectories(resolvedSourceRoot)
-            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        string[] sourceDirectories = ResolveSourceDirectories(
+            resolvedSourceRoot,
+            sourceNames);
         List<CharacterCatalogBattleSet> completeSets = [];
         List<CharacterCatalogSkippedEntry> skippedEntries = [];
         foreach (string sourceDirectory in sourceDirectories)
@@ -249,6 +259,49 @@ public sealed class CharacterCatalogBattleImportService
             sourceDirectories.Length,
             completeSets,
             skippedEntries);
+    }
+
+    private static string[] ResolveSourceDirectories(
+        string sourceRoot,
+        IEnumerable<string> sourceNames)
+    {
+        string[] names = sourceNames
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .Select(name => name.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (names.Length == 0)
+        {
+            throw new ArgumentException(
+                "At least one source directory must be specified.",
+                nameof(sourceNames));
+        }
+
+        List<string> directories = [];
+        foreach (string name in names)
+        {
+            if (Path.IsPathRooted(name) ||
+                name.Contains(Path.DirectorySeparatorChar) ||
+                name.Contains(Path.AltDirectorySeparatorChar) ||
+                name is "." or "..")
+            {
+                throw new ArgumentException(
+                    $"Source selection must be a direct directory name: '{name}'.",
+                    nameof(sourceNames));
+            }
+
+            string directory = Path.Combine(sourceRoot, name);
+            if (!Directory.Exists(directory))
+            {
+                throw new DirectoryNotFoundException(
+                    $"Selected character directory was not found: {directory}");
+            }
+
+            directories.Add(directory);
+        }
+
+        return [.. directories];
     }
 
     private CharacterResourceFiles? SelectValidResource(

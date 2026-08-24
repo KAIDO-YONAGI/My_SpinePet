@@ -1,26 +1,32 @@
 using System.Text.Json;
 using SpinePet.Services;
 
-CharacterCatalogBattleImportService importer = new();
 JsonSerializerOptions jsonOptions = new() { WriteIndented = true };
-if (args.Length == 2 &&
+CharacterCatalogBattleImportService importer = new();
+if (args.Length >= 3 &&
     string.Equals(args[0], "--audit", StringComparison.OrdinalIgnoreCase))
 {
     Console.WriteLine(JsonSerializer.Serialize(
-        importer.Audit(args[1]),
+        importer.Audit(args[1], args[2..]),
         jsonOptions));
     return 0;
 }
 
-if (args.Length == 2)
+if (args.Length >= 4)
 {
     Console.WriteLine(JsonSerializer.Serialize(
-        importer.Import(args[0], args[1]),
+        importer.Import(args[0], args[1], args[2..]),
         jsonOptions));
     return 0;
 }
 
 Console.Error.WriteLine(
-    "Usage: BattleCatalogImporter [--audit] " +
-    "<resources/Characters> [SpinePet/res]");
+    "Usage: BattleCatalogImporter --audit " +
+    "<resources/Characters> <resource-directory> [<resource-directory> ...]");
+Console.Error.WriteLine(
+    "   or: BattleCatalogImporter " +
+    "<resources/Characters> <SpinePet/res> " +
+    "<resource-directory> [<resource-directory> ...]");
+Console.Error.WriteLine(
+    "The resource directory list is required; full-catalog import is disabled.");
 return 2;

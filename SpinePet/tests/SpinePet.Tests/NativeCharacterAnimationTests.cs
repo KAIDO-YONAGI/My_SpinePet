@@ -27,6 +27,26 @@ public sealed class NativeCharacterAnimationTests
     }
 
     [Fact]
+    public void ClickAnimationSupportsFavoriteExpressionFallback()
+    {
+        string? animation =
+            NativeAnimationController.SelectClickAnimationName(
+                ["bg_idle", "expression_merged", "idle"]);
+
+        Assert.Equal("expression_merged", animation);
+    }
+
+    [Fact]
+    public void ConventionalClickAnimationPrecedesFavoriteExpression()
+    {
+        string? animation =
+            NativeAnimationController.SelectClickAnimationName(
+                ["expression_merged", "touch"]);
+
+        Assert.Equal("touch", animation);
+    }
+
+    [Fact]
     public void IdleAnimationUsesIdleVariantWhenExactIdleIsMissing()
     {
         string? animation =
@@ -34,6 +54,43 @@ public sealed class NativeCharacterAnimationTests
                 ["walk", "idle2", "skillcut_1"]);
 
         Assert.Equal("idle2", animation);
+    }
+
+    [Fact]
+    public void FavoriteDefaultAnimationPrefersMergedIdle()
+    {
+        string? animation =
+            NativeAnimationController.SelectConfiguredOrIdleAnimationName(
+                string.Empty,
+                ["idle", "idle_merged", "expression_merged"],
+                preferMergedIdle: true);
+
+        Assert.Equal("idle_merged", animation);
+    }
+
+    [Fact]
+    public void FavoriteConfiguredAnimationStillWinsOverMergedIdle()
+    {
+        string? animation =
+            NativeAnimationController.SelectConfiguredOrIdleAnimationName(
+                "idle",
+                ["idle", "idle_merged", "expression_merged"],
+                preferMergedIdle: true);
+
+        Assert.Equal("idle", animation);
+    }
+
+    [Theory]
+    [InlineData("Diesel Favorite", true)]
+    [InlineData("diesel favorite", true)]
+    [InlineData("Diesel", false)]
+    public void FavoriteDisplayNameControlsMergedIdlePreference(
+        string displayName,
+        bool expected)
+    {
+        Assert.Equal(
+            expected,
+            NativeAnimationController.ShouldPreferMergedIdle(displayName));
     }
 
     [Fact]
@@ -270,6 +327,26 @@ public sealed class NativeCharacterAnimationTests
                 ["normal_idle", "cover_idle", "aim_idle"]);
 
         Assert.Equal(expected, selected);
+    }
+
+    [Fact]
+    public void FavoriteNormalStateDefaultsToMergedIdle()
+    {
+        NativeCharacterState state = new()
+        {
+            Config = new CharacterConfig
+            {
+                Name = "Diesel Favorite"
+            },
+            ActiveResourceState = CharacterDisplayModes.Normal
+        };
+
+        string? selected =
+            NativeAnimationController.SelectDefaultAnimationNameForState(
+                state,
+                ["idle", "idle_merged", "expression_merged"]);
+
+        Assert.Equal("idle_merged", selected);
     }
 
     private static AnimationFixture CreateAnimationFixture(

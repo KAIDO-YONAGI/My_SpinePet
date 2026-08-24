@@ -57,71 +57,6 @@ function Get-DatapackBaseUri {
     return $latestUri.TrimEnd('/') + '/'
 }
 
-function Get-CharacterResources {
-    param(
-        [string]$Root
-    )
-
-    if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
-        throw "Character resource directory was not found: $Root"
-    }
-
-    $resources = [System.Collections.Generic.List[object]]::new()
-    $pendingDirectories = [System.Collections.Generic.Stack[string]]::new()
-    $pendingDirectories.Push([System.IO.Path]::GetFullPath($Root))
-
-    while ($pendingDirectories.Count -gt 0) {
-        $currentPath = $pendingDirectories.Pop()
-        Assert-NotReparsePoint -Path $currentPath
-        $currentDirectory = Get-Item -LiteralPath $currentPath -Force
-
-        if ([string]::Equals(
-            $currentDirectory.Name,
-            'standing',
-            [System.StringComparison]::OrdinalIgnoreCase
-        )) {
-            $skinDirectory = $currentDirectory.Parent
-            if ($null -eq $skinDirectory) {
-                Write-Warning (
-                    'Unable to resolve the Skin directory for: ' +
-                    $currentDirectory.FullName
-                )
-                continue
-            }
-
-            foreach (
-                $skeleton in Get-ChildItem -LiteralPath $currentPath -File `
-                    -Filter '*.skel' -Force
-            ) {
-                Assert-NotReparsePoint -Path $skeleton.FullName
-                if ($skeleton.BaseName -match '^(?<id>c\d+_[^_]+)') {
-                    $resources.Add([pscustomobject]@{
-                        ResourceId = $Matches['id'].ToLowerInvariant()
-                        CharacterDirectory = $skinDirectory.FullName
-                    })
-                }
-            }
-
-            # Resource files must be directly inside standing. Do not descend
-            # into arbitrary directories below a resource set.
-            continue
-        }
-
-        foreach (
-            $childDirectory in Get-ChildItem -LiteralPath $currentPath `
-                -Directory -Force
-        ) {
-            Assert-NotReparsePoint -Path $childDirectory.FullName
-            $pendingDirectories.Push($childDirectory.FullName)
-        }
-    }
-
-    return @(
-        $resources |
-            Sort-Object -Property ResourceId, CharacterDirectory -Unique
-    )
-}
-
 function Get-NormalizedDirectoryPath {
     param(
         [string]$Path
@@ -356,66 +291,32 @@ $ResourceDirectory = Get-NormalizedDirectoryPath -Path $ResourceDirectory
 $hasTargetSkinDirectory = -not [string]::IsNullOrWhiteSpace(
     $TargetSkinDirectory
 )
-if ($hasTargetSkinDirectory -and $requestedResourceIds.Count -ne 1) {
+if ($requestedResourceIds.Count -ne 1 -or -not $hasTargetSkinDirectory) {
     throw (
-        'TargetSkinDirectory requires exactly one ResourceId so the ' +
-        'destination Skin can be verified.'
+        'Specify exactly one ResourceId and its exact TargetSkinDirectory. ' +
+        'Whole-res discovery is disabled.'
     )
 }
 
-if ($hasTargetSkinDirectory) {
-    $resolvedTargetSkinDirectory = Get-NormalizedDirectoryPath `
-        -Path $TargetSkinDirectory
-    $characterResources = @(
-        Get-TargetCharacterResource `
-            -Root $ResourceDirectory `
-            -TargetDirectory $resolvedTargetSkinDirectory `
-            -RequestedResourceId $requestedResourceIds[0]
-    )
-}
-else {
-    $allCharacterResources = @(
-        Get-CharacterResources -Root $ResourceDirectory
-    )
-    $characterResources = $allCharacterResources
-}
-
-if (-not $hasTargetSkinDirectory -and $requestedResourceIds.Count -gt 0) {
-    $localResourceIds = @(
-        $allCharacterResources |
-            Select-Object -ExpandProperty ResourceId -Unique
-    )
-    $unknownResourceIds = @(
-        $requestedResourceIds |
-            Where-Object { $_ -notin $localResourceIds }
-    )
-    if ($unknownResourceIds.Count -gt 0) {
-        throw (
-            'Requested ResourceId was not found in a local standing ' +
-            "directory: $($unknownResourceIds -join ', ')"
-        )
-    }
-
-    $characterResources = @(
-        $allCharacterResources |
-            Where-Object {
-                $requestedResourceIdSet.ContainsKey($_.ResourceId)
-            }
-    )
-}
+$resolvedTargetSkinDirectory = Get-NormalizedDirectoryPath `
+    -Path $TargetSkinDirectory
+$characterResources = @(
+    Get-TargetCharacterResource `
+        -Root $ResourceDirectory `
+        -TargetDirectory $resolvedTargetSkinDirectory `
+        -RequestedResourceId $requestedResourceIds[0]
+)
 
 $iconBundles = Get-IconBundles -Path $CatalogPath
-if ($requestedResourceIds.Count -gt 0) {
-    $missingBundleResourceIds = @(
-        $requestedResourceIds |
-            Where-Object { -not $iconBundles.ContainsKey($_) }
+$missingBundleResourceIds = @(
+    $requestedResourceIds |
+        Where-Object { -not $iconBundles.ContainsKey($_) }
+)
+if ($missingBundleResourceIds.Count -gt 0) {
+    throw (
+        'No HD icon bundle was found for requested ResourceId: ' +
+        ($missingBundleResourceIds -join ', ')
     )
-    if ($missingBundleResourceIds.Count -gt 0) {
-        throw (
-            'No HD icon bundle was found for requested ResourceId: ' +
-            ($missingBundleResourceIds -join ', ')
-        )
-    }
 }
 
 $resolvedBaseUri = if ([string]::IsNullOrWhiteSpace($BaseUri)) {
@@ -445,9 +346,7 @@ $downloadPlan = @(
 )
 
 Write-Output "Datapack BaseUri: $resolvedBaseUri"
-if ($hasTargetSkinDirectory) {
-    Write-Output "Target Skin directory: $resolvedTargetSkinDirectory"
-}
+Write-Output "Target Skin directory: $resolvedTargetSkinDirectory"
 $downloadPlan |
     Select-Object ResourceId, BundleName, OutputPath |
     Format-Table -AutoSize

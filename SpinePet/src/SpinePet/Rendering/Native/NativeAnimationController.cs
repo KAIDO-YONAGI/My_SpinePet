@@ -17,7 +17,8 @@ internal static class NativeAnimationController
 
         string? animation = SelectConfiguredOrIdleAnimationName(
             state.Config.ConfiguredAnimation,
-            resource.AnimationNames);
+            resource.AnimationNames,
+            ShouldPreferMergedIdle(state.Config.Name));
         state.PersistentAnimationName = animation;
         TrackEntry? current = resource.AnimationState.GetCurrent(0);
         if (current?.Animation?.Name.Equals(
@@ -111,12 +112,26 @@ internal static class NativeAnimationController
                 return prefixed;
         }
 
-        return null;
+        return animationNames.FirstOrDefault(name =>
+            name.Equals(
+                "expression_merged",
+                StringComparison.OrdinalIgnoreCase));
     }
 
     internal static string? SelectIdleAnimationName(
-        IReadOnlyList<string> animationNames)
+        IReadOnlyList<string> animationNames,
+        bool preferMergedIdle = false)
     {
+        if (preferMergedIdle)
+        {
+            string? mergedIdle = animationNames.FirstOrDefault(name =>
+                name.Equals(
+                    "idle_merged",
+                    StringComparison.OrdinalIgnoreCase));
+            if (mergedIdle != null)
+                return mergedIdle;
+        }
+
         string? idle = animationNames.FirstOrDefault(name =>
             name.Equals("idle", StringComparison.OrdinalIgnoreCase));
         return idle ??
@@ -129,14 +144,21 @@ internal static class NativeAnimationController
 
     internal static string? SelectConfiguredOrIdleAnimationName(
         string? configuredAnimation,
-        IReadOnlyList<string> animationNames)
+        IReadOnlyList<string> animationNames,
+        bool preferMergedIdle = false)
     {
         string? configured = animationNames.FirstOrDefault(name =>
             name.Equals(
                 configuredAnimation,
                 StringComparison.OrdinalIgnoreCase));
-        return configured ?? SelectIdleAnimationName(animationNames);
+        return configured ??
+               SelectIdleAnimationName(animationNames, preferMergedIdle);
     }
+
+    internal static bool ShouldPreferMergedIdle(string? displayName) =>
+        displayName?.EndsWith(
+            " Favorite",
+            StringComparison.OrdinalIgnoreCase) == true;
 
     internal static string? SelectCurrentDefaultAnimationName(
         NativeCharacterState state,
@@ -182,8 +204,14 @@ internal static class NativeAnimationController
             configuredAnimation = state.Config.ConfiguredAnimation;
         }
 
+        bool preferMergedIdle =
+            state.ActiveResourceState.Equals(
+                CharacterDisplayModes.Normal,
+                StringComparison.OrdinalIgnoreCase) &&
+            ShouldPreferMergedIdle(state.Config.Name);
         return SelectConfiguredOrIdleAnimationName(
             configuredAnimation,
-            animationNames);
+            animationNames,
+            preferMergedIdle);
     }
 }

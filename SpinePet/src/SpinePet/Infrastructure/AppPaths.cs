@@ -20,35 +20,17 @@ internal static class AppPaths
         LocalDataDirectory,
         "Logs");
 
-    public static string ProjectRoot { get; } = FindProjectRoot();
-
-    // Published layouts keep resources next to the executable, so the
-    // exe-adjacent folder wins over the repository lookup (which only
-    // applies to development runs from bin\).
     public static string ResourceDirectory { get; } =
-        ResolveResourceDirectory();
+        ResolveResourceDirectory(AppContext.BaseDirectory);
 
     public static string BundleExtractorScript { get; } =
-        ResolveBundledFile(
-            Path.Combine(
-                "src",
-                "SpinePet",
-                "Infrastructure",
-                "Import",
-                "Tools",
-                "extract_spine_bundle.py"),
-            Path.Combine("Tools", "extract_spine_bundle.py"));
+        ResolveBundledFile(Path.Combine("Tools", "extract_spine_bundle.py"));
 
     public static string CharacterIconDownloaderScript { get; } =
-        ResolveBundledFile(
-            Path.Combine(
-                "tools",
-                "icons-downloader",
-                "Update-CharacterIcons.ps1"),
-            Path.Combine(
-                "Tools",
-                "icons-downloader",
-                "Update-CharacterIcons.ps1"));
+        ResolveBundledFile(Path.Combine(
+            "Tools",
+            "icons-downloader",
+            "Update-CharacterIcons.ps1"));
 
     internal static string ResolveLocalDataDirectory(string? overridePath)
     {
@@ -60,7 +42,8 @@ internal static class AppPaths
         // Portable layout: a config.json next to the executable (or in the
         // parent folder when the payload lives in an app\ subfolder) keeps
         // all user state (config, logs) inside the application folder.
-        foreach (string candidate in GetPortableBaseDirectories())
+        foreach (string candidate in GetPortableBaseDirectories(
+                     AppContext.BaseDirectory))
         {
             string portableConfigPath = Path.Combine(candidate, "config.json");
             if (File.Exists(portableConfigPath))
@@ -75,12 +58,11 @@ internal static class AppPaths
             ApplicationDirectoryName);
     }
 
-    private static string ResolveResourceDirectory()
+    internal static string ResolveResourceDirectory(string baseDirectory)
     {
-        // Published layouts keep resources beside the executable or beside
-        // the parent folder of an app\ payload; the repository lookup only
-        // applies to development runs from bin\.
-        foreach (string candidate in GetPortableBaseDirectories())
+        string resolvedBaseDirectory = Path.GetFullPath(baseDirectory);
+        foreach (string candidate in GetPortableBaseDirectories(
+                     resolvedBaseDirectory))
         {
             string candidateResources = Path.Combine(candidate, "res");
             if (Directory.Exists(candidateResources))
@@ -89,41 +71,51 @@ internal static class AppPaths
             }
         }
 
-        return Path.Combine(ProjectRoot, "res");
+        string? projectDirectory = FindApplicationProjectDirectory(
+            resolvedBaseDirectory);
+        return Path.Combine(
+            projectDirectory ?? resolvedBaseDirectory,
+            "res");
     }
 
-    private static IEnumerable<string> GetPortableBaseDirectories()
+    private static IEnumerable<string> GetPortableBaseDirectories(
+        string baseDirectory)
     {
-        yield return AppContext.BaseDirectory;
+        yield return baseDirectory;
 
         // The packaged layout keeps the payload in an app\ subfolder next to
         // config.json/res. Only that exact folder name opts into the parent
         // lookup, so a stray config.json somewhere above a flat install can
         // never be mistaken for SpinePet's portable configuration.
-        string baseDirectory = Path.TrimEndingDirectorySeparator(
-            AppContext.BaseDirectory);
+        string trimmedBaseDirectory = Path.TrimEndingDirectorySeparator(
+            baseDirectory);
         if (!string.Equals(
-                Path.GetFileName(baseDirectory),
+                Path.GetFileName(trimmedBaseDirectory),
                 "app",
                 StringComparison.OrdinalIgnoreCase))
         {
             yield break;
         }
 
-        string? parentDirectory = Path.GetDirectoryName(baseDirectory);
+        string? parentDirectory = Path.GetDirectoryName(trimmedBaseDirectory);
         if (parentDirectory != null)
         {
             yield return parentDirectory;
         }
     }
 
-    private static string FindProjectRoot()
+    private static string? FindApplicationProjectDirectory(
+        string baseDirectory)
     {
-        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+        DirectoryInfo? directory = new(baseDirectory);
         while (directory != null)
         {
-            if (File.Exists(Path.Combine(directory.FullName, "SpinePet.sln")) ||
-                Directory.Exists(Path.Combine(directory.FullName, ".git")))
+            if (File.Exists(Path.Combine(directory.FullName, "SpinePet.sln")) &&
+                File.Exists(Path.Combine(
+                    directory.FullName,
+                    "src",
+                    "SpinePet",
+                    "SpinePet.csproj")))
             {
                 return directory.FullName;
             }
@@ -131,16 +123,9 @@ internal static class AppPaths
             directory = directory.Parent;
         }
 
-        return AppContext.BaseDirectory;
+        return null;
     }
 
-    private static string ResolveBundledFile(
-        string sourceRelativePath,
-        string outputRelativePath)
-    {
-        string sourcePath = Path.Combine(ProjectRoot, sourceRelativePath);
-        return File.Exists(sourcePath)
-            ? sourcePath
-            : Path.Combine(AppContext.BaseDirectory, outputRelativePath);
-    }
+    private static string ResolveBundledFile(string outputRelativePath) =>
+        Path.Combine(AppContext.BaseDirectory, outputRelativePath);
 }

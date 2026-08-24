@@ -21,17 +21,15 @@ public sealed class IconDownloaderTests : IDisposable
     }
 
     [Fact]
-    public async Task ResourceIdArrayLimitsListOnlyPlanToRequestedSkins()
+    public async Task MultipleResourceIdsAreRejected()
     {
         string resourceRoot = Path.Combine(_temporaryDirectory, "res-filter");
         WriteStandingSkeleton(resourceRoot, "Rapi", "01", "c010_01");
         WriteStandingSkeleton(resourceRoot, "Rapi", "02", "c010_02");
-        WriteStandingSkeleton(resourceRoot, "Anis", "00", "c017_00");
         string catalogPath = WriteCatalog(
             "filter-catalog.json",
             "c010_01",
-            "c010_02",
-            "c017_00");
+            "c010_02");
 
         ProcessResult result = await RunIconDownloaderAsync(
             resourceRoot,
@@ -40,17 +38,15 @@ public sealed class IconDownloaderTests : IDisposable
             "c010_01",
             "c010_02");
 
-        Assert.True(
-            result.ExitCode == 0,
-            $"stdout: {result.StandardOutput}\nstderr: {result.StandardError}");
-        Assert.Contains("c010_01", result.StandardOutput);
-        Assert.Contains("c010_02", result.StandardOutput);
-        Assert.DoesNotContain("c017_00", result.StandardOutput);
-        Assert.Contains("matched 2 icon(s)", result.StandardOutput);
+        Assert.NotEqual(0, result.ExitCode);
+        Assert.Contains(
+            "exactly one ResourceId",
+            result.StandardError + result.StandardOutput,
+            StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task OmittingResourceIdKeepsTheFullLocalPlan()
+    public async Task OmittingSelectionDoesNotScanResourceTree()
     {
         string resourceRoot = Path.Combine(_temporaryDirectory, "res-all");
         WriteStandingSkeleton(resourceRoot, "Rapi", "02", "c010_02");
@@ -64,12 +60,10 @@ public sealed class IconDownloaderTests : IDisposable
             resourceRoot,
             catalogPath);
 
-        Assert.True(
-            result.ExitCode == 0,
-            $"stdout: {result.StandardOutput}\nstderr: {result.StandardError}");
-        Assert.Contains("c010_02", result.StandardOutput);
-        Assert.Contains("c017_00", result.StandardOutput);
-        Assert.Contains("matched 2 icon(s)", result.StandardOutput);
+        Assert.NotEqual(0, result.ExitCode);
+        string output = result.StandardError + result.StandardOutput;
+        Assert.Contains("Whole-res discovery is disabled", output);
+        Assert.DoesNotContain("matched", output);
     }
 
     [Fact]
@@ -81,16 +75,21 @@ public sealed class IconDownloaderTests : IDisposable
             "unknown-catalog.json",
             "c010_00");
 
-        ProcessResult result = await RunIconDownloaderAsync(
+        string targetSkinDirectory = Path.Combine(
+            resourceRoot,
+            "Rapi",
+            "00");
+        ProcessResult result = await RunTargetIconDownloaderAsync(
             resourceRoot,
             catalogPath,
+            targetSkinDirectory,
             "c999_00");
 
         Assert.NotEqual(0, result.ExitCode);
         string output = result.StandardError + result.StandardOutput;
         Assert.Contains("c999_00", output);
         Assert.Contains(
-            "not found in a local standing directory",
+            "c999_00.skel",
             output,
             StringComparison.OrdinalIgnoreCase);
     }
@@ -104,9 +103,14 @@ public sealed class IconDownloaderTests : IDisposable
             "missing-bundle-catalog.json",
             "c010_00");
 
-        ProcessResult result = await RunIconDownloaderAsync(
+        string targetSkinDirectory = Path.Combine(
+            resourceRoot,
+            "Rapi",
+            "02");
+        ProcessResult result = await RunTargetIconDownloaderAsync(
             resourceRoot,
             catalogPath,
+            targetSkinDirectory,
             "c010_02");
 
         Assert.NotEqual(0, result.ExitCode);

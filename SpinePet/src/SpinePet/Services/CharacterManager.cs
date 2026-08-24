@@ -317,7 +317,9 @@ public sealed class CharacterManager
             string? selected =
                 NativeAnimationController.SelectConfiguredOrIdleAnimationName(
                     character.ConfiguredAnimation,
-                    animations);
+                    animations,
+                    NativeAnimationController.ShouldPreferMergedIdle(
+                        character.Name));
             if (selected != null &&
                 !string.Equals(
                     character.ConfiguredAnimation,

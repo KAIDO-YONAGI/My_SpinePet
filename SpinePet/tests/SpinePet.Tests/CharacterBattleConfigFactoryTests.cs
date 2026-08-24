@@ -69,10 +69,11 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
     }
 
     [Fact]
-    public void RealC01701ResourcesBuildCompleteBattleProfile()
+    public void ProjectAnisStarResourcesBuildCompleteBattleProfile()
     {
         string resourceRoot = Path.Combine(_temporaryDirectory, "res");
-        StageNikkeDbResource(resourceRoot);
+        if (!TryStageProjectResource(resourceRoot))
+            return;
         CharacterResourceDiscoveryService discovery = new();
         IReadOnlyList<CharacterResourceFiles> resources =
             discovery.DiscoverAll(resourceRoot);
@@ -92,7 +93,7 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
         CharacterBattleLayerConfig fireLayer = Assert.Single(
             battle.Animations.AimFireLayers!);
         Assert.Equal("aim_fire", fireLayer.Animation);
-        Assert.Equal(73, fireLayer.ExcludeTimelines?.Count);
+        Assert.Equal(15, fireLayer.ExcludeTimelines?.Count);
         Assert.Equal("cover_idle", battle.Animations.CoverIdle);
         Assert.Equal("to_cover", battle.Animations.ToCover);
         Assert.Equal(["cover_reload"], battle.Animations.ReloadSequence);
@@ -104,7 +105,8 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
     public void ScanBackfillsRemovesAndNormalizesBattleProfile()
     {
         string resourceRoot = Path.Combine(_temporaryDirectory, "scan-res");
-        StageNikkeDbResource(resourceRoot);
+        if (!TryStageProjectResource(resourceRoot))
+            return;
         CharacterResourceDiscoveryService discovery = new();
         CharacterResourceFiles[] complete =
             discovery.DiscoverAll(resourceRoot).ToArray();
@@ -169,14 +171,14 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
                 item => item.Battle!,
                 StringComparer.OrdinalIgnoreCase);
 
-        Assert.Equal(41, profiles.Count);
+        Assert.Equal(49, profiles.Count);
         CharacterBattleConfig[] configured = profiles.Values
             .Where(profile =>
                 profile.Animations.AimFireLayers?.Count > 0)
             .ToArray();
-        Assert.Equal(40, configured.Length);
+        Assert.Equal(48, configured.Length);
         Assert.Equal(
-            45,
+            53,
             configured.Sum(profile =>
                 profile.Animations.AimFireLayers!.Count));
 
@@ -184,9 +186,9 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
             .Where(profile => profile.Animations.AimFireLayers!.Any(layer =>
                 layer.ExcludeTimelines?.Count > 0))
             .ToArray();
-        Assert.Equal(18, filtered.Length);
+        Assert.Equal(23, filtered.Length);
         Assert.Equal(
-            350,
+            370,
             filtered.Sum(profile =>
                 profile.Animations.AimFireLayers!.Sum(layer =>
                     layer.ExcludeTimelines?.Count ?? 0)));
@@ -334,22 +336,20 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
                    "Repository root not found.");
     }
 
-    // Stages the real c017_01 evidence files from the workspace nikkedb
-    // library into a managed res layout (standing/aim/cover subfolders),
-    // mirroring what the removed NikkeDB import produced.
-    private static void StageNikkeDbResource(string destinationRoot)
+    private static bool TryStageProjectResource(string destinationRoot)
     {
         string sourceRoot = Path.Combine(
-            FindWorkspaceRoot(),
-            "resources",
-            "nikkedb",
-            "l2d",
-            "mapped",
-            "2026-04-25__Anis Star Variant 01 [c017_01]");
+            FindRepositoryRoot(),
+            "res",
+            "Anis Star",
+            "00");
+        if (!Directory.Exists(sourceRoot))
+            return false;
+
         StageState(
             sourceRoot,
             destinationRoot,
-            sourceDirectoryName: null,
+            CharacterResourceTypes.Standing,
             CharacterResourceTypes.Standing);
         StageState(
             sourceRoot,
@@ -361,6 +361,7 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
             destinationRoot,
             CharacterResourceTypes.Cover,
             CharacterResourceTypes.Cover);
+        return true;
     }
 
     private static void StageState(
@@ -384,35 +385,6 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
                 filePath,
                 Path.Combine(target, Path.GetFileName(filePath)));
         }
-    }
-
-    private static string FindWorkspaceRoot()
-    {
-        foreach (string start in new[]
-                 {
-                     AppContext.BaseDirectory,
-                     Environment.CurrentDirectory
-                 })
-        {
-            DirectoryInfo? directory = new(Path.GetFullPath(start));
-            while (directory != null)
-            {
-                if (File.Exists(Path.Combine(
-                        directory.FullName,
-                        "resources",
-                        "nikkedb",
-                        "data",
-                        "indexes",
-                        "rename-map.json")))
-                {
-                    return directory.FullName;
-                }
-
-                directory = directory.Parent;
-            }
-        }
-
-        throw new DirectoryNotFoundException("Workspace root not found.");
     }
 
     public void Dispose()

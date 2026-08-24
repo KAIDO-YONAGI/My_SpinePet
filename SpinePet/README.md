@@ -85,7 +85,8 @@ After Add imports a standing bundle, SpinePet automatically downloads and
 extracts a missing icon for that Skin. Icon download failure does not undo the
 standing import; the panel reports the problem and continues using the standing
 texture as a fallback. `tools/icons-downloader/Update-CharacterIcons.ps1`
-remains available for manual repair or bulk updates.
+remains available for one exactly selected Skin. It requires one resource ID
+and that Skin's exact target directory; it has no whole-`res` mode.
 
 The Add button accepts an existing `.skel` file or a UnityFS bundle whose file
 name starts with:
@@ -107,9 +108,9 @@ directory, then attempts to download that Skin's separate official icon bundle.
 Manually supplied icon bundles use the icon extractor and write the resulting
 PNG into the matching skin's `icons` directory. An icon-only import does not
 create a character card. Ordinary Add imports remain standing-only. Complete
-Aim/Cover pairs can be imported through the DB entry or audited and imported in
-bulk from `resources/Characters` with `tools/battle-catalog-importer`; incomplete
-or non-4.1 battle pairs are skipped. Imports refuse to overwrite unrelated
+Aim/Cover pairs can be audited and imported only from an explicit list of direct
+directories under `resources/Characters` with `tools/battle-catalog-importer`;
+incomplete or non-4.1 battle pairs are skipped. Imports refuse to overwrite unrelated
 existing character resources and stop if two character IDs would share the same
 display-name and skin directory. Correct `CharacterNames.json` or export the
 bundle with Spine 4.1 before retrying.
@@ -117,9 +118,12 @@ bundle with Spine 4.1 before retrying.
 Audit and import the local character catalog:
 
 ```powershell
-dotnet run --project .\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- --audit ..\resources\Characters
-dotnet run --project .\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- ..\resources\Characters .\res
+dotnet run --project .\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- --audit ..\resources\Characters "<resource-directory>" "<another-resource-directory>"
+dotnet run --project .\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- ..\resources\Characters .\res "<resource-directory>" "<another-resource-directory>"
 ```
+
+The resource directory list is required. The importer never scans the whole
+`resources\Characters` catalog by default.
 
 ## Build
 

@@ -380,7 +380,9 @@ internal sealed class CharacterCatalog
                 GetAnimationNames(character);
             string? idleAnimation =
                 NativeAnimationController.SelectIdleAnimationName(
-                    animationNames);
+                    animationNames,
+                    NativeAnimationController.ShouldPreferMergedIdle(
+                        character.Name));
 
             character.Scale = CharacterConfig.DefaultScale;
             character.ScaleBasePercent =

@@ -2,11 +2,14 @@
 
 文档 ID：`RES-LOAD-ROUTER`  
 状态：`Active`  
-维护计数：`3/5`
+维护计数：`0/5`
 最后更新：`2026-08-24`
 
 zip/文件夹入库、资源身份与新 ID、`res` 布局、图标、配置同步和导入验证，
 完整读取 `SpinePet_Resources_Load_Guide.md`。
+
+导入 `favorite_cNNN_00` 单状态互动资源时，同时完整读取
+`Favorite_Interactive_Import_Guide.md`。
 
 清理不是导入默认步骤；用户要求背景或特效处理时同时读取
 `..\MatchClean\Router.md`。涉及应用运行、用户配置或构建时声明相应
@@ -23,4 +26,5 @@ zip/文件夹入库、资源身份与新 ID、`res` 布局、图标、配置同�
 | `resources\nikkedb\NIKKE资源核验报告.md` | 已冻结的历史核验报告 |
 
 需要更深层证据时先沿这些入口给出的索引定位，不把子目录文档逐项复制进
-工作流 Router。
+工作流 Router。以上入口只供离线自动化按用户指定项取证，应用运行时不得
+扫描或依赖这些路径。

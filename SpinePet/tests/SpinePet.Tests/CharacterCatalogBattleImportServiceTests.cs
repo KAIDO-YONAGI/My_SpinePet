@@ -49,7 +49,9 @@ public sealed class CharacterCatalogBattleImportServiceTests : IDisposable
             "c200_00",
             CharacterResourceTypes.Standing);
 
-        CharacterCatalogAudit audit = CreateService().Audit(source);
+        CharacterCatalogAudit audit = CreateService().Audit(
+            source,
+            ["Complete", "StandingOnly"]);
 
         CharacterCatalogBattleSet complete = Assert.Single(
             audit.CompleteSets);
@@ -78,10 +80,12 @@ public sealed class CharacterCatalogBattleImportServiceTests : IDisposable
 
         CharacterCatalogBattleImportResult first = service.Import(
             source,
-            destination);
+            destination,
+            ["Variant"]);
         CharacterCatalogBattleImportResult second = service.Import(
             source,
-            destination);
+            destination,
+            ["Variant"]);
 
         Assert.Equal(1, first.AddedCharacterCount);
         Assert.Equal(1, first.ImportedBattleCount);
@@ -122,10 +126,12 @@ public sealed class CharacterCatalogBattleImportServiceTests : IDisposable
 
         CharacterCatalogBattleImportResult result = service.Import(
             source,
-            destination);
+            destination,
+            ["Custom Display"]);
         CharacterCatalogBattleImportResult second = service.Import(
             source,
-            destination);
+            destination,
+            ["Custom Display"]);
 
         Assert.Equal(0, result.AddedCharacterCount);
         Assert.Equal(1, result.ImportedBattleCount);
@@ -167,7 +173,7 @@ public sealed class CharacterCatalogBattleImportServiceTests : IDisposable
             CharacterResourceTypes.Aim);
 
         CharacterCatalogBattleImportResult result =
-            CreateService().Import(source, destination);
+            CreateService().Import(source, destination, ["Partial"]);
 
         Assert.Equal(0, result.CompleteSetCount);
         Assert.Empty(Directory.EnumerateFileSystemEntries(destination));
@@ -176,6 +182,32 @@ public sealed class CharacterCatalogBattleImportServiceTests : IDisposable
         Assert.True(skipped.HasStanding);
         Assert.True(skipped.HasAim);
         Assert.False(skipped.HasCover);
+    }
+
+    [Fact]
+    public void ImportOnlyProcessesExplicitlySelectedDirectories()
+    {
+        string source = Path.Combine(_root, "source");
+        string destination = Path.Combine(_root, "destination");
+        CreateBattleSet(source, "Selected", "c100_01");
+        CreateBattleSet(source, "Not Selected", "c200_01");
+
+        CharacterCatalogBattleImportResult result =
+            CreateService().Import(source, destination, ["Selected"]);
+
+        Assert.Equal(1, result.CompleteSetCount);
+        Assert.True(Directory.Exists(Path.Combine(destination, "Selected")));
+        Assert.False(Directory.Exists(Path.Combine(destination, "Not Selected")));
+    }
+
+    [Fact]
+    public void EmptySelectionIsRejected()
+    {
+        string source = Path.Combine(_root, "source");
+        Directory.CreateDirectory(source);
+
+        Assert.Throws<ArgumentException>(() =>
+            CreateService().Audit(source, []));
     }
 
     public void Dispose()

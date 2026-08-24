@@ -4,35 +4,40 @@
 > 状态：`Active`  
 > 最后核验：`2026-08-24`
 
-本文是流程化规范：资源从拿到手到出现在 SpinePet 里，按
-**入库 → 判定 → 导入 → 验证** 四个阶段推进，每个阶段写明执行顺序和
-硬性要求。
+本文是流程化规范：自动化导入固定按
+**指定清单 → 入库 → 本体与头像预检 → 导入登记 → 验证** 推进。
+没有指定清单不得扫描或导入整个资源库。
 
-**本文所有相对路径均以项目根目录为根**，例如
-`resources\Characters\` 指项目根目录下的 `resources\Characters\`。
+**本文所有相对路径均以工作区根目录为根**。应用项目根专指
+`SpinePet\`；`resources\` 是工作区证据与归档区，不是应用运行时资源。
 背景清理等进阶操作见
 `..\MatchClean\SpineResource_Match_Clean_Guide.md`。
 
 ## 0. 流程总览
 
 ```text
-zip 压缩包 ──┐
-            ├─→ 阶段一 入库 ──→ 阶段二 判定 ──→ 阶段三 导入 ──→ 阶段四 验证
-文件夹/桌面 ─┘   resources\       选骨骼集/       SpinePet\res\     Scan
-                Characters\      分新ID/定名      <名>\<皮肤>\
-                                  standing|aim|cover\
+指定的 zip/目录
+  → 入库到 resources\Characters
+  → 同时预检骨骼、身份、目标 ID、头像
+  → 只写指定项到 SpinePet\res 和 CharacterNames.json
+  → 逐项验证并输出结果
 ```
 
 核心原则（全程适用）：
 
 1. 普通 Add/手工入库的身份以**文件名前缀**
    `c<角色ID>_<皮肤ID>` 为准。
-2. 所有源资源先进入 `resources\Characters\`，`SpinePet\res\` 只放
-   已确认可运行的最终资源；两者不混用。
+2. 离线自动化导入的源资源先进入 `resources\Characters\`；应用 Add
+   是直接用户操作，不得被自动化脚本当成全库导入入口。
 3. 导入 `res` 的文件**原样复制**：不改行尾、不加清理规则，
    除非明确要求清理。
 4. 源资源只入库一次；后续调整都改 `res` 或 `CharacterNames.json`，
    不回写源。
+5. 头像属于导入预检，不是导入结束后的补漏项。指定资源无法确定头像时，
+   本次自动化导入必须明确失败或报告 `MissingIcon`，不得静默跳过。
+6. 应用运行时只允许访问 `SpinePet\res\`、可执行文件旁的 `res\` 与打包
+   `Tools\`；不得扫描 `resources\`、`resources\nikkedb\` 或任意 `.git`
+   祖先目录。nikkedb 只允许离线自动化按指定资源查询。
 
 ## 1. 目录职责
 
@@ -74,7 +79,8 @@ zip 压缩包 ──┐
 
 ## 2. 阶段一：入库
 
-**要求：任何来源的资源，先全部进入 `resources\Characters\`，再谈导入。**
+**要求：离线自动化只处理用户明确指定的 zip 或目录，并先进入
+`resources\Characters\`。不得枚举未指定的同级目录。**
 
 ### 2.1 zip 入口（脚本自动）
 
@@ -124,7 +130,7 @@ YYYY-MM-DD__名称 [cNNN_NN]  →  resources\Characters\名称
 
 - 同一次 Spine 4.1.x 导出，置于同一目录；
 - 普通 Add 只接受 standing，不接受 aim 或 cover 单套资源；aim、cover
-  由 4.2 的全量审计工具验证三状态完整后成对导入；
+  由 4.2 的指定清单审计验证三状态完整后成对导入；
 - 不满足时资源停留在 `resources\`，不得进入 `res\`。
 
 ## 3. 阶段二：判定
@@ -237,14 +243,21 @@ SpinePet\res\<资源全名>\<皮肤ID>\
 目标目录中的同一文件，也不视为导入成功。事务不覆盖任何既有目标；失败或
 取消后，导入前已经存在的文件保持不变。
 
-### 4.2 全量审计 `resources\Characters`
+### 4.2 指定清单审计与导入
 
-本地入库目录需要整体复核时，使用仓库内工具，不按目录名臆测战斗支持：
+只审计或导入本次明确指定的直属目录：
 
 ```powershell
-dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- --audit resources\Characters
-dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- resources\Characters SpinePet\res
+dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- --audit resources\Characters "<资源目录名>" "<另一个资源目录名>"
+dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- resources\Characters SpinePet\res "<资源目录名>" "<另一个资源目录名>"
 ```
+
+资源目录清单是必填项，必须填写 `resources\Characters` 下的精确直属目录名；
+工具不会再默认扫描并导入整个资源库。
+
+固定顺序为：先运行 `--audit`，逐项确认 Standing/Aim/Cover、身份和目标
+目录；随后为同一清单定位头像；全部预检通过后才执行写入命令。审计结果与
+头像结果必须使用同一份指定清单，禁止中途扩大范围。
 
 审计只识别精确命名的 `Standing`、`Aim`、`Cover` 状态目录；诸如
 `Aim (Chinese Censored Version)` 的变体目录不会混入主资源。每套资源还要
@@ -257,9 +270,11 @@ AlreadyPresent，重复执行不会创建重复角色。无法映射到现有目
 `Dolla Dark Rose` 虽有 Aim/Cover 文件，但其战斗骨骼为 Spine `4.0.47`，
 与当前 4.1 运行时不兼容，因此跳过。
 
-### 4.3 图标（icon）配置
+### 4.3 图标（icon）预检与配置
 
-头像从本地 nikkedb 索引取，不要用部件贴图（纹理页 png）充当图标：
+离线自动化在写入 `res` 前就要为每个指定项完成头像定位。可从本地 nikkedb
+按指定源 ID 查询，但不得遍历或导入未指定资源，也不得让应用运行时依赖
+nikkedb。不要用部件贴图（纹理页 png）充当图标：
 
 1. 图标源目录：
    `resources\nikkedb\github-repository\images\sprite\`，
@@ -272,7 +287,8 @@ AlreadyPresent，重复执行不会创建重复角色。无法映射到现有目
 4. 命中后复制为 `<皮肤目录>\icons\<资源前缀>_icon.png`，
    资源前缀 = 骨骼文件名前两段（如 `c27003_03`）；
 5. 皮肤无专属头像时，回退本体图标 `si_c<原角色ID>_00_s.png`；
-6. `icons` 下已存在图标则跳过，不覆盖；
+6. `icons` 下已存在图标则校验后跳过，不覆盖；未命中时停止该项导入并报告
+   `MissingIcon`，不得先写本体再无限期补头像；
 7. 旧布局卡（`res\<角色>\standing\`，自定义文件名）的图标约定不同：
    放在骨骼同目录，命名为 `<骨骼主文件名>_icon.png`
    （如 `Blanc_WhiteRabbit_icon.png`）。身份用
@@ -367,7 +383,7 @@ AlreadyPresent，重复执行不会创建重复角色。无法映射到现有目
 
 应用 **Add** 支持 standing `.skel` 或 UnityFS bundle；bundle 文件名以
 `c<角色ID>_<皮肤ID>_<standing|icons>_` 开头。Aim/Cover 不通过单文件 Add，
-使用 4.2 的全量审计工具导入。依赖：
+使用 4.2 的指定清单工具导入。依赖：
 `python -m pip install -r SpinePet\tools\requirements.txt`。
 导入遵守 4.1 的事务、冲突不覆盖、失败回滚和临时目录清理规则。
 

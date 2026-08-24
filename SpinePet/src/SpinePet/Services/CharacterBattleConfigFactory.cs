@@ -511,7 +511,13 @@ internal static class CharacterBattleConfigFactory
         List<string> exclusions = timelines
             .Where(timeline =>
                 timeline.FrameCount <= 1 &&
-                idleDynamicTimelines.Contains(timeline.Key))
+                idleDynamicTimelines.Contains(timeline.Key) &&
+                !timeline.Key.StartsWith(
+                    "AttachmentTimeline@",
+                    StringComparison.Ordinal) &&
+                !timeline.Key.StartsWith(
+                    "DrawOrderTimeline@",
+                    StringComparison.Ordinal))
             .Select(timeline => timeline.Key)
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
