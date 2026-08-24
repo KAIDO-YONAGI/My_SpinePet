@@ -42,7 +42,6 @@ public class MainWindow : Window, IDisposable
     private Slider _speedSlider = null!;
     private Border _windowChrome = null!;
     private Button _addCharacterButton = null!;
-    private Button _importNikkeDbButton = null!;
     private Button _scanResourcesButton = null!;
     private Button _openResourceFolderButton = null!;
     private ComboBox _batchProcessingCombo = null!;
@@ -85,7 +84,6 @@ public class MainWindow : Window, IDisposable
         CharacterManager characterManager,
         CharacterResourceDiscoveryService resourceDiscovery,
         UnityBundleImportService bundleImporter,
-        NikkeDbResourceImportService nikkeDbImporter,
         CharacterIconDownloadService? characterIconDownloader = null)
     {
         LoadView();
@@ -116,8 +114,6 @@ public class MainWindow : Window, IDisposable
             RequireNamedElement<Border>("WindowChrome");
         _addCharacterButton =
             RequireNamedElement<Button>("AddCharacterButton");
-        _importNikkeDbButton =
-            RequireNamedElement<Button>("ImportNikkeDbButton");
         _scanResourcesButton =
             RequireNamedElement<Button>("ScanResourcesButton");
         _openResourceFolderButton =
@@ -149,7 +145,6 @@ public class MainWindow : Window, IDisposable
             characterManager,
             resourceDiscovery,
             bundleImporter,
-            nikkeDbImporter,
             characterIconDownloader ?? new(),
             _viewModel,
             _characterCards,
@@ -248,7 +243,6 @@ public class MainWindow : Window, IDisposable
         _windowChrome.MouseLeftButtonDown +=
             OnWindowChromeMouseLeftButtonDown;
         _addCharacterButton.Click += OnAddCharacter;
-        _importNikkeDbButton.Click += OnImportNikkeDb;
         _scanResourcesButton.Click += OnScanResources;
         _openResourceFolderButton.Click += OnOpenResourceFolder;
         _batchProcessingCombo.SelectionChanged += OnBatchProcessingChanged;
@@ -413,9 +407,6 @@ public class MainWindow : Window, IDisposable
     private void OnAddCharacter(object sender, RoutedEventArgs e) =>
         _ = _libraryController.AddCharacterAsync(
             sender as Button);
-
-    private void OnImportNikkeDb(object sender, RoutedEventArgs e) =>
-        _libraryController.ImportFromNikkeDb();
 
     private void OnScanResources(object sender, RoutedEventArgs e) =>
         _ = _libraryController.ScanResourcesAsync(

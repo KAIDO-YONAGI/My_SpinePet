@@ -2,7 +2,7 @@
 
 > 文档 ID：`RES-LOAD-GUIDE`  
 > 状态：`Active`  
-> 最后核验：`2026-08-23`
+> 最后核验：`2026-08-24`
 
 本文是流程化规范：资源从拿到手到出现在 SpinePet 里，按
 **入库 → 判定 → 导入 → 验证** 四个阶段推进，每个阶段写明执行顺序和
@@ -26,8 +26,7 @@ zip 压缩包 ──┐
 核心原则（全程适用）：
 
 1. 普通 Add/手工入库的身份以**文件名前缀**
-   `c<角色ID>_<皮肤ID>` 为准；应用 DB 入口则以 `rename-map.json`
-   中精确资源编号为准。
+   `c<角色ID>_<皮肤ID>` 为准。
 2. 所有源资源先进入 `resources\Characters\`，`SpinePet\res\` 只放
    已确认可运行的最终资源；两者不混用。
 3. 导入 `res` 的文件**原样复制**：不改行尾、不加清理规则，
@@ -124,8 +123,8 @@ YYYY-MM-DD__名称 [cNNN_NN]  →  resources\Characters\名称
 ```
 
 - 同一次 Spine 4.1.x 导出，置于同一目录；
-- 普通 Add 只接受 standing；DB 编号导入会独立验证 aim、cover，并且只有
-  两者同时完整时才成对导入；
+- 普通 Add 只接受 standing，不接受 aim 或 cover 单套资源；aim、cover
+  由 4.2 的全量审计工具验证三状态完整后成对导入；
 - 不满足时资源停留在 `resources\`，不得进入 `res\`。
 
 ## 3. 阶段二：判定
@@ -238,25 +237,7 @@ SpinePet\res\<资源全名>\<皮肤ID>\
 目标目录中的同一文件，也不视为导入成功。事务不覆盖任何既有目标；失败或
 取消后，导入前已经存在的文件保持不变。
 
-### 4.2 按 nikkedb 资源编号导入
-
-配置面板的 **DB** 按钮接受精确资源编号，例如 `c017_01`。应用执行：
-
-1. 在 `resources\nikkedb\data\indexes\rename-map.json` 中不区分大小写
-   精确匹配 `id`，未知编号直接报错，不做模糊猜测；
-2. 沿 `currentRelativePath` 到 `resources\nikkedb\l2d` 查找 standing、
-   aim、cover；
-3. standing 不完整时整次失败；Aim/Cover 只有双方骨骼、atlas 和全部纹理页
-   都完整时才一起导入，任意一边缺失则两边都跳过；
-4. 目标统一创建 `standing/aim/cover/icons` 四个目录；
-5. 所有文件沿用 4.1 的冲突不覆盖、串行提交和失败回滚规则；
-6. 导入完成后扫描资源。完整 Aim/Cover 会自动写入角色 Battle 配置，
-   不完整组合不显示 Battle。
-
-普通 **Add** 不接受 aim 或 cover 单套资源。Aim/Cover 的现行配置与输入规则
-见 `..\StateSupport\Aim_Cover_Proposal.md`。
-
-### 4.3 全量审计 `resources\Characters`
+### 4.2 全量审计 `resources\Characters`
 
 本地入库目录需要整体复核时，使用仓库内工具，不按目录名臆测战斗支持：
 
@@ -276,7 +257,7 @@ AlreadyPresent，重复执行不会创建重复角色。无法映射到现有目
 `Dolla Dark Rose` 虽有 Aim/Cover 文件，但其战斗骨骼为 Spine `4.0.47`，
 与当前 4.1 运行时不兼容，因此跳过。
 
-### 4.4 图标（icon）配置
+### 4.3 图标（icon）配置
 
 头像从本地 nikkedb 索引取，不要用部件贴图（纹理页 png）充当图标：
 
@@ -385,10 +366,10 @@ AlreadyPresent，重复执行不会创建重复角色。无法映射到现有目
 ### 6.3 UnityFS 导入
 
 应用 **Add** 支持 standing `.skel` 或 UnityFS bundle；bundle 文件名以
-`c<角色ID>_<皮肤ID>_<standing|icons>_` 开头。Aim/Cover 使用 4.2 的
-本地 nikkedb 编号入口，不通过单文件 Add。依赖：
+`c<角色ID>_<皮肤ID>_<standing|icons>_` 开头。Aim/Cover 不通过单文件 Add，
+使用 4.2 的全量审计工具导入。依赖：
 `python -m pip install -r SpinePet\tools\requirements.txt`。
-两种导入都遵守 4.1 的事务、冲突不覆盖、失败回滚和临时目录清理规则。
+导入遵守 4.1 的事务、冲突不覆盖、失败回滚和临时目录清理规则。
 
 ### 6.4 aim / cover
 

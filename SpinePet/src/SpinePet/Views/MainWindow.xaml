@@ -130,17 +130,6 @@
                                      </Button>
 
                                      <Button Style="{StaticResource QuietButtonStyle}"
-                                             MinWidth="34"
-                                             Height="24"
-                                             MinHeight="24"
-                                             Margin="4,0,0,0"
-                                             Padding="6,0"
-                                             x:Name="ImportNikkeDbButton"
-                                             Content="DB"
-                                             ToolTip="Import by exact NikkeDB resource ID"
-                                             AutomationProperties.Name="Import from NikkeDB by resource ID" />
-
-                                     <Button Style="{StaticResource QuietButtonStyle}"
                                              MinWidth="48"
                                              Height="24"
                                              MinHeight="24"

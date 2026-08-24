@@ -63,7 +63,6 @@
 | 功能 | 具体实现 | 状态 |
 |---|---|---|
 | Add | 文件选择器接受 `.skel` 或符合命名规则的 UnityFS bundle；导入 standing 资源后尝试自动补齐角色图标 | 已实现 |
-| DB | 输入精确 nikkedb 资源编号；standing 必须导入，Aim/Cover 仅在双方完整时成对导入 | 已实现 |
 | Scan | 扫描 `res`，按角色、Skin、状态同步；完整 Aim/Cover 自动补写 Battle，残缺或失效组合清除 Battle；连续扫描无变化时不保存、不通知也不移除渲染资源 | 已实现 |
 | 新卡默认配置 | Add 或 Scan 新建的角色卡默认保持 Hidden，不自动打开；Scale 基础比例为 100%，倍率为 1.0，对应最终缩放 0.2 | 已实现 |
 | Folder | 创建并打开当前生效的 `res` 资源目录 | 已实现 |

@@ -1,5 +1,44 @@
 # GUI Developer Log
 
+## 2026-08-24：Reset All 后动画下拉标题空白修复
+
+- 用户反馈：Reset All Settings 后下拉标题回到空白状态。根因与此前
+  标题修复不同：`ResetAllSettings` 对未加载（隐藏）角色调用
+  `GetAnimationNames` 得到空列表，`SelectIdleAnimationName` 返回 null，
+  `ConfiguredAnimation` 被重置为**空字符串**——下拉回退项与标题随之
+  消失。该行为在重构前即存在，非阶段 1/2 回归。
+- 修复：`CharacterCatalog.ResetAllSettings` 在无法解析 idle 时回退到
+  `"idle"` 字面值而非空串；渲染侧按 `idle -> idle* -> 第一动画` 链解析，
+  下次加载后收敛为真实 idle。`CharacterManagerTests` 对应断言由
+  `Empty` 更新为 `"idle"` 并注明理由。
+- 兄弟路径核对（新增回归防控要求）：面板打开/卡片选中/Scan/换肤/
+  加载完成/Normal-Battle 切换均不依赖该空值回退，行为不变；换肤后
+  加载期间的短暂空白属既有加载表现，加载完成后自动回填。
+- 验证证据：Debug 全量测试 `318/318`；Release Build 0 警告 0 错误；
+  Publish 成功（`SpinePet-Release-2026-08-24-19 16 49`）；新实例 PID
+  3848 于 19:16:59 写入 `startup-complete` 并持续运行。
+- 本次实际影响 GUI 批量重置行为，维护计数（新周期）：`0/5 -> 1/5`。
+
+## 2026-08-24：移除 DB（NikkeDB 编号导入）功能
+
+- 按用户要求移除配置面板 DB 按钮（XAML/事件处理器/控制器方法/
+  `NikkeDbResourceImportService`/`NikkeDbImportResult`/App 组装与
+  `AppPaths.NikkeDbDirectory`），删除专项测试 7 项。
+- `CharacterBattleConfigFactoryTests` 原用 DB 导入服务做夹具，改为
+  `StageNikkeDbResource` 直接复制 `resources\nikkedb` 真实文件到
+  standing/aim/cover 布局；两个真实资源测试断言不变、继续通过。
+- 文档同步：`GUI_Design.md` §5 删除 DB 行；`RES-LOAD-GUIDE` 移除
+  4.2 DB 流程（审计节升为 4.2、图标为 4.3）并修正核心原则、2.3、
+  6.3 的交叉引用（纯文档维护，Resources.Load 不计数）。
+- 验证证据：Debug 全量测试 `318/318`（原 325 减去 7 项 DB 服务
+  测试）；Release Build 0 警告 0 错误；Publish 成功；新实例写入
+  `startup-complete` 并持续运行。
+- 本次实际影响 GUI 资源入口，维护计数：`4/5 -> 5/5`。按规则复查本
+  周期 5 项任务（重构阶段 1、重构阶段 2、面板真实状态同步、下拉
+  标题差量更新、DB 移除）：`GUI_Design.md` 各节均已在对应任务中同步，
+  §1–§9 与当前实现一致，其余记录 `reviewed-no-change`，计数归零：
+  `5/5 -> 0/5`。
+
 ## 2026-08-24：动画下拉标题始终显示当前生效值
 
 - 用户反馈：Animation 下拉收起标题空白，应显示默认配置动画（如

@@ -69,21 +69,13 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
     }
 
     [Fact]
-    public void RealC01701ImportsAndBuildsCompleteBattleProfile()
+    public void RealC01701ResourcesBuildCompleteBattleProfile()
     {
-        string workspaceRoot = FindWorkspaceRoot();
-        string nikkedb = Path.Combine(
-            workspaceRoot,
-            "resources",
-            "nikkedb");
+        string resourceRoot = Path.Combine(_temporaryDirectory, "res");
+        StageNikkeDbResource(resourceRoot);
         CharacterResourceDiscoveryService discovery = new();
-        NikkeDbImportResult imported =
-            new NikkeDbResourceImportService(discovery).Import(
-                "c017_01",
-                nikkedb,
-                Path.Combine(_temporaryDirectory, "res"));
         IReadOnlyList<CharacterResourceFiles> resources =
-            discovery.DiscoverAll(Path.Combine(_temporaryDirectory, "res"));
+            discovery.DiscoverAll(resourceRoot);
         CharacterResourceFiles standing = Assert.Single(
             resources,
             resource =>
@@ -92,7 +84,6 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
         CharacterBattleConfig? battle =
             CharacterBattleConfigFactory.TryCreate(standing, resources);
 
-        Assert.True(imported.BattleImported);
         Assert.NotNull(battle);
         Assert.Equal("aim_idle", battle.Animations.AimIdle);
         Assert.Equal("to_aim", battle.Animations.ToAim);
@@ -112,13 +103,9 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
     [Fact]
     public void ScanBackfillsRemovesAndNormalizesBattleProfile()
     {
-        string workspaceRoot = FindWorkspaceRoot();
         string resourceRoot = Path.Combine(_temporaryDirectory, "scan-res");
+        StageNikkeDbResource(resourceRoot);
         CharacterResourceDiscoveryService discovery = new();
-        new NikkeDbResourceImportService(discovery).Import(
-            "c017_01",
-            Path.Combine(workspaceRoot, "resources", "nikkedb"),
-            resourceRoot);
         CharacterResourceFiles[] complete =
             discovery.DiscoverAll(resourceRoot).ToArray();
         ConfigService configService = new(Path.Combine(
@@ -345,6 +332,58 @@ public sealed class CharacterBattleConfigFactoryTests : IDisposable
         return directory?.FullName ??
                throw new DirectoryNotFoundException(
                    "Repository root not found.");
+    }
+
+    // Stages the real c017_01 evidence files from the workspace nikkedb
+    // library into a managed res layout (standing/aim/cover subfolders),
+    // mirroring what the removed NikkeDB import produced.
+    private static void StageNikkeDbResource(string destinationRoot)
+    {
+        string sourceRoot = Path.Combine(
+            FindWorkspaceRoot(),
+            "resources",
+            "nikkedb",
+            "l2d",
+            "mapped",
+            "2026-04-25__Anis Star Variant 01 [c017_01]");
+        StageState(
+            sourceRoot,
+            destinationRoot,
+            sourceDirectoryName: null,
+            CharacterResourceTypes.Standing);
+        StageState(
+            sourceRoot,
+            destinationRoot,
+            CharacterResourceTypes.Aim,
+            CharacterResourceTypes.Aim);
+        StageState(
+            sourceRoot,
+            destinationRoot,
+            CharacterResourceTypes.Cover,
+            CharacterResourceTypes.Cover);
+    }
+
+    private static void StageState(
+        string sourceRoot,
+        string destinationRoot,
+        string? sourceDirectoryName,
+        string resourceType)
+    {
+        string source = sourceDirectoryName == null
+            ? sourceRoot
+            : Path.Combine(sourceRoot, sourceDirectoryName);
+        string target = Path.Combine(
+            destinationRoot,
+            "Anis",
+            "c017_01",
+            resourceType);
+        Directory.CreateDirectory(target);
+        foreach (string filePath in Directory.EnumerateFiles(source))
+        {
+            File.Copy(
+                filePath,
+                Path.Combine(target, Path.GetFileName(filePath)));
+        }
     }
 
     private static string FindWorkspaceRoot()

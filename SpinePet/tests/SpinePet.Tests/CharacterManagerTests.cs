@@ -109,7 +109,10 @@ public sealed class CharacterManagerTests : IDisposable
         Assert.Equal(
             CharacterConfig.DefaultAnimationSpeed,
             reset.AnimationSpeed);
-        Assert.Empty(reset.ConfiguredAnimation);
+        // The character is not loaded, so no animation names are known;
+        // the reset must still land on a visible idle default instead of
+        // wiping the configured animation to an empty string.
+        Assert.Equal("idle", reset.ConfiguredAnimation);
         Assert.Equal(960, reset.PositionX);
         Assert.Equal(1056, reset.PositionY);
         Assert.False(reset.Visible);

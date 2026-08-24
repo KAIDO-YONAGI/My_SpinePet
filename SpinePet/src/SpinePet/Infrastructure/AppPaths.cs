@@ -28,9 +28,6 @@ internal static class AppPaths
     public static string ResourceDirectory { get; } =
         ResolveResourceDirectory();
 
-    public static string NikkeDbDirectory { get; } =
-        ResolveNikkeDbDirectory();
-
     public static string BundleExtractorScript { get; } =
         ResolveBundledFile(
             Path.Combine(
@@ -93,18 +90,6 @@ internal static class AppPaths
         }
 
         return Path.Combine(ProjectRoot, "res");
-    }
-
-    private static string ResolveNikkeDbDirectory()
-    {
-        string[] candidates =
-        [
-            Path.Combine(ProjectRoot, "resources", "nikkedb"),
-            Path.Combine(ProjectRoot, "..", "resources", "nikkedb")
-        ];
-        return candidates
-            .Select(Path.GetFullPath)
-            .FirstOrDefault(Directory.Exists) ?? candidates[0];
     }
 
     private static IEnumerable<string> GetPortableBaseDirectories()

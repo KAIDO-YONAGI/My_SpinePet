@@ -376,7 +376,11 @@ internal sealed class CharacterCatalog
                 CharacterConfig.DefaultScaleMultiplier;
             character.AnimationSpeed =
                 CharacterConfig.DefaultAnimationSpeed;
-            character.ConfiguredAnimation = idleAnimation ?? string.Empty;
+            // Unloaded characters expose no animation names; keep the idle
+            // literal so the reset default stays visible in the panel and
+            // resolves through the renderer's idle -> idle* -> first
+            // animation fallback once the character loads.
+            character.ConfiguredAnimation = idleAnimation ?? "idle";
             character.PositionX = defaultPositionX;
             character.PositionY = defaultPositionY;
 

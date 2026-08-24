@@ -26,7 +26,6 @@ internal sealed class CharacterLibraryController
     private readonly CharacterManager _characterManager;
     private readonly CharacterResourceDiscoveryService _resourceDiscovery;
     private readonly UnityBundleImportService _bundleImporter;
-    private readonly NikkeDbResourceImportService _nikkeDbImporter;
     private readonly CharacterIconDownloadService _characterIconDownloader;
     private readonly CharacterThumbnailService _thumbnailService = new();
     private readonly MainViewModel _viewModel;
@@ -50,7 +49,6 @@ internal sealed class CharacterLibraryController
         CharacterManager characterManager,
         CharacterResourceDiscoveryService resourceDiscovery,
         UnityBundleImportService bundleImporter,
-        NikkeDbResourceImportService nikkeDbImporter,
         CharacterIconDownloadService characterIconDownloader,
         MainViewModel viewModel,
         ListBox characterCards,
@@ -65,7 +63,6 @@ internal sealed class CharacterLibraryController
         _characterManager = characterManager;
         _resourceDiscovery = resourceDiscovery;
         _bundleImporter = bundleImporter;
-        _nikkeDbImporter = nikkeDbImporter;
         _characterIconDownloader = characterIconDownloader;
         _viewModel = viewModel;
         _characters = viewModel.Characters;
@@ -311,52 +308,6 @@ internal sealed class CharacterLibraryController
             {
                 addButton.IsEnabled = true;
             }
-        }
-    }
-
-    public void ImportFromNikkeDb()
-    {
-        string resourceId = Microsoft.VisualBasic.Interaction.InputBox(
-            "Enter the exact NikkeDB resource ID.",
-            "Import from NikkeDB",
-            string.Empty);
-        if (string.IsNullOrWhiteSpace(resourceId))
-            return;
-
-        try
-        {
-            NikkeDbImportResult result = _nikkeDbImporter.Import(
-                resourceId,
-                AppPaths.NikkeDbDirectory,
-                AppPaths.ResourceDirectory,
-                _lifetimeToken);
-            RefreshKnownResources();
-            SynchronizeKnownResources();
-            RefreshCharacterList();
-            string battleMessage = result.BattleImported
-                ? "Standing, Aim, and Cover were imported."
-                : "Standing was imported. Battle was skipped because Aim " +
-                  "and Cover were not both complete.";
-            MessageBox.Show(
-                _owner,
-                $"{battleMessage}{Environment.NewLine}" +
-                result.DestinationDirectory,
-                "NikkeDB Import Complete",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
-        }
-        catch (Exception exception)
-        {
-            AppLogger.Write(
-                nameof(CharacterLibraryController),
-                $"nikkedb-import-failed id={resourceId} " +
-                $"message={exception.Message}");
-            MessageBox.Show(
-                _owner,
-                exception.Message,
-                "NikkeDB Import Failed",
-                MessageBoxButton.OK,
-                MessageBoxImage.Warning);
         }
     }
 
