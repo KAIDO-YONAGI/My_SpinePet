@@ -30,6 +30,8 @@ public class MainWindow : Window, IDisposable
     private readonly MainWindowLifecycleController _lifecycle;
     private readonly CharacterResourceStorageService _resourceStorage = new();
     private readonly MainViewModel _viewModel;
+    private readonly DisplaySelectionComboCoordinator
+        _displaySelectionCoordinator;
     private CharacterPreviewNavigationController _previewNavigation = null!;
     private CharacterLibraryController _libraryController = null!;
     private CharacterSettingsController _settingsController = null!;
@@ -134,6 +136,10 @@ public class MainWindow : Window, IDisposable
             RequireNamedElement<CheckBox>("AllowDraggingToggle");
 
         _viewModel = new MainViewModel(characterManager);
+        _displaySelectionCoordinator =
+            new DisplaySelectionComboCoordinator(
+                _animationCombo,
+                _viewModel);
         _previewNavigation = new CharacterPreviewNavigationController(
             _characterCards,
             _viewModel,
@@ -487,6 +493,7 @@ public class MainWindow : Window, IDisposable
     {
         if (_viewModel.IsRefreshingSelection ||
             _viewModel.IsUpdatingDisplaySelection ||
+            _displaySelectionCoordinator.IsApplying ||
             _viewModel.FindSelectedCharacterConfig() is not { } character)
         {
             return;
@@ -857,6 +864,7 @@ public class MainWindow : Window, IDisposable
         _searchAnnouncementTimer.Stop();
         _searchAnnouncementTimer.Tick -=
             OnCharacterSearchAnnouncementTick;
+        _displaySelectionCoordinator.Dispose();
         _lifecycle.Dispose();
         GC.SuppressFinalize(this);
     }

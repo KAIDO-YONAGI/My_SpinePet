@@ -38,7 +38,7 @@
 |---|---|---|
 | 当前角色 | 显示所选角色名和当前 Skin；未选择时显示空状态。面板每次打开都会从当前配置与运行时状态重建角色库与详情；选中角色的资源加载完成、动画列表或配置动画变化时自动重新同步右侧选项，无需手动点选 | 已实现 |
 | Normal/Battle | 完整 Aim/Cover 角色可手动切换；启动及首次展示为 Normal，进入 Battle 默认 Cover；模式不持久化 | 已实现 |
-| Mode 联动选择 | Mode 与右侧选择框同一行；Normal 显示 standing 资源的真实动画名，选择后立即循环播放并保存；隐藏角色从 `.skel/.json + .atlas` 元数据读取动画名，不制造配置值占位项；Battle 仅显示 `Cover`、`Aim`，继续使用现有 Battle 状态逻辑；无 Battle 资源时 Mode 禁用。选择框一次发布完整选项快照，再同步选中值，收起标题与展开后的真实选中项保持一致 | 已实现 |
+| Mode 联动选择 | Mode 与右侧选择框同一行；Normal 显示 standing 资源的真实动画名，选择后立即循环播放并保存；隐藏角色从 `.skel/.json + .atlas` 元数据读取动画名，不制造配置值占位项；Battle 仅显示 `Cover`、`Aim`，继续使用现有 Battle 状态逻辑；无 Battle 资源时 Mode 禁用。视图协调器在同一次提交中把完整选项快照与快照中的真实选中项应用到选择框，Normal/Battle 往返后收起标题与展开选中项保持一致 | 已实现 |
 | Reset All | 缩放、速度、位置与动画恢复默认；动画默认名从已加载渲染快照或隐藏角色骨骼元数据按 `idle -> idle* -> 第一动画` 解析并持久化，不能写死不存在的 `idle`。相同资源连续 Reset 得到相同配置与下拉选中项 | 已实现 |
 | Desktop frame rate | 提供 30、60、120 FPS 三档，标注为 `Global Setting`，立即应用并持久化 | 已实现 |
 | Allow dragging | iOS 风格开关，标注为 `Global Setting`；控制渲染模式是否允许拖动全部角色 | 已实现 |
@@ -80,6 +80,9 @@
   同步、过滤刷新、缩略图应用），不持有控件。
 - `Views/MainWindow.xaml.cs`：视图装配、事件路由、窗口命中测试、拖动
   开关动画和无障碍播报；不持有绑定状态。
+- `Views/DisplaySelectionComboCoordinator.cs`：动画选择框的唯一视图写入者；
+  把 ViewModel 的完整选项快照和该快照中的匹配选中项作为一次控件提交应用，
+  并在提交期间屏蔽选择回写。
 - `Views/CharacterLibraryController.cs`：搜索、Add/DB 导入、扫描、显隐、
   Skin 切换和列表同步；角色状态快照只增量更新对应卡片。
 - `Views/CharacterThumbnailService.cs`、`VirtualizingUniformGrid.cs`：
@@ -163,8 +166,11 @@ WPF 控件、配置服务和第三方 `SpineRuntime41` 不反向依赖渲染内�
   与轮廓缓存，最后释放原生窗口和图形资源。关闭后的回调及重复关闭均为空操作。
 - 配置同步与异步保存共用同一原子提交路径；旧版本不能覆盖新版本，相同内容
   不替换磁盘文件，成功提交后统一清除 `RequiresRewrite`。
-- 动画下拉的选项必须作为完整快照先于选中值发布；选中值必须来自该真实
-  快照。禁止用伪选项或修改源值为 `空 -> 当前值` 来制造标题显示。
+- 动画下拉不得用相互独立的 `ItemsSource`/`SelectedItem` 绑定竞争更新。
+  唯一视图协调器必须在同一次提交中应用完整选项快照，并把
+  `SelectedItem` 设置为该快照中匹配的真实实例；Normal/Battle 往返及
+  重复同步后，收起标题、展开选中项和 ViewModel 值必须一致。禁止用伪选项
+  或修改源值为 `空 -> 当前值` 来制造标题显示。
 - Reset All 的动画默认值必须从角色真实动画列表解析。连续执行 Reset 时，
   配置值、下拉标题和展开后的选中项必须保持一致。
 - Mode 与 Cover/Aim 是角色运行时状态。角色隐藏、移除、卸载或应用

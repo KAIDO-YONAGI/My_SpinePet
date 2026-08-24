@@ -1,5 +1,38 @@
 # GUI Developer Log
 
+## 2026-08-24：Normal/Battle 往返后动画标题空白的控件层修复
+
+- 用户复报：从其他 Mode 切回 Normal 后，动画下拉的收起标题再次变空。
+  修复前对运行实例做 UI Automation 复现：Normal 下拉包含真实 `think`，
+  手动选择后标题正常；切到 Battle 再切回 Normal，标题立即为空且两秒后
+  仍不恢复。此时 ViewModel 的动画值和选项列表仍正确，故障只存在于
+  `ComboBox.SelectedItem`。
+- 根因：`ItemsSource` 与 `SelectedItem` 原由两条独立 TwoWay 绑定更新。
+  Normal 与 Battle 使用互不相交的选项集合，列表替换时 WPF 会先清除目标
+  选择；异步事件顺序下，源字符串没有发生变化，绑定不会保证把新列表中的
+  同名真实项重新选中。此前只验证 ViewModel 或单次列表刷新，未覆盖真实
+  控件的跨 Mode 往返。
+- 修复：新增 `DisplaySelectionComboCoordinator`，作为动画选择框唯一的
+  视图写入者。每次收到完整状态快照后，在同一 UI 提交中设置
+  `ItemsSource`，并从该快照中查找匹配的真实字符串实例设置
+  `SelectedItem`；应用期间屏蔽用户选择回写。XAML 删除这两个相互竞争的
+  绑定。实现不写死 `idle`，也不修改源状态制造 `空 -> 当前值` 抖动。
+- 真实 WPF ComboBox 回归测试新增完整往返：
+  `Normal[idle] -> Battle[Cover] -> Normal[idle]`，同时保留资源列表替换、
+  展开项真实选中和重复刷新断言。
+- 兄弟路径核对：面板打开由协调器初次提交，Release 活体初始标题为
+  `idle`；卡片选中、Scan、换肤和资源加载完成均继续汇入
+  `SyncSelectedCharacterSettings` 的完整快照，其中资源列表替换由真实
+  ComboBox 测试覆盖；Reset All 的真实默认值与重复执行测试继续通过；
+  Normal/Battle 在最终 Release 上连续两轮 UIA 往返均通过。Scan 与换肤
+  本轮为代码路径核对，未单独执行活体导入操作。
+- 验证：Debug 全量测试 `323/323`；Release Build 0 警告 0 错误；Publish
+  `SpinePet-Release-2026-08-24-21 38 51`；最终实例 PID 25680 写入
+  `startup-complete`。UIA 两轮结果均为
+  `Normal[idle] -> Battle[Cover] -> Normal[idle]`，展开后 `idle` 为真实
+  选中项。
+- 本次实际影响 GUI 动画选择框，维护计数：`3/5 -> 4/5`。
+
 ## 2026-08-24：动画下拉真实默认值与 Show/Reset 幂等修复（纠正前两次结论）
 
 - 用户指出前两次修复仍是“未 Show 时硬编码 idle、Show 后空白、展开后全白”。

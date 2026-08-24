@@ -7,6 +7,7 @@ using SpinePet.Models;
 using SpinePet.Services;
 using SpinePet.Tests.TestDoubles;
 using SpinePet.ViewModels;
+using SpinePet.Views;
 
 namespace SpinePet.Tests;
 
@@ -541,25 +542,35 @@ public sealed class MainViewModelTests : IDisposable
             };
 
             ComboBox combo = new();
-            combo.SetBinding(
+            ComboBox modeCombo = new();
+            modeCombo.SetBinding(
                 System.Windows.Controls.ItemsControl
                     .ItemsSourceProperty,
                 new System.Windows.Data.Binding(
-                    "DisplaySelectionOptions"));
-            combo.SetBinding(
+                    "DisplayModeOptions"));
+            modeCombo.SetBinding(
                 System.Windows.Controls.Primitives.Selector
                     .SelectedItemProperty,
                 new System.Windows.Data.Binding(
-                    "SelectedDisplaySelection")
+                    "SelectedDisplayMode")
                 {
                     Mode = System.Windows.Data.BindingMode.TwoWay
                 });
-            combo.DataContext = viewModel;
+            combo.SetBinding(
+                System.Windows.UIElement.IsEnabledProperty,
+                new System.Windows.Data.Binding(
+                    "IsDisplaySelectionEnabled"));
+            StackPanel panel = new();
+            panel.Children.Add(modeCombo);
+            panel.Children.Add(combo);
+            panel.DataContext = viewModel;
+            using DisplaySelectionComboCoordinator coordinator =
+                new(combo, viewModel);
             Window window = new()
             {
-                Content = combo,
+                Content = panel,
                 Width = 200,
-                Height = 60,
+                Height = 100,
                 ShowInTaskbar = false
             };
             window.Show();
@@ -587,6 +598,20 @@ public sealed class MainViewModelTests : IDisposable
             Assert.True(
                 ((ComboBoxItem)combo.ItemContainerGenerator
                     .ContainerFromItem("idle")).IsSelected);
+            combo.IsDropDownOpen = false;
+
+            // Mode changes replace the animation items with a disjoint
+            // Battle list. Returning to Normal must restore the real
+            // configured animation as the closed combo title.
+            modeCombo.SelectedItem = CharacterDisplayModes.Battle;
+            PumpCallbacks!();
+            Assert.Equal(
+                CharacterBattleStates.Cover,
+                (string?)combo.SelectedItem);
+            modeCombo.SelectedItem = CharacterDisplayModes.Normal;
+            PumpCallbacks!();
+            Assert.Equal("idle", viewModel.SelectedDisplaySelection);
+            Assert.Equal("idle", (string?)combo.SelectedItem);
 
             // Repeating the same refresh must preserve the same real item.
             viewModel.SyncSelectedCharacterSettings();

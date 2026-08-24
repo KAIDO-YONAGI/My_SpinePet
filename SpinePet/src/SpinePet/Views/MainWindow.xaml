@@ -754,8 +754,6 @@
                                               AutomationProperties.Name="Character display mode" />
                                     <ComboBox Grid.Column="1"
                                               x:Name="AnimationCombo"
-                                              ItemsSource="{Binding DisplaySelectionOptions}"
-                                              SelectedItem="{Binding SelectedDisplaySelection, Mode=TwoWay}"
                                               IsEnabled="{Binding IsDisplaySelectionEnabled}"
                                               Height="32"
                                               Margin="3,0,0,0"
