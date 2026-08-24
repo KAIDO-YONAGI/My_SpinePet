@@ -497,14 +497,35 @@ public sealed class MainViewModel : INotifyPropertyChanged,
 
     private void RefreshDisplaySelectionOptions()
     {
-        _displaySelectionOptions.Clear();
+        // Update the option list in place instead of clearing it: a
+        // collection reset makes the combo box drop its selection, which
+        // blanks the closed title even when the value is still valid.
         IEnumerable<string> options =
             SelectedDisplayMode == CharacterDisplayModes.Battle
                 ? BattleStateOptions
                 : SelectedAnimationNames;
+        int index = 0;
         foreach (string option in options)
         {
-            _displaySelectionOptions.Add(option);
+            if (index < _displaySelectionOptions.Count &&
+                string.Equals(
+                    _displaySelectionOptions[index],
+                    option,
+                    StringComparison.Ordinal))
+            {
+                index++;
+                continue;
+            }
+
+            _displaySelectionOptions.Remove(option);
+            _displaySelectionOptions.Insert(index, option);
+            index++;
+        }
+
+        while (_displaySelectionOptions.Count > index)
+        {
+            _displaySelectionOptions.RemoveAt(
+                _displaySelectionOptions.Count - 1);
         }
 
         OnPropertyChanged(nameof(SelectedDisplaySelection));

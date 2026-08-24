@@ -141,6 +141,51 @@ public sealed class MainViewModelTests : IDisposable
     }
 
     [Fact]
+    public void DisplayOptionsRebuildKeepsCurrentSelection()
+    {
+        (MainViewModel viewModel, _, _) = CreateViewModel();
+        viewModel.SelectedCharacter =
+            CreateListCharacter("c1", "Rapi");
+        viewModel.SelectedAnimationNames.Add("idle");
+        viewModel.SelectedAnimationNames.Add("wave");
+        viewModel.SelectedAnimation = "idle";
+        viewModel.SelectedDisplayMode =
+            CharacterDisplayModes.Battle;
+
+        viewModel.SelectedDisplayMode =
+            CharacterDisplayModes.Normal;
+
+        // The closed combo title must keep showing the effective value
+        // after the option list is rebuilt for the same mode.
+        Assert.Equal(
+            ["idle", "wave"],
+            viewModel.DisplaySelectionOptions);
+        Assert.Equal("idle", viewModel.SelectedDisplaySelection);
+    }
+
+    [Fact]
+    public void DisplayOptionsRebuildReplacesStaleEntries()
+    {
+        (MainViewModel viewModel, _, _) = CreateViewModel();
+        viewModel.SelectedCharacter =
+            CreateListCharacter("c1", "Rapi");
+        viewModel.SelectedAnimationNames.Add("old1");
+        viewModel.SelectedAnimationNames.Add("old2");
+        viewModel.SelectedDisplayMode =
+            CharacterDisplayModes.Battle;
+
+        viewModel.SelectedAnimationNames.Clear();
+        viewModel.SelectedAnimationNames.Add("a");
+        viewModel.SelectedAnimationNames.Add("b");
+        viewModel.SelectedDisplayMode =
+            CharacterDisplayModes.Normal;
+
+        Assert.Equal(
+            ["a", "b"],
+            viewModel.DisplaySelectionOptions);
+    }
+
+    [Fact]
     public void IsDisplaySelectionRequiresSelection()
     {
         (MainViewModel viewModel, _, _) = CreateViewModel();
