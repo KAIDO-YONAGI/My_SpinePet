@@ -1,4 +1,8 @@
 using System.IO;
+using System.Threading;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Threading;
 using SpinePet.Models;
 using SpinePet.Services;
 using SpinePet.Tests.TestDoubles;
@@ -449,6 +453,182 @@ public sealed class MainViewModelTests : IDisposable
             "1 matching characters out of 2 loaded",
             viewModel.CharacterSearchStatus);
     }
+
+    [Fact]
+    public void BindingSmoke()
+    {
+        RunOnSta(() =>
+        {
+            TextBox box = new();
+            box.SetBinding(
+                TextBox.TextProperty,
+                new System.Windows.Data.Binding("SelectedAnimation"));
+            box.DataContext = viewModelForSmoke();
+            Window window = new()
+            {
+                Content = box,
+                Width = 200,
+                Height = 60,
+                ShowInTaskbar = false
+            };
+            window.Show();
+            PumpCallbacks!();
+            Assert.Equal("smoke", box.Text);
+        });
+
+        static MainViewModel viewModelForSmoke()
+        {
+            CharacterConfig character = new()
+            {
+                Id = "smoke",
+                Name = "Smoke"
+            };
+            ConfigService configService = new(Path.Combine(
+                Path.GetTempPath(),
+                $"spinepet-smoke-{Guid.NewGuid():N}.json"));
+            CharacterManager manager = new(
+                configService,
+                new CharacterIdentityService(
+                    new Dictionary<string, string>()),
+                new FakeCharacterRenderHost());
+            MainViewModel viewModel = new(manager);
+            viewModel.SelectedAnimation = "smoke";
+            return viewModel;
+        }
+    }
+
+    [Fact]
+    public void RealComboShowsConfiguredIdleAfterResetSequence()
+    {
+        RunOnSta(() =>
+        {
+            CharacterConfig character = new()
+            {
+                Id = "reset-combo",
+                Name = "Reset Combo",
+                ConfiguredAnimation = "wave",
+                Visible = false
+            };
+            var (viewModel, _, _) =
+                CreateViewModel(configCharacters: character);
+            CharacterViewModel selection = CreateListCharacter(
+                character.Id,
+                character.Name);
+            viewModel.Characters.Add(selection);
+            viewModel.SelectedCharacter = selection;
+            // Mirror what CharacterSettingsController does on settings
+            // sync: copy the card's animation names and pick the
+            // configured-or-idle animation.
+            viewModel.SettingsSyncRequested += () =>
+            {
+                viewModel.SelectedAnimationNames.Clear();
+                foreach (string name in selection.AnimationNames)
+                {
+                    viewModel.SelectedAnimationNames.Add(name);
+                }
+
+                viewModel.SelectedAnimation =
+                    selection.AnimationNames.FirstOrDefault(name =>
+                        name.Equals(
+                            selection.ConfiguredAnimation,
+                            StringComparison.OrdinalIgnoreCase)) ??
+                    selection.AnimationNames.FirstOrDefault(name =>
+                        name.StartsWith(
+                            "idle",
+                            StringComparison.OrdinalIgnoreCase)) ??
+                    selection.AnimationNames.FirstOrDefault() ??
+                    string.Empty;
+            };
+
+            ComboBox combo = new();
+            combo.SetBinding(
+                System.Windows.Controls.ItemsControl
+                    .ItemsSourceProperty,
+                new System.Windows.Data.Binding(
+                    "DisplaySelectionOptions"));
+            combo.SetBinding(
+                System.Windows.Controls.Primitives.Selector
+                    .SelectedItemProperty,
+                new System.Windows.Data.Binding(
+                    "SelectedDisplaySelection")
+                {
+                    Mode = System.Windows.Data.BindingMode.TwoWay
+                });
+            combo.DataContext = viewModel;
+            Window window = new()
+            {
+                Content = combo,
+                Width = 200,
+                Height = 60,
+                ShowInTaskbar = false
+            };
+            window.Show();
+            PumpCallbacks!();
+
+            // Pre-reset state: the user had picked a different animation.
+            selection.UpdateAnimationNames(["wave"]);
+            selection.ConfiguredAnimation = "wave";
+            viewModel.SyncSelectedCharacterSettings();
+            PumpCallbacks!();
+            Assert.True(
+                combo.Items.Count == 1,
+                $"items-count={combo.Items.Count}");
+            Assert.Equal(
+                "wave",
+                (string?)combo.SelectedItem);
+
+            // Reset All on a character that is not loaded: the configured
+            // animation falls back to the idle literal and the refreshed
+            // card exposes exactly that name.
+            selection.UpdateAnimationNames(["idle"]);
+            selection.ConfiguredAnimation = "idle";
+            viewModel.SyncSelectedCharacterSettings();
+            PumpCallbacks!();
+
+            Assert.Equal("idle", viewModel.SelectedDisplaySelection);
+            Assert.Equal("idle", (string?)combo.SelectedItem);
+        });
+    }
+
+    private static void RunOnSta(Action action)
+    {
+        Exception? failure = null;
+        Thread thread = new(() =>
+        {
+            try
+            {
+                // Bindings only transfer values through dispatcher
+                // operations; create the dispatcher up front and pump a
+                // frame whenever the action needs bindings applied.
+                Dispatcher dispatcher = Dispatcher.CurrentDispatcher;
+                void pump()
+                {
+                    DispatcherFrame frame = new();
+                    dispatcher.BeginInvoke(
+                        DispatcherPriority.Background,
+                        new Action(() => frame.Continue = false));
+                    Dispatcher.PushFrame(frame);
+                }
+
+                PumpCallbacks = pump;
+                action();
+            }
+            catch (Exception exception)
+            {
+                failure = exception;
+            }
+            finally
+            {
+                PumpCallbacks = null;
+            }
+        });
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+        Assert.Null(failure);
+    }
+
+    private static Action? PumpCallbacks { get; set; }
 
     private (
         MainViewModel ViewModel,

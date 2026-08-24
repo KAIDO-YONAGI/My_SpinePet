@@ -530,6 +530,36 @@ public sealed class MainViewModel : INotifyPropertyChanged,
 
         OnPropertyChanged(nameof(SelectedDisplaySelection));
         OnPropertyChanged(nameof(IsDisplaySelectionEnabled));
+        ReassertDisplaySelectionBinding();
+    }
+
+    /// <summary>
+    /// A combo box cannot resolve a SelectedItem that was pushed while the
+    /// option list was stale or empty, and the binding engine will not
+    /// transfer the same value again on its own. Re-assign the effective
+    /// selection once the option list is final so the closed title always
+    /// shows the current value.
+    /// </summary>
+    private void ReassertDisplaySelectionBinding()
+    {
+        string current = SelectedDisplaySelection;
+        if (string.IsNullOrEmpty(current) ||
+            !_displaySelectionOptions.Contains(current))
+        {
+            return;
+        }
+
+        if (SelectedDisplayMode == CharacterDisplayModes.Battle)
+        {
+            _selectedBattleState = string.Empty;
+            SelectedBattleState = current;
+        }
+        else
+        {
+            _selectedAnimation = string.Empty;
+            SelectedAnimation = current;
+            OnPropertyChanged(nameof(SelectedDisplaySelection));
+        }
     }
 
     private static bool NearlyEquals(double left, double right) =>

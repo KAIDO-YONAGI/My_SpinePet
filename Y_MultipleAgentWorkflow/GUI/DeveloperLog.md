@@ -1,5 +1,32 @@
 # GUI Developer Log
 
+## 2026-08-24：动画下拉标题空白的真正根因——SelectedItem 绑定不重传输（活体验证）
+
+- 用户复报"还是空的"。上一条 Reset 修复（idle 字面值回退）只治了数据层，
+  未能治愈显示。本轮改用证据链驱动：构建真实 Window+ComboBox 测试装置
+  （`RunOnSta` + Dispatcher 泵），并用 UI Automation 直接驱动运行中的应用
+  取证。
+- 活体证据（修复前构建）：面板打开时动画下拉 `(none)`、展开仅一项
+  `idle`——VM 值与选项都正确，唯独 ComboBox 未选中；手动选中后 Reset All
+  不丢。结论：启动时同步把 `SelectedAnimation` 推给下拉框时选项列表尚为
+  空，ComboBox 无法解析该值，而绑定引擎记下"已传输"，此后源值不变则
+  永远跳过重传输——标题终生空白。此前单元测试未复现是因为装置中值发生过
+  变化（会触发真实传输），与真实时序不符。
+- 修复：`MainViewModel.ReassertDisplaySelectionBinding`——选项列表定稿后
+  强制 `空 -> 当前值` 两段式重新赋值（先置字段为空再走 setter 触发两次
+  PropertyChanged），保证绑定在选项已存在时重新传输并解析选中。覆盖所有
+  `RefreshDisplaySelectionOptions` 调用路径（面板打开/选中变化/Reset/
+  运行时战斗态应用）。
+- 新增测试：`RealComboShowsConfiguredIdleAfterResetSequence`（真实
+  ComboBox + 窗口的端到端回归钉）与 `BindingSmoke`（装置冒烟）。
+- 活体验证（修复后构建，UI Automation）：面板打开初始标题 `[idle]`；
+  执行 Reset All 后保持 `[idle]`；2 秒后仍 `[idle]`。验证证据补充：Debug
+  全量测试 `320/320`；Release Build 0 警告 0 错误；Publish 成功
+  （`SpinePet-Release-2026-08-24-19 53 07`）；新实例 `startup-complete`。
+- 流程改进：面板可见行为此后优先用"真实控件测试装置 + UIA 活体验证"
+  取证，不以未复现的机制推断宣布修复。
+- 本次实际影响 GUI 详情面板选择框，维护计数：`1/5 -> 2/5`。
+
 ## 2026-08-24：Reset All 后动画下拉标题空白修复
 
 - 用户反馈：Reset All Settings 后下拉标题回到空白状态。根因与此前
