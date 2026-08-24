@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using SpinePet.ViewModels;
 using ICollectionView = System.ComponentModel.ICollectionView;
@@ -21,7 +22,10 @@ internal sealed class CharacterPreviewNavigationController
     private readonly Func<bool> _isDisposed;
     private readonly Func<bool> _isLoaded;
     private readonly PreviewNavigationCoordinator _session = new();
+    private readonly ScrollOffsetAnimationHost _scrollOffsetAnimator = new();
     private bool _suppressFollowScroll;
+    private bool _isScrollAnimationActive;
+    private long _scrollAnimationVersion;
 
     public CharacterPreviewNavigationController(
         ListBox cards,
@@ -233,8 +237,14 @@ internal sealed class CharacterPreviewNavigationController
         if (double.IsFinite(centeredOffset) &&
             Math.Abs(centeredOffset - scrollViewer.VerticalOffset) > 0.001)
         {
-            ScrollToCenteredOffset(scrollViewer, centeredOffset);
-            ScheduleRevealCompletion(character);
+            if (!_isScrollAnimationActive)
+            {
+                ScrollToCenteredOffset(
+                    scrollViewer,
+                    centeredOffset,
+                    () => ScheduleRevealCompletion(character));
+            }
+
             return;
         }
 
@@ -245,24 +255,59 @@ internal sealed class CharacterPreviewNavigationController
 
     private void ScrollToCenteredOffset(
         ScrollViewer scrollViewer,
-        double offset)
+        double offset,
+        Action? completed = null)
     {
         if (!double.IsFinite(offset))
         {
             return;
         }
 
+        double currentOffset = scrollViewer.VerticalOffset;
+        if (Math.Abs(offset - currentOffset) <= 0.001)
+        {
+            return;
+        }
+
+        long animationVersion = ++_scrollAnimationVersion;
         _suppressFollowScroll = true;
-        try
+        _isScrollAnimationActive = true;
+        _scrollOffsetAnimator.Target = scrollViewer;
+        _scrollOffsetAnimator.BeginAnimation(
+            ScrollOffsetAnimationHost.VerticalOffsetProperty,
+            null);
+        _scrollOffsetAnimator.VerticalOffset = currentOffset;
+
+        DoubleAnimation animation = new(
+            currentOffset,
+            offset,
+            TimeSpan.FromMilliseconds(180))
         {
-            scrollViewer.ScrollToVerticalOffset(offset);
-        }
-        finally
+            EasingFunction = new CubicEase
+            {
+                EasingMode = EasingMode.EaseOut
+            },
+            FillBehavior = FillBehavior.Stop
+        };
+        animation.Completed += (_, _) =>
         {
-            _dispatcher.BeginInvoke(
-                DispatcherPriority.Background,
-                new Action(() => _suppressFollowScroll = false));
-        }
+            if (animationVersion != _scrollAnimationVersion)
+            {
+                return;
+            }
+
+            _scrollOffsetAnimator.BeginAnimation(
+                ScrollOffsetAnimationHost.VerticalOffsetProperty,
+                null);
+            _scrollOffsetAnimator.VerticalOffset = offset;
+            _isScrollAnimationActive = false;
+            _suppressFollowScroll = false;
+            completed?.Invoke();
+        };
+        _scrollOffsetAnimator.BeginAnimation(
+            ScrollOffsetAnimationHost.VerticalOffsetProperty,
+            animation,
+            HandoffBehavior.SnapshotAndReplace);
     }
 
     private bool IsItemVisible(
@@ -320,5 +365,35 @@ internal sealed class CharacterPreviewNavigationController
                 yield return descendant;
             }
         }
+    }
+
+    private sealed class ScrollOffsetAnimationHost : Animatable
+    {
+        public static readonly DependencyProperty VerticalOffsetProperty =
+            DependencyProperty.Register(
+                nameof(VerticalOffset),
+                typeof(double),
+                typeof(ScrollOffsetAnimationHost),
+                new PropertyMetadata(0d, OnVerticalOffsetChanged));
+
+        public ScrollViewer? Target { get; set; }
+
+        public double VerticalOffset
+        {
+            get => (double)GetValue(VerticalOffsetProperty);
+            set => SetValue(VerticalOffsetProperty, value);
+        }
+
+        private static void OnVerticalOffsetChanged(
+            DependencyObject dependencyObject,
+            DependencyPropertyChangedEventArgs e)
+        {
+            ScrollOffsetAnimationHost host =
+                (ScrollOffsetAnimationHost)dependencyObject;
+            host.Target?.ScrollToVerticalOffset((double)e.NewValue);
+        }
+
+        protected override Freezable CreateInstanceCore() =>
+            new ScrollOffsetAnimationHost();
     }
 }
