@@ -29,6 +29,7 @@ internal sealed class CharacterLibraryController
     private readonly NikkeDbResourceImportService _nikkeDbImporter;
     private readonly CharacterIconDownloadService _characterIconDownloader;
     private readonly CharacterThumbnailService _thumbnailService = new();
+    private readonly MainViewModel _viewModel;
     private readonly ObservableCollection<CharacterViewModel> _characters;
     private readonly ICollectionView _characterView;
     private readonly ListBox _characterCards;
@@ -36,10 +37,7 @@ internal sealed class CharacterLibraryController
     private readonly Dispatcher _dispatcher;
     private readonly Window _owner;
     private readonly CancellationToken _lifetimeToken;
-    private readonly Func<CharacterViewModel?> _getSelectedCharacter;
-    private readonly Action<CharacterViewModel?> _setSelectedCharacter;
     private readonly Action _syncSelectedCharacterSettings;
-    private readonly Action _notifySearchResultsChanged;
     private readonly Action _announceSearchStatus;
     private readonly Func<bool> _isConfigMode;
     private readonly HashSet<string> _visibilityOperations =
@@ -54,16 +52,12 @@ internal sealed class CharacterLibraryController
         UnityBundleImportService bundleImporter,
         NikkeDbResourceImportService nikkeDbImporter,
         CharacterIconDownloadService characterIconDownloader,
-        ObservableCollection<CharacterViewModel> characters,
-        ICollectionView characterView,
+        MainViewModel viewModel,
         ListBox characterCards,
         CharacterPreviewNavigationController previewNavigation,
         Dispatcher dispatcher,
         Window owner,
-        Func<CharacterViewModel?> getSelectedCharacter,
-        Action<CharacterViewModel?> setSelectedCharacter,
         Action syncSelectedCharacterSettings,
-        Action notifySearchResultsChanged,
         Action announceSearchStatus,
         Func<bool> isConfigMode,
         CancellationToken lifetimeToken)
@@ -73,19 +67,17 @@ internal sealed class CharacterLibraryController
         _bundleImporter = bundleImporter;
         _nikkeDbImporter = nikkeDbImporter;
         _characterIconDownloader = characterIconDownloader;
-        _characters = characters;
-        _characterView = characterView;
+        _viewModel = viewModel;
+        _characters = viewModel.Characters;
+        _characterView = viewModel.CharacterView;
         _characterCards = characterCards;
         _previewNavigation = previewNavigation;
         _dispatcher = dispatcher;
         _owner = owner;
-        _lifetimeToken = lifetimeToken;
-        _getSelectedCharacter = getSelectedCharacter;
-        _setSelectedCharacter = setSelectedCharacter;
         _syncSelectedCharacterSettings = syncSelectedCharacterSettings;
-        _notifySearchResultsChanged = notifySearchResultsChanged;
         _announceSearchStatus = announceSearchStatus;
         _isConfigMode = isConfigMode;
+        _lifetimeToken = lifetimeToken;
     }
 
     public bool IsUpdatingSelection { get; private set; }
@@ -150,7 +142,7 @@ internal sealed class CharacterLibraryController
         try
         {
             _characterView.Refresh();
-            _notifySearchResultsChanged();
+            _viewModel.NotifySearchResultsChanged();
 
             nextSelection =
                 preferredSelection != null &&
@@ -160,7 +152,7 @@ internal sealed class CharacterLibraryController
                         .Cast<CharacterViewModel>()
                         .FirstOrDefault();
 
-            _setSelectedCharacter(nextSelection);
+            _viewModel.SelectedCharacter = nextSelection;
             _characterCards.SelectedItem = nextSelection;
         }
         finally
@@ -182,10 +174,10 @@ internal sealed class CharacterLibraryController
 
     public void FocusCharacterResults()
     {
+        CharacterViewModel? selected = _viewModel.SelectedCharacter;
         CharacterViewModel? result =
-            _getSelectedCharacter() != null &&
-            _characterView.Contains(_getSelectedCharacter())
-                ? _getSelectedCharacter()
+            selected != null && _characterView.Contains(selected)
+                ? selected
                 : _characterView
                     .Cast<CharacterViewModel>()
                     .FirstOrDefault();
@@ -605,7 +597,7 @@ internal sealed class CharacterLibraryController
 
     private void RefreshCharacterListCore()
     {
-        string? selectedId = _getSelectedCharacter()?.Id;
+        string? selectedId = _viewModel.SelectedCharacter?.Id;
         Dictionary<string, CharacterViewModel> existing = _characters.ToDictionary(
             character => character.Id,
             StringComparer.Ordinal);

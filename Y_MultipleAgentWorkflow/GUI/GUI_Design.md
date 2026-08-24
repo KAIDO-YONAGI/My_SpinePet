@@ -75,7 +75,11 @@
 ## 6. 实现分层与渲染引擎边界
 
 - `Views/MainWindow.xaml`：布局、控件、绑定、视觉状态和无障碍文本。
-- `Views/MainWindow.xaml.cs`：视图装配、事件路由、属性绑定和窗口命中测试。
+- `ViewModels/MainViewModel.cs`：主界面 DataContext，持有全部 INPC 状态、
+  选项集、派生显示与搜索锚定；setter 副作用经事件出口（缩放提交、设置
+  同步、过滤刷新、缩略图应用），不持有控件。
+- `Views/MainWindow.xaml.cs`：视图装配、事件路由、窗口命中测试、拖动
+  开关动画和无障碍播报；不持有绑定状态。
 - `Views/CharacterLibraryController.cs`：搜索、Add/DB 导入、扫描、显隐、
   Skin 切换和列表同步；角色状态快照只增量更新对应卡片。
 - `Views/CharacterThumbnailService.cs`、`VirtualizingUniformGrid.cs`：

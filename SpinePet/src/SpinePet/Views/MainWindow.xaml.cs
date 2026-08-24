@@ -1,11 +1,8 @@
-using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation.Peers;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
@@ -26,16 +23,13 @@ using TextBox = System.Windows.Controls.TextBox;
 
 namespace SpinePet.Views;
 
-public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
-    ICharacterSettingsHost
+public class MainWindow : Window, IDisposable
 {
     private readonly CharacterManager _characterManager;
     private readonly DispatcherTimer _searchAnnouncementTimer;
     private readonly MainWindowLifecycleController _lifecycle;
     private readonly CharacterResourceStorageService _resourceStorage = new();
-    private readonly ObservableCollection<CharacterViewModel> _characters = new();
-    private readonly ObservableCollection<string> _selectedAnimationNames = new();
-    private readonly ObservableCollection<string> _displaySelectionOptions = new();
+    private readonly MainViewModel _viewModel;
     private CharacterPreviewNavigationController _previewNavigation = null!;
     private CharacterLibraryController _libraryController = null!;
     private CharacterSettingsController _settingsController = null!;
@@ -58,27 +52,6 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
     private Button _finishConfigurationButton = null!;
     private Button _exitButton = null!;
     private CheckBox _allowDraggingToggle = null!;
-    private bool _isRefreshingSelection;
-    private bool _isUpdatingDisplaySelection;
-    private CharacterViewModel? _selectedCharacter;
-    private string _selectedAnimation = string.Empty;
-    private string _selectedDisplayMode = CharacterDisplayModes.Normal;
-    private string _selectedBattleState = CharacterBattleStates.Cover;
-    private double _selectedScale =
-        CharacterSettingsDefaults.DefaultScale;
-    private double _selectedScaleMax =
-        CharacterSettingsDefaults.DefaultMaxScale;
-    private double _selectedScaleBasePercent =
-        CharacterSettingsDefaults.MaximumScaleBasePercent;
-    private double _selectedScaleMultiplier =
-        CharacterSettingsDefaults.MinimumScaleMultiplier;
-    private double _selectedSpeed = 100;
-    private bool _allowRenderDrag;
-    private int _targetFrameRate = GlobalConfig.DefaultTargetFrameRate;
-    private int _thumbnailScalePercent = 100;
-    private int _matchingCharacterCount;
-    private string _characterSearchText = string.Empty;
-    private string? _selectionBeforeSearchId;
 
     public static RoutedUICommand SwitchSkinCommand { get; } =
         new(
@@ -164,47 +137,34 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         _allowDraggingToggle =
             RequireNamedElement<CheckBox>("AllowDraggingToggle");
 
-        _allowRenderDrag = characterManager.AllowRenderDrag;
-        _targetFrameRate = characterManager.TargetFrameRate;
-        _thumbnailScalePercent =
-            characterManager.LibraryThumbnailScalePercent;
-        CharacterView = CollectionViewSource.GetDefaultView(Characters);
-        CharacterView.Filter = item =>
-            item is CharacterViewModel character &&
-            CharacterSearchMatcher.Matches(character, CharacterSearchText);
-
+        _viewModel = new MainViewModel(characterManager);
         _previewNavigation = new CharacterPreviewNavigationController(
             _characterCards,
-            CharacterView,
+            _viewModel,
             Dispatcher,
             () => _lifecycle.IsConfigMode,
             () => IsDisposed,
-            () => IsLoaded,
-            () => SelectedCharacter);
+            () => IsLoaded);
         _libraryController = new CharacterLibraryController(
             characterManager,
             resourceDiscovery,
             bundleImporter,
             nikkeDbImporter,
             characterIconDownloader ?? new(),
-            Characters,
-            CharacterView,
+            _viewModel,
             _characterCards,
             _previewNavigation,
             Dispatcher,
             this,
-            () => SelectedCharacter,
-            value => SelectedCharacter = value,
-            SyncSelectedCharacterSettings,
-            NotifySearchResultsChanged,
+            _viewModel.SyncSelectedCharacterSettings,
             AnnounceCharacterSearchStatus,
             () => _lifecycle.IsConfigMode,
             _lifecycle.LifetimeToken);
         _settingsController = new CharacterSettingsController(
             characterManager,
             _resourceStorage,
-            Characters,
-            this,
+            _viewModel.Characters,
+            _viewModel,
             this,
             Dispatcher,
             () => _libraryController.KnownResources,
@@ -216,10 +176,18 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             () => _lifecycle.IsConfigMode,
             _lifecycle.ExitConfiguration,
             _libraryController.FindCharacter,
-            CharacterView.Contains,
-            () => CharacterSearchText = string.Empty,
+            _viewModel.CharacterView.Contains,
+            _viewModel.ClearSearch,
             _lifecycle.SwitchToConfigMode,
             _previewNavigation.SelectAndReveal);
+
+        _viewModel.SettingsSyncRequested +=
+            _settingsController.SyncSelectedCharacterSettings;
+        _viewModel.ScaleComponentsChanged +=
+            _settingsController.CommitSelectedScale;
+        _viewModel.ThumbnailScaleApplied += ApplyThumbnailScale;
+        _viewModel.SearchFilterRequested +=
+            _libraryController.RefreshCharacterFilter;
 
         AttachViewEvents();
         CommandBindings.Add(new CommandBinding(
@@ -236,7 +204,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             FocusCharacterResultsCommand,
             OnFocusCharacterResultsExecuted,
             OnCanFocusCharacterResultsExecuted));
-        DataContext = this;
+        DataContext = _viewModel;
 
         _libraryController.RefreshKnownResources();
         _libraryController.RefreshCharacterList();
@@ -254,358 +222,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             OnCharacterBattleStateChanged;
     }
 
-    public ObservableCollection<CharacterViewModel> Characters =>
-        _characters;
-
-    public bool HasCharacters => Characters.Count > 0;
-
-    public ICollectionView CharacterView { get; }
-
-    public ObservableCollection<string> SelectedAnimationNames =>
-        _selectedAnimationNames;
-
-    public ObservableCollection<string> DisplaySelectionOptions =>
-        _displaySelectionOptions;
-
-    public string CharacterSearchText
-    {
-        get => _characterSearchText;
-        set
-        {
-            string normalized = value ?? string.Empty;
-            if (_characterSearchText == normalized)
-            {
-                return;
-            }
-
-            bool hadSearch = HasCharacterSearch;
-            bool willSearch =
-                !string.IsNullOrWhiteSpace(normalized);
-            CharacterViewModel? preferredSelection =
-                SelectedCharacter;
-            if (!hadSearch && willSearch)
-            {
-                _selectionBeforeSearchId =
-                    SelectedCharacter?.Id;
-            }
-            else if (hadSearch && !willSearch)
-            {
-                preferredSelection = Characters.FirstOrDefault(
-                    character =>
-                        character.Id == _selectionBeforeSearchId) ??
-                    SelectedCharacter;
-                _selectionBeforeSearchId = null;
-            }
-
-            _characterSearchText = normalized;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(HasCharacterSearch));
-            OnPropertyChanged(nameof(HasCharacterSearchInput));
-            _libraryController?.RefreshCharacterFilter(preferredSelection);
-        }
-    }
-
-    public bool HasCharacterSearch =>
-        !string.IsNullOrWhiteSpace(CharacterSearchText);
-
-    public bool HasCharacterSearchInput =>
-        CharacterSearchText.Length > 0;
-
-    public int MatchingCharacterCount => _matchingCharacterCount;
-
-    public string CharacterCountDisplay =>
-        HasCharacterSearch
-            ? $"{MatchingCharacterCount} of {Characters.Count}"
-            : $"{Characters.Count} loaded";
-
-    public string CharacterSearchStatus =>
-        HasCharacterSearch
-            ? $"{MatchingCharacterCount} matching characters out of " +
-              $"{Characters.Count} loaded"
-            : $"{Characters.Count} characters loaded";
-
-    public CharacterViewModel? SelectedCharacter
-    {
-        get => _selectedCharacter;
-        set
-        {
-            if (ReferenceEquals(_selectedCharacter, value))
-            {
-                return;
-            }
-
-            _selectedCharacter = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(HasSelectedCharacter));
-        }
-    }
-
-    public bool HasSelectedCharacter => SelectedCharacter != null;
-
-    public IReadOnlyList<string> DisplayModeOptions { get; } =
-        [CharacterDisplayModes.Normal, CharacterDisplayModes.Battle];
-
-    public IReadOnlyList<string> BattleStateOptions { get; } =
-        [CharacterBattleStates.Cover, CharacterBattleStates.Aim];
-
-    public bool HasSelectedBattle =>
-        FindSelectedCharacterConfig()?.Battle != null;
-
-    public bool IsDisplaySelectionEnabled =>
-        HasSelectedCharacter &&
-        (SelectedDisplayMode == CharacterDisplayModes.Battle
-            ? HasSelectedBattle
-            : _displaySelectionOptions.Count > 0);
-
-    public string SelectedAnimation
-    {
-        get => _selectedAnimation;
-        set
-        {
-            if (_selectedAnimation == value)
-            {
-                return;
-            }
-
-            _selectedAnimation = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(SelectedDisplaySelection));
-        }
-    }
-
-    public string SelectedDisplayMode
-    {
-        get => _selectedDisplayMode;
-        set
-        {
-            if (_selectedDisplayMode == value)
-                return;
-            _selectedDisplayMode = value;
-            OnPropertyChanged();
-            _isUpdatingDisplaySelection = true;
-            try
-            {
-                RefreshDisplaySelectionOptions();
-            }
-            finally
-            {
-                _isUpdatingDisplaySelection = false;
-            }
-        }
-    }
-
-    public string SelectedBattleState
-    {
-        get => _selectedBattleState;
-        set
-        {
-            if (_selectedBattleState == value)
-                return;
-            _selectedBattleState = value;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(SelectedDisplaySelection));
-        }
-    }
-
-    public string SelectedDisplaySelection
-    {
-        get => SelectedDisplayMode == CharacterDisplayModes.Battle
-            ? SelectedBattleState
-            : SelectedAnimation;
-        set
-        {
-            if (string.IsNullOrWhiteSpace(value) ||
-                !_displaySelectionOptions.Contains(value))
-            {
-                return;
-            }
-
-            if (SelectedDisplayMode == CharacterDisplayModes.Battle)
-            {
-                SelectedBattleState = value;
-            }
-            else
-            {
-                SelectedAnimation = value;
-            }
-
-            OnPropertyChanged();
-        }
-    }
-
-    public double SelectedScale
-    {
-        get => _selectedScale;
-        set
-        {
-            if (NearlyEquals(_selectedScale, value))
-            {
-                return;
-            }
-
-            _selectedScale = value;
-            OnPropertyChanged();
-        }
-    }
-
-    public double SelectedScaleMax
-    {
-        get => _selectedScaleMax;
-        set
-        {
-            double normalized = Math.Clamp(
-                value,
-                CharacterSettingsDefaults.MinimumMaximumScale,
-                CharacterSettingsDefaults.DefaultMaxScale);
-            if (NearlyEquals(_selectedScaleMax, normalized))
-            {
-                return;
-            }
-
-            _selectedScaleMax = normalized;
-            OnPropertyChanged();
-        }
-    }
-
-    public double SelectedScaleBasePercent
-    {
-        get => _selectedScaleBasePercent;
-        set
-        {
-            double normalized = Math.Clamp(
-                value,
-                CharacterSettingsDefaults.MinimumScaleBasePercent,
-                CharacterSettingsDefaults.MaximumScaleBasePercent);
-            if (NearlyEquals(_selectedScaleBasePercent, normalized))
-            {
-                return;
-            }
-
-            _selectedScaleBasePercent = normalized;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(SelectedScaleBasePercentDisplay));
-            _settingsController?.CommitSelectedScale();
-        }
-    }
-
-    public double SelectedScaleMultiplier
-    {
-        get => _selectedScaleMultiplier;
-        set
-        {
-            double normalized = Math.Clamp(
-                value,
-                CharacterSettingsDefaults.MinimumScaleMultiplier,
-                CharacterSettingsDefaults.MaximumScaleMultiplier);
-            if (NearlyEquals(_selectedScaleMultiplier, normalized))
-            {
-                return;
-            }
-
-            _selectedScaleMultiplier = normalized;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(SelectedScaleMultiplierDisplay));
-            _settingsController?.CommitSelectedScale();
-        }
-    }
-
-    public string SelectedScaleBasePercentDisplay =>
-        $"{SelectedScaleBasePercent:F0}%";
-
-    public string SelectedScaleMultiplierDisplay =>
-        $"x{SelectedScaleMultiplier:F1}";
-
-    public double SelectedSpeed
-    {
-        get => _selectedSpeed;
-        set
-        {
-            double normalized = Math.Clamp(value, 10, 200);
-            if (NearlyEquals(_selectedSpeed, normalized))
-            {
-                return;
-            }
-
-            _selectedSpeed = normalized;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(SelectedSpeedDisplay));
-        }
-    }
-
-    public string SelectedSpeedDisplay =>
-        $"{SelectedSpeed / 100.0:F2}x";
-
-    public bool AllowRenderDrag
-    {
-        get => _allowRenderDrag;
-        set
-        {
-            if (_allowRenderDrag == value)
-            {
-                return;
-            }
-
-            _allowRenderDrag = value;
-            OnPropertyChanged();
-            _characterManager.SetAllowRenderDrag(value);
-        }
-    }
-
-    public IReadOnlyList<int> FrameRateOptions { get; } =
-    [
-        GlobalConfig.PowerSavingTargetFrameRate,
-        GlobalConfig.DefaultTargetFrameRate,
-        GlobalConfig.HighRefreshTargetFrameRate
-    ];
-
-    public int TargetFrameRate
-    {
-        get => _targetFrameRate;
-        set
-        {
-            int normalized = GlobalConfig.NormalizeTargetFrameRate(value);
-            if (_targetFrameRate == normalized)
-            {
-                return;
-            }
-
-            _targetFrameRate = normalized;
-            OnPropertyChanged();
-            _characterManager.SetTargetFrameRate(normalized);
-        }
-    }
-
-    public int ThumbnailScalePercent
-    {
-        get => _thumbnailScalePercent;
-        set
-        {
-            int normalized =
-                GlobalConfig.NormalizeLibraryThumbnailScale(value);
-            if (_thumbnailScalePercent == normalized)
-            {
-                return;
-            }
-
-            _thumbnailScalePercent = normalized;
-            OnPropertyChanged();
-            OnPropertyChanged(nameof(ThumbnailScaleDisplay));
-            ApplyThumbnailScale();
-            _characterManager.SetLibraryThumbnailScale(normalized);
-        }
-    }
-
-    public string ThumbnailScaleDisplay => $"{ThumbnailScalePercent}%";
-
-    public event PropertyChangedEventHandler? PropertyChanged;
-
     internal bool IsDisposed => _lifecycle.IsDisposed;
-
-    bool ICharacterSettingsHost.IsRefreshingSelection
-    {
-        get => _isRefreshingSelection;
-        set => _isRefreshingSelection = value;
-    }
 
     public void SwitchToConfigMode() =>
         _lifecycle.SwitchToConfigMode();
@@ -670,20 +287,14 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             return;
         }
 
-        SelectedCharacter =
-            _characterCards.SelectedItem as CharacterViewModel;
-        if (HasCharacterSearch)
-        {
-            _selectionBeforeSearchId =
-                SelectedCharacter?.Id;
-        }
-
-        SyncSelectedCharacterSettings();
+        _viewModel.OnSelectionChangedByView(
+            _characterCards.SelectedItem as CharacterViewModel);
+        _viewModel.SyncSelectedCharacterSettings();
         if (_lifecycle.IsConfigMode &&
-            SelectedCharacter != null &&
+            _viewModel.SelectedCharacter != null &&
             !_previewNavigation.IsApplyingScrollSelection)
         {
-            _previewNavigation.Reveal(SelectedCharacter);
+            _previewNavigation.Reveal(_viewModel.SelectedCharacter);
         }
     }
 
@@ -762,7 +373,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         object sender,
         ExecutedRoutedEventArgs e)
     {
-        CharacterSearchText = string.Empty;
+        _viewModel.ClearSearch();
         _characterSearchBox.Focus();
         e.Handled = true;
     }
@@ -771,7 +382,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         object sender,
         CanExecuteRoutedEventArgs e)
     {
-        e.CanExecute = HasCharacterSearchInput;
+        e.CanExecute = _viewModel.HasCharacterSearchInput;
         e.Handled = true;
     }
 
@@ -787,7 +398,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         object sender,
         CanExecuteRoutedEventArgs e)
     {
-        e.CanExecute = MatchingCharacterCount > 0;
+        e.CanExecute = _viewModel.MatchingCharacterCount > 0;
         e.Handled = true;
     }
 
@@ -851,7 +462,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
     {
         _characterManager.ResetAllSettings();
         _libraryController.RefreshCharacterList();
-        SyncSelectedCharacterSettings();
+        _viewModel.SyncSelectedCharacterSettings();
     }
 
     private async void OnCharacterSkinExecuted(
@@ -875,9 +486,9 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         object sender,
         SelectionChangedEventArgs e)
     {
-        if (_isRefreshingSelection ||
-            _isUpdatingDisplaySelection ||
-            FindSelectedCharacterConfig() is not { } character)
+        if (_viewModel.IsRefreshingSelection ||
+            _viewModel.IsUpdatingDisplaySelection ||
+            _viewModel.FindSelectedCharacterConfig() is not { } character)
         {
             return;
         }
@@ -887,12 +498,12 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             .LastOrDefault() ??
             _animationCombo.SelectedItem as string;
         if (string.IsNullOrWhiteSpace(selection) ||
-            !DisplaySelectionOptions.Contains(selection))
+            !_viewModel.DisplaySelectionOptions.Contains(selection))
         {
             return;
         }
 
-        if (SelectedDisplayMode == CharacterDisplayModes.Normal)
+        if (_viewModel.SelectedDisplayMode == CharacterDisplayModes.Normal)
         {
             if (string.Equals(
                     character.ConfiguredAnimation,
@@ -902,12 +513,12 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
                 return;
             }
 
-            SelectedAnimation = selection;
+            _viewModel.SelectedAnimation = selection;
             _settingsController.HandleAnimationChanged(sender, e);
             return;
         }
 
-        if (!BattleStateOptions.Contains(selection) ||
+        if (!_viewModel.BattleStateOptions.Contains(selection) ||
             string.Equals(
                 _characterManager.GetCharacterBattleState(character.Id),
                 selection,
@@ -916,7 +527,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             return;
         }
 
-        SelectedBattleState = selection;
+        _viewModel.SelectedBattleState = selection;
         try
         {
             bool switched =
@@ -924,7 +535,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
                     character,
                     selection);
             if (!switched)
-                SyncSelectedCharacterSettings();
+                _viewModel.SyncSelectedCharacterSettings();
         }
         catch (Exception exception)
         {
@@ -932,7 +543,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
                 nameof(MainWindow),
                 $"battle-state-switch-failed id={character.Id} " +
                 $"message={exception.Message}");
-            SyncSelectedCharacterSettings();
+            _viewModel.SyncSelectedCharacterSettings();
         }
     }
 
@@ -940,8 +551,8 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         object sender,
         SelectionChangedEventArgs e)
     {
-        if (_isRefreshingSelection ||
-            FindSelectedCharacterConfig() is not { } character)
+        if (_viewModel.IsRefreshingSelection ||
+            _viewModel.FindSelectedCharacterConfig() is not { } character)
         {
             return;
         }
@@ -951,7 +562,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
             .LastOrDefault() ??
             _displayModeCombo.SelectedItem as string;
         if (string.IsNullOrWhiteSpace(mode) ||
-            !DisplayModeOptions.Contains(mode) ||
+            !_viewModel.DisplayModeOptions.Contains(mode) ||
             string.Equals(
                 _characterManager.GetCharacterDisplayMode(character.Id),
                 mode,
@@ -967,7 +578,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
                     character,
                     mode);
             if (!switched)
-                SyncSelectedCharacterSettings();
+                _viewModel.SyncSelectedCharacterSettings();
         }
         catch (Exception exception)
         {
@@ -975,7 +586,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
                 nameof(MainWindow),
                 $"display-mode-switch-failed id={character.Id} " +
                 $"message={exception.Message}");
-            SyncSelectedCharacterSettings();
+            _viewModel.SyncSelectedCharacterSettings();
         }
     }
 
@@ -1040,21 +651,12 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         Dispose();
     }
 
-    private void OnCharacterScaleChanged(
-        string characterId,
-        double maximumScale,
-        double currentScale) =>
-        _settingsController.HandleCharacterScaleChanged(
-            characterId,
-            maximumScale,
-            currentScale);
-
     private void OnCharacterPositionChanged(
         string characterId,
         double left,
         double top)
     {
-        CharacterViewModel? character = _characters.FirstOrDefault(
+        CharacterViewModel? character = _viewModel.Characters.FirstOrDefault(
             item => item.Id == characterId);
         if (character == null)
         {
@@ -1065,80 +667,11 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         character.PositionY = (int)top;
     }
 
-    private void SyncSelectedCharacterSettings()
-    {
-        _settingsController?.SyncSelectedCharacterSettings();
-        _isRefreshingSelection = true;
-        try
-        {
-            CharacterConfig? character = FindSelectedCharacterConfig();
-            SelectedDisplayMode = character == null
-                ? CharacterDisplayModes.Normal
-                : _characterManager.GetCharacterDisplayMode(character.Id);
-            SelectedBattleState = character == null
-                ? CharacterBattleStates.Cover
-                : _characterManager.GetCharacterBattleState(character.Id);
-            OnPropertyChanged(nameof(HasSelectedBattle));
-            RefreshDisplaySelectionOptions();
-        }
-        finally
-        {
-            _isRefreshingSelection = false;
-        }
-    }
-
     private void OnCharacterBattleStateChanged(
         string characterId,
         string mode,
-        string battleState)
-    {
-        if (SelectedCharacter?.Id != characterId)
-            return;
-
-        _isRefreshingSelection = true;
-        try
-        {
-            SelectedDisplayMode = mode;
-            SelectedBattleState = battleState;
-            RefreshDisplaySelectionOptions();
-        }
-        finally
-        {
-            _isRefreshingSelection = false;
-        }
-    }
-
-    private CharacterConfig? FindSelectedCharacterConfig() =>
-        SelectedCharacter == null
-            ? null
-            : _characterManager.Characters.FirstOrDefault(
-                character => character.Id == SelectedCharacter.Id);
-
-    private void RefreshDisplaySelectionOptions()
-    {
-        _displaySelectionOptions.Clear();
-        IEnumerable<string> options =
-            SelectedDisplayMode == CharacterDisplayModes.Battle
-                ? BattleStateOptions
-                : SelectedAnimationNames;
-        foreach (string option in options)
-        {
-            _displaySelectionOptions.Add(option);
-        }
-
-        OnPropertyChanged(nameof(SelectedDisplaySelection));
-        OnPropertyChanged(nameof(IsDisplaySelectionEnabled));
-    }
-
-    private void NotifySearchResultsChanged()
-    {
-        _matchingCharacterCount =
-            CharacterView.Cast<object>().Count();
-        OnPropertyChanged(nameof(MatchingCharacterCount));
-        OnPropertyChanged(nameof(CharacterCountDisplay));
-        OnPropertyChanged(nameof(CharacterSearchStatus));
-        CommandManager.InvalidateRequerySuggested();
-    }
+        string battleState) =>
+        _viewModel.ApplyRuntimeBattleState(characterId, mode, battleState);
 
     private void AnnounceCharacterSearchStatus()
     {
@@ -1170,7 +703,7 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
 
     private void ApplyThumbnailScale()
     {
-        double scale = ThumbnailScalePercent / 100.0;
+        double scale = _viewModel.ThumbnailScalePercent / 100.0;
         _characterCards.LayoutTransform = scale == 1.0
             ? Transform.Identity
             : new ScaleTransform(scale, scale);
@@ -1319,15 +852,6 @@ public class MainWindow : Window, INotifyPropertyChanged, IDisposable,
         FindName(name) as T ??
         throw new InvalidOperationException(
             $"MainWindow.xaml did not define named element '{name}'.");
-
-    private static bool NearlyEquals(double left, double right) =>
-        Math.Abs(left - right) < 0.0001;
-
-    private void OnPropertyChanged(
-        [CallerMemberName] string? propertyName = null) =>
-        PropertyChanged?.Invoke(
-            this,
-            new PropertyChangedEventArgs(propertyName));
 
     public void Dispose()
     {

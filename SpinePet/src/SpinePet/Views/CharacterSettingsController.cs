@@ -14,19 +14,6 @@ using MessageBox = System.Windows.MessageBox;
 
 namespace SpinePet.Views;
 
-internal interface ICharacterSettingsHost
-{
-    CharacterViewModel? SelectedCharacter { get; }
-    bool IsRefreshingSelection { get; set; }
-    string SelectedAnimation { get; set; }
-    double SelectedScale { get; set; }
-    double SelectedScaleMax { get; set; }
-    double SelectedScaleBasePercent { get; set; }
-    double SelectedScaleMultiplier { get; set; }
-    double SelectedSpeed { get; set; }
-    ObservableCollection<string> SelectedAnimationNames { get; }
-}
-
 internal sealed class CharacterSettingsController
 {
     private readonly CharacterManager _characterManager;

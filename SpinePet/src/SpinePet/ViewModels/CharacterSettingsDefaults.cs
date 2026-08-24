@@ -1,4 +1,4 @@
-namespace SpinePet.Views;
+namespace SpinePet.ViewModels;
 
 internal static class CharacterSettingsDefaults
 {

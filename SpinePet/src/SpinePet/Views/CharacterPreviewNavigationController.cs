@@ -14,31 +14,30 @@ internal sealed class CharacterPreviewNavigationController
     private const double PreviewItemHeight = 128;
 
     private readonly ListBox _cards;
+    private readonly MainViewModel _viewModel;
     private readonly ICollectionView _view;
     private readonly Dispatcher _dispatcher;
     private readonly Func<bool> _isConfigMode;
     private readonly Func<bool> _isDisposed;
     private readonly Func<bool> _isLoaded;
-    private readonly Func<CharacterViewModel?> _getSelectedCharacter;
     private readonly PreviewNavigationCoordinator _session = new();
     private bool _suppressFollowScroll;
 
     public CharacterPreviewNavigationController(
         ListBox cards,
-        ICollectionView view,
+        MainViewModel viewModel,
         Dispatcher dispatcher,
         Func<bool> isConfigMode,
         Func<bool> isDisposed,
-        Func<bool> isLoaded,
-        Func<CharacterViewModel?> getSelectedCharacter)
+        Func<bool> isLoaded)
     {
         _cards = cards;
-        _view = view;
+        _viewModel = viewModel;
+        _view = viewModel.CharacterView;
         _dispatcher = dispatcher;
         _isConfigMode = isConfigMode;
         _isDisposed = isDisposed;
         _isLoaded = isLoaded;
-        _getSelectedCharacter = getSelectedCharacter;
     }
 
     public bool IsApplyingScrollSelection =>
@@ -208,7 +207,7 @@ internal sealed class CharacterPreviewNavigationController
         }
 
         if (_isDisposed() ||
-            !ReferenceEquals(_getSelectedCharacter(), character))
+            !ReferenceEquals(_viewModel.SelectedCharacter, character))
         {
             _session.ClearReveal();
             return;

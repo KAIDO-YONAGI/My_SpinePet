@@ -29,7 +29,7 @@
 - 取 write 租约；本文档落盘并在 GUI Router 与根 Router 登记。
 - 基线：全量测试通过数 + Release 构建干净。
 
-### 阶段 1：拆分 CharacterManager（公共面保真）
+### 阶段 1：拆分 CharacterManager（公共面保真）（2026-08-24 已完成）
 
 新组件全部 `internal`，沿用"门面先行"模式：
 
@@ -45,7 +45,7 @@ internal 4 参构造、渲染事件订阅与回写、`SetConfigMode`）。
 新增 `BattleInteractionControllerTests`、`CharacterShowCoordinatorTests`；
 原 `CharacterManagerTests` 不改断言原样通过。
 
-### 阶段 2：提取 MainViewModel（XAML 零改动）
+### 阶段 2：提取 MainViewModel（XAML 零改动）（2026-08-24 已完成）
 
 - `ICharacterSettingsHost` 移至 `ViewModels/`（签名不变）。
 - 新建 `ViewModels/MainViewModel.cs`：实现 `ICharacterSettingsHost`，迁入

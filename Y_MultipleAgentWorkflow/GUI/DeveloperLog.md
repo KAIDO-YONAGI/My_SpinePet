@@ -1,5 +1,31 @@
 # GUI Developer Log
 
+## 2026-08-24：提取 MainViewModel、MainWindow 瘦身为纯视图（重构阶段 2）
+
+- 按 `GUI_Refactor_Plan.md` 阶段 2 执行，行为零变化、XAML 零改动
+  （49 处 DataContext 绑定全部为直接属性名）。
+- 新建 `ViewModels/MainViewModel.cs`（约 700 行）：实现
+  `ICharacterSettingsHost`，迁入 MainWindow 全部 29 个 INPC 状态、选项集、
+  派生显示与搜索锚定；setter 副作用改四个事件出口：
+  `ScaleComponentsChanged`（缩放提交）、`SettingsSyncRequested`（设置
+  同步）、`SearchFilterRequested`（过滤刷新）、`ThumbnailScaleApplied`
+  （缩略图布局）。`ICharacterSettingsHost` 与 `CharacterSettingsDefaults`
+  移至 ViewModels（依赖方向：Views → ViewModels）。
+- `MainWindow.xaml.cs` 从 1340 行瘦身至约 700 行：`DataContext =
+  MainViewModel`，只留视图职责（命名元素装配、事件路由、WM_NCHITTEST
+  边缘命中测试、DragMove、拖动开关动画、UIA 搜索播报、生命周期转发）。
+- 控制器重连：`CharacterLibraryController` 构造参数 18→13（选中状态与
+  过滤通知改经 VM）；`CharacterPreviewNavigationController` 的视图与
+  选中委托换 VM；`CharacterPanelActivationController` 的清空搜索换
+  `vm.ClearSearch()`；`MainWindowLifecycleController` 不变。
+- 新增 `MainViewModelTests` 18 项（搜索锚定恢复、DisplayMode 联动、
+  缩放分量钳制与提交事件、全局设置写透持久化、运行时战斗态应用），
+  补上 Views 状态层不可测的缺口。
+- 验证证据：Debug 全量测试 `323/323`；Release Build 0 警告 0 错误；
+  Publish 成功（`SpinePet-Release-2026-08-24-18 46 20`）；新实例 PID
+  31088 于 18:46:30 写入 `startup-complete`，持续运行且日志无错误行。
+- 本次实际影响 GUI 视图层结构，维护计数：`1/5 -> 2/5`。
+
 ## 2026-08-24：CharacterManager 按职责拆分为组合门面（重构阶段 1）
 
 - 按 `GUI_Refactor_Plan.md` 阶段 1 执行，行为零变化、公共 API 冻结：
