@@ -10,6 +10,8 @@ internal static class ProcessDpiInitialization
     [ModuleInitializer]
     internal static void EnsureProcessIsDpiAware()
     {
+        EnsureWindowsDirectoryEnvironment();
+
         // 桌宠本体以 DPI 感知模式运行（窗口/区域坐标为物理像素）；
         // 测试宿主没有清单，运行中 WPF 初始化会中途改变 DPI 虚拟化状态，
         // 导致原生窗口区域坐标按显示器缩放（如 1.75）被系统改写，
@@ -18,6 +20,37 @@ internal static class ProcessDpiInitialization
         if (SetProcessDpiAwarenessContext(PerMonitorAwareV2))
             return;
         SetProcessDPIAware();
+    }
+
+    private static void EnsureWindowsDirectoryEnvironment()
+    {
+        string? windir =
+            Environment.GetEnvironmentVariable("windir");
+        string? systemRoot =
+            Environment.GetEnvironmentVariable("SystemRoot");
+        string? windowsRoot =
+            !string.IsNullOrWhiteSpace(systemRoot)
+                ? systemRoot
+                : windir;
+
+        if (string.IsNullOrWhiteSpace(windowsRoot))
+        {
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(windir))
+        {
+            Environment.SetEnvironmentVariable(
+                "windir",
+                windowsRoot);
+        }
+
+        if (string.IsNullOrWhiteSpace(systemRoot))
+        {
+            Environment.SetEnvironmentVariable(
+                "SystemRoot",
+                windowsRoot);
+        }
     }
 
     [DllImport("user32.dll")]
