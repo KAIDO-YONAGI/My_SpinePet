@@ -188,6 +188,7 @@ public class MainWindow : Window, IDisposable
         _viewModel.ThumbnailScaleApplied += ApplyThumbnailScale;
         _viewModel.SearchFilterRequested +=
             _libraryController.RefreshCharacterFilter;
+        _lifecycle.ConfigModeEntered += OnConfigModeEntered;
 
         AttachViewEvents();
         CommandBindings.Add(new CommandBinding(
@@ -273,6 +274,13 @@ public class MainWindow : Window, IDisposable
         _deleteSkinButton.Click += OnDeleteSelectedSkin;
         _finishConfigurationButton.Click += OnExitConfiguration;
         _exitButton.Click += OnExitApplication;
+    }
+
+    private void OnConfigModeEntered()
+    {
+        // Rebuild the library view models from current configuration and
+        // runtime state so the panel never shows stale startup content.
+        _libraryController.RefreshCharacterList();
     }
 
     private void OnWindowLoaded(object sender, RoutedEventArgs e) =>

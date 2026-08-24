@@ -32,6 +32,9 @@ internal sealed class MainWindowLifecycleController : IDisposable
     public bool IsDisposed =>
         Volatile.Read(ref _disposeState) != 0;
 
+    /// <summary>Raised after the panel switched to configuration mode.</summary>
+    public event Action? ConfigModeEntered;
+
     public void HandleLoaded(Action applyThumbnailScale)
     {
         Rect workArea = SystemParameters.WorkArea;
@@ -62,6 +65,7 @@ internal sealed class MainWindowLifecycleController : IDisposable
         ApplyConfigMode();
         _window.Show();
         _window.Activate();
+        ConfigModeEntered?.Invoke();
     }
 
     public void PrepareForShutdown()

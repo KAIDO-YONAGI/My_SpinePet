@@ -736,18 +736,34 @@ internal sealed class CharacterLibraryController
             return;
         }
 
+        bool animationNamesChanged = !viewModel.AnimationNames
+            .SequenceEqual(snapshot.AnimationNames);
         viewModel.IsLoading = snapshot.IsLoading;
         viewModel.IsVisible = snapshot.IsVisible;
         viewModel.MaxScale = snapshot.MaximumScale;
         viewModel.Scale = snapshot.CurrentScale;
         viewModel.UpdateAnimationNames(snapshot.AnimationNames);
 
+        bool configuredAnimationChanged = false;
         CharacterConfig? config = _characterManager.Characters.FirstOrDefault(
             character => character.Id == snapshot.CharacterId);
         if (config != null)
         {
+            configuredAnimationChanged = !string.Equals(
+                viewModel.ConfiguredAnimation,
+                config.ConfiguredAnimation,
+                StringComparison.Ordinal);
             viewModel.ConfiguredAnimation = config.ConfiguredAnimation;
             viewModel.AnimationSpeed = config.AnimationSpeed;
+        }
+
+        // The detail panel was last synced before this character finished
+        // loading; refresh it once the real animation list is available so
+        // the dropdown reflects the actual resource without user clicks.
+        if ((animationNamesChanged || configuredAnimationChanged) &&
+            _viewModel.SelectedCharacter?.Id == snapshot.CharacterId)
+        {
+            _viewModel.SyncSelectedCharacterSettings();
         }
     }
 

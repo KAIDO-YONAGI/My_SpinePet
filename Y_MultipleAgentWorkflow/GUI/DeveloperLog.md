@@ -1,5 +1,25 @@
 # GUI Developer Log
 
+## 2026-08-24：面板打开与加载完成后自动同步真实配置状态
+
+- 用户反馈两个问题：Normal 模式右侧下拉只剩 `idle`；面板默认空白，需要
+  手动点选才能填充。根因相同：右侧详情只在用户点选时同步——启动时
+  `RefreshCharacterList` 发生在角色渲染加载完成之前（动画名只有
+  `ConfiguredAnimation` 回退值），之后加载完成的快照事件只更新卡片
+  ViewModel，没有人再刷新选中角色的下拉选项；面板打开时也没有任何
+  重新同步。该行为在重构阶段 1/2 之前即存在，非回归。
+- 修复：`MainWindowLifecycleController` 新增 `ConfigModeEntered` 事件
+  （`SwitchToConfigMode` 显示面板后触发），MainWindow 订阅并执行
+  `RefreshCharacterList` 重建真实状态；`CharacterLibraryController.
+  UpdateCharacterState` 在选中角色的动画名或配置动画变化时（典型：
+  加载完成）自动调用 `SyncSelectedCharacterSettings` 刷新右侧选项。
+- 隐含收益：面板打开即显示真实运行时 Mode（Battle 桌面交互后的状态），
+  无需先点卡片。
+- 验证证据：Debug 全量测试 `323/323`；Release Build 0 警告 0 错误；
+  Publish 成功（`SpinePet-Release-2026-08-24-19 01 54`）；新实例 PID
+  30604 于 19:02:05 写入 `startup-complete` 并持续运行。
+- 本次实际影响 GUI 面板状态同步行为，维护计数：`2/5 -> 3/5`。
+
 ## 2026-08-24：提取 MainViewModel、MainWindow 瘦身为纯视图（重构阶段 2）
 
 - 按 `GUI_Refactor_Plan.md` 阶段 2 执行，行为零变化、XAML 零改动
