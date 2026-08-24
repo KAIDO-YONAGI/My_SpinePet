@@ -5,282 +5,275 @@ namespace SpinePet.Tests;
 public sealed class PreviewNavigationCoordinatorTests
 {
     [Theory]
-    [InlineData(4, 3)]
-    [InlineData(1, 0)]
-    public void BoundaryWheelStepsOneItemTowardTheTop(
-        int selectedIndex,
+    [InlineData(120, -1)]
+    [InlineData(-120, 1)]
+    [InlineData(240, -2)]
+    [InlineData(-360, 3)]
+    [InlineData(60, 0)]
+    [InlineData(-60, 0)]
+    public void WheelStepsMoveOneItemPerNotch(int wheelDelta, int expectedSteps)
+    {
+        int residual = 0;
+
+        int steps = PreviewNavigationRules.AccumulateWheelSteps(
+            wheelDelta,
+            ref residual);
+
+        Assert.Equal(expectedSteps, steps);
+    }
+
+    [Fact]
+    public void WheelStepsAccumulateSubNotchTrackPadDeltas()
+    {
+        int residual = 0;
+
+        Assert.Equal(
+            0,
+            PreviewNavigationRules.AccumulateWheelSteps(40, ref residual));
+        Assert.Equal(
+            0,
+            PreviewNavigationRules.AccumulateWheelSteps(40, ref residual));
+        Assert.Equal(
+            -1,
+            PreviewNavigationRules.AccumulateWheelSteps(40, ref residual));
+        Assert.Equal(
+            0,
+            residual);
+    }
+
+    [Fact]
+    public void WheelStepsKeepResidualAcrossNotches()
+    {
+        int residual = 0;
+
+        PreviewNavigationRules.AccumulateWheelSteps(150, ref residual);
+        int secondSteps = PreviewNavigationRules.AccumulateWheelSteps(
+            150,
+            ref residual);
+
+        Assert.Equal(-1, secondSteps);
+        Assert.Equal(60, residual);
+    }
+
+    [Theory]
+    [InlineData(-5, 8, 0)]
+    [InlineData(0, 8, 0)]
+    [InlineData(3, 8, 3)]
+    [InlineData(9, 8, 7)]
+    [InlineData(int.MaxValue, 8, 7)]
+    public void ClampIndexStaysInsideItemRange(
+        int index,
+        int itemCount,
         int expectedIndex)
     {
         Assert.Equal(
             expectedIndex,
-            PreviewNavigationRules.FindBoundaryWheelSelectionIndex(
-                itemCount: 8,
-                selectedIndex,
-                wheelDelta: 120,
-                verticalOffset: 0,
-                maximumOffset: 640));
-    }
-
-    [Theory]
-    [InlineData(3, 4)]
-    [InlineData(6, 7)]
-    public void BoundaryWheelStepsOneItemTowardTheBottom(
-        int selectedIndex,
-        int expectedIndex)
-    {
-        Assert.Equal(
-            expectedIndex,
-            PreviewNavigationRules.FindBoundaryWheelSelectionIndex(
-                itemCount: 8,
-                selectedIndex,
-                wheelDelta: -120,
-                verticalOffset: 640,
-                maximumOffset: 640));
-    }
-
-    [Theory]
-    [InlineData(0, 1)]
-    [InlineData(7, 6)]
-    public void BoundaryWheelStepsOneItemBackIntoContent(
-        int selectedIndex,
-        int expectedIndex)
-    {
-        Assert.Equal(
-            expectedIndex,
-            PreviewNavigationRules.FindBoundaryWheelSelectionIndex(
-                itemCount: 8,
-                selectedIndex,
-                wheelDelta: selectedIndex == 0 ? -120 : 120,
-                verticalOffset: selectedIndex == 0 ? 0 : 640,
-                maximumOffset: 640));
-    }
-
-    [Theory]
-    [InlineData(0, 120, 0, 640)]
-    [InlineData(7, -120, 640, 640)]
-    [InlineData(3, 120, 320, 640)]
-    [InlineData(3, -120, 320, 640)]
-    public void BoundaryWheelDoesNotJumpOrReverseDirection(
-        int selectedIndex,
-        int wheelDelta,
-        double verticalOffset,
-        double maximumOffset)
-    {
-        Assert.Null(
-            PreviewNavigationRules.FindBoundaryWheelSelectionIndex(
-                itemCount: 8,
-                selectedIndex,
-                wheelDelta,
-                verticalOffset,
-                maximumOffset));
+            PreviewNavigationRules.ClampIndex(index, itemCount));
     }
 
     [Fact]
-    public void ScrollSelectionUsesTheVisibleCenterAtTheTopBoundary()
+    public void CenteredOffsetPutsTheSelectedSlotOnTheViewportMidline()
     {
-        Assert.Equal(
-            1,
-            PreviewNavigationRules.FindScrollSelectionIndex(
-                itemCount: 8,
-                verticalOffset: 0,
-                maximumOffset: 640,
-                visibleItems:
-                [
-                    new(0, 0, 80),
-                    new(1, 0, 80),
-                    new(2, 80, 160),
-                    new(3, 80, 160)
-                ],
-                viewportHeight: 160));
+        double offset = PreviewNavigationRules.GetSelectionCenteredOffset(
+            index: 9,
+            columnCount: 2,
+            itemHeight: 128,
+            viewportHeight: 600,
+            extentHeight: 2560);
+
+        Assert.Equal(9 * 64 + 32 - 300, offset);
     }
 
     [Fact]
-    public void ScrollSelectionUsesTheVisibleCenterAtTheBottomBoundary()
+    public void CenteredOffsetAdvancesHalfARowPerItem()
     {
-        Assert.Equal(
-            5,
-            PreviewNavigationRules.FindScrollSelectionIndex(
-                itemCount: 8,
-                verticalOffset: 640,
-                maximumOffset: 640,
-                visibleItems:
-                [
-                    new(4, 0, 80),
-                    new(5, 0, 80),
-                    new(6, 80, 160),
-                    new(7, 80, 160)
-                ],
-                viewportHeight: 160));
+        const double itemHeight = 128;
+        const double viewportHeight = 600;
+        const double extentHeight = 2560;
+        double left = PreviewNavigationRules.GetSelectionCenteredOffset(
+            8, 2, itemHeight, viewportHeight, extentHeight);
+        double right = PreviewNavigationRules.GetSelectionCenteredOffset(
+            9, 2, itemHeight, viewportHeight, extentHeight);
+
+        Assert.Equal(itemHeight / 2, right - left);
     }
 
     [Fact]
-    public void BoundaryRuleSelectsFirstItemAtTop()
+    public void CenteredOffsetClampsAtTheHeadAndTail()
     {
         Assert.Equal(
             0,
-            PreviewNavigationRules.FindBoundaryItemIndex(
-                itemCount: 8,
-                verticalOffset: 0,
-                maximumOffset: 640));
+            PreviewNavigationRules.GetSelectionCenteredOffset(
+                index: 0,
+                columnCount: 2,
+                itemHeight: 128,
+                viewportHeight: 600,
+                extentHeight: 2560));
+        Assert.Equal(
+            2560 - 600,
+            PreviewNavigationRules.GetSelectionCenteredOffset(
+                index: 39,
+                columnCount: 2,
+                itemHeight: 128,
+                viewportHeight: 600,
+                extentHeight: 2560));
     }
 
     [Fact]
-    public void BoundaryRuleSelectsLastItemAtBottom()
+    public void CenteredOffsetReturnsNaNForInvalidInputs()
+    {
+        Assert.True(double.IsNaN(
+            PreviewNavigationRules.GetSelectionCenteredOffset(
+                -1, 2, 128, 600, 2560)));
+        Assert.True(double.IsNaN(
+            PreviewNavigationRules.GetSelectionCenteredOffset(
+                4, 0, 128, 600, 2560)));
+        Assert.True(double.IsNaN(
+            PreviewNavigationRules.GetSelectionCenteredOffset(
+                4, 2, 0, 600, 2560)));
+        Assert.True(double.IsNaN(
+            PreviewNavigationRules.GetSelectionCenteredOffset(
+                4, 2, 128, 0, 2560)));
+    }
+
+    [Fact]
+    public void ScrollFollowAgreesWithEveryUnclampedCenteredOffset()
+    {
+        const int itemCount = 40;
+        const double itemHeight = 128;
+        const double viewportHeight = 600;
+        const double extentHeight = 2560;
+
+        for (int index = 5; index <= 34; index++)
+        {
+            double offset = PreviewNavigationRules.GetSelectionCenteredOffset(
+                index, 2, itemHeight, viewportHeight, extentHeight);
+            int? followed = PreviewNavigationRules.FindScrollSelectionIndex(
+                itemCount,
+                offset,
+                extentHeight - viewportHeight,
+                viewportHeight,
+                itemHeight,
+                columnCount: 2);
+            Assert.Equal(index, followed);
+        }
+    }
+
+    [Fact]
+    public void ScrollFollowTraversesItemsInRowMajorReadingOrder()
+    {
+        // viewport 160 with item height 128: the midline sweeps
+        // 64px per item, alternating left/right columns.
+        int? first = PreviewNavigationRules.FindScrollSelectionIndex(
+            itemCount: 40,
+            verticalOffset: 64 + 32 - 80,
+            maximumOffset: 1960,
+            viewportHeight: 160,
+            itemHeight: 128,
+            columnCount: 2);
+        int? second = PreviewNavigationRules.FindScrollSelectionIndex(
+            itemCount: 40,
+            verticalOffset: 2 * 64 + 32 - 80,
+            maximumOffset: 1960,
+            viewportHeight: 160,
+            itemHeight: 128,
+            columnCount: 2);
+
+        Assert.Equal(1, first);
+        Assert.Equal(2, second);
+    }
+
+    [Fact]
+    public void ScrollFollowSelectsTheFirstItemAtTheTopBoundary()
     {
         Assert.Equal(
-            7,
-            PreviewNavigationRules.FindBoundaryItemIndex(
-                itemCount: 8,
-                verticalOffset: 639.5,
-                maximumOffset: 640));
+            0,
+            PreviewNavigationRules.FindScrollSelectionIndex(
+                itemCount: 40,
+                verticalOffset: 0,
+                maximumOffset: 1960,
+                viewportHeight: 600,
+                itemHeight: 128,
+                columnCount: 2));
     }
 
     [Fact]
-    public void BoundaryRuleKeepsPreferredItemWhenContentDoesNotScroll()
+    public void ScrollFollowSelectsTheLastItemAtTheBottomBoundary()
+    {
+        Assert.Equal(
+            39,
+            PreviewNavigationRules.FindScrollSelectionIndex(
+                itemCount: 40,
+                verticalOffset: 1959.5,
+                maximumOffset: 1960,
+                viewportHeight: 600,
+                itemHeight: 128,
+                columnCount: 2));
+    }
+
+    [Fact]
+    public void ScrollFollowKeepsPreferredWhenContentDoesNotScroll()
     {
         Assert.Equal(
             3,
-            PreviewNavigationRules.FindBoundaryItemIndex(
+            PreviewNavigationRules.FindScrollSelectionIndex(
                 itemCount: 8,
                 verticalOffset: 0,
                 maximumOffset: 0,
+                viewportHeight: 1024,
+                itemHeight: 128,
+                columnCount: 2,
                 preferredIndex: 3));
     }
 
     [Fact]
-    public void BoundaryRuleReturnsNoSelectionAwayFromEdges()
+    public void ScrollFollowKeepsPreferredOnAnExactMidlineTie()
     {
-        Assert.Null(
-            PreviewNavigationRules.FindBoundaryItemIndex(
-                itemCount: 8,
-                verticalOffset: 120,
-                maximumOffset: 640));
-    }
-
-    [Fact]
-    public void FindCenterItemConsidersEveryVisibleRowMajorItem()
-    {
-        PreviewItemGeometry[] items =
-        [
-            new(0, 0, 30),
-            new(1, 0, 70),
-            new(2, 70, 110),
-            new(3, 70, 130)
-        ];
-
-        int? selected = PreviewNavigationRules.FindCenterItemIndex(
-            items,
-            viewportHeight: 70);
-
-        Assert.Equal(1, selected);
-    }
-
-    [Fact]
-    public void FindCenterItemTraversesTwoColumnsFromLeftToRight()
-    {
-        PreviewItemGeometry[] items =
-        [
-            new(0, 0, 70),
-            new(1, 0, 70),
-            new(2, 70, 140),
-            new(3, 70, 140)
-        ];
+        // Midline exactly between slot 4 and slot 5 centers.
+        const double viewportHeight = 600;
+        double midline = 5 * 64;
+        double offset = midline - viewportHeight / 2;
 
         Assert.Equal(
-            0,
-            PreviewNavigationRules.FindCenterItemIndex(
-                items,
-                viewportHeight: 70));
+            5,
+            PreviewNavigationRules.FindScrollSelectionIndex(
+                itemCount: 40,
+                verticalOffset: offset,
+                maximumOffset: 1960,
+                viewportHeight: viewportHeight,
+                itemHeight: 128,
+                columnCount: 2,
+                preferredIndex: 5));
         Assert.Equal(
-            1,
-            PreviewNavigationRules.FindCenterItemIndex(
-                [
-                    new(0, -5, 65),
-                    new(1, -5, 65),
-                    new(2, 65, 135),
-                    new(3, 65, 135)
-                ],
-                viewportHeight: 70));
+            4,
+            PreviewNavigationRules.FindScrollSelectionIndex(
+                itemCount: 40,
+                verticalOffset: offset,
+                maximumOffset: 1960,
+                viewportHeight: viewportHeight,
+                itemHeight: 128,
+                columnCount: 2,
+                preferredIndex: 4));
         Assert.Equal(
-            2,
-            PreviewNavigationRules.FindCenterItemIndex(
-                [
-                    new(0, -40, 30),
-                    new(1, -40, 30),
-                    new(2, 30, 100),
-                    new(3, 30, 100)
-                ],
-                viewportHeight: 70));
+            4,
+            PreviewNavigationRules.FindScrollSelectionIndex(
+                itemCount: 40,
+                verticalOffset: offset,
+                maximumOffset: 1960,
+                viewportHeight: viewportHeight,
+                itemHeight: 128,
+                columnCount: 2));
     }
 
     [Fact]
-    public void FindCenterItemUsesRowMajorOrderWhenCardsShareTheCenter()
+    public void ScrollFollowReturnsNullForInvalidInputs()
     {
-        PreviewItemGeometry[] items =
-        [
-            new(3, 20, 40),
-            new(1, 0, 20),
-            new(2, 20, 40),
-            new(0, 0, 20)
-        ];
-
-        int? selected = PreviewNavigationRules.FindCenterItemIndex(
-            items,
-            viewportHeight: 40,
-            columnCount: 1);
-
-        Assert.Equal(0, selected);
-    }
-
-    [Fact]
-    public void FindCenterItemKeepsTheRightColumnWhenItIsTheCurrentTie()
-    {
-        PreviewItemGeometry[] items =
-        [
-            new(0, 0, 40),
-            new(1, 0, 40)
-        ];
-
-        int? selected = PreviewNavigationRules.FindCenterItemIndex(
-            items,
-            viewportHeight: 40,
-            preferredIndex: 1);
-
-        Assert.Equal(1, selected);
-    }
-
-    [Fact]
-    public void FindCenterItemReturnsNullForEmptyOrInvalidViewports()
-    {
-        PreviewItemGeometry[] items = [new(0, 0, 40)];
-
-        Assert.Null(
-            PreviewNavigationRules.FindCenterItemIndex([], 40));
-        Assert.Null(
-            PreviewNavigationRules.FindCenterItemIndex(items, 0));
-        Assert.Null(
-            PreviewNavigationRules.FindCenterItemIndex(items, -1));
-    }
-
-    [Fact]
-    public void CenteredOffsetClampsToScrollableBounds()
-    {
-        Assert.Equal(
-            0,
-            PreviewNavigationRules.GetCenteredVerticalOffset(
-                currentOffset: 10,
-                itemTop: -5,
-                itemHeight: 20,
-                viewportHeight: 100,
-                extentHeight: 300));
-        Assert.Equal(
-            200,
-            PreviewNavigationRules.GetCenteredVerticalOffset(
-                currentOffset: 180,
-                itemTop: 160,
-                itemHeight: 20,
-                viewportHeight: 100,
-                extentHeight: 300));
+        Assert.Null(PreviewNavigationRules.FindScrollSelectionIndex(
+            0, 0, 1960, 600, 128, 2));
+        Assert.Null(PreviewNavigationRules.FindScrollSelectionIndex(
+            40, 0, -1, 600, 128, 2));
+        Assert.Null(PreviewNavigationRules.FindScrollSelectionIndex(
+            40, double.NaN, 1960, 600, 128, 2));
     }
 
     [Fact]
@@ -298,25 +291,37 @@ public sealed class PreviewNavigationCoordinatorTests
     }
 
     [Fact]
-    public void PendingScrollSelectionIsConsumedOnce()
-    {
-        PreviewNavigationCoordinator coordinator = new();
-        coordinator.QueuePendingScrollSelection(4);
-
-        Assert.Equal(4, coordinator.ConsumePendingScrollSelection());
-        Assert.Null(coordinator.ConsumePendingScrollSelection());
-    }
-
-    [Fact]
-    public void ClearRevealCancelsRevealAndPendingScrollSelection()
+    public void ClearRevealCancelsAnActiveReveal()
     {
         PreviewNavigationCoordinator coordinator = new();
         coordinator.BeginReveal("character-1");
-        coordinator.QueuePendingScrollSelection(4);
 
         coordinator.ClearReveal();
 
         Assert.False(coordinator.IsRevealing);
-        Assert.Null(coordinator.ConsumePendingScrollSelection());
+    }
+
+    [Fact]
+    public void SessionAccumulatesWheelStepsAcrossCalls()
+    {
+        PreviewNavigationCoordinator coordinator = new();
+
+        Assert.Equal(0, coordinator.AccumulateWheelSteps(90));
+        Assert.Equal(-1, coordinator.AccumulateWheelSteps(90));
+        Assert.Equal(0, coordinator.AccumulateWheelSteps(-120));
+        Assert.Equal(1, coordinator.AccumulateWheelSteps(-120));
+    }
+
+    [Fact]
+    public void ApplyScrollSelectionFlagsOnlyDuringTheSelection()
+    {
+        PreviewNavigationCoordinator coordinator = new();
+        bool observed = false;
+
+        coordinator.ApplyScrollSelection(
+            () => observed = coordinator.IsApplyingScrollSelection);
+
+        Assert.True(observed);
+        Assert.False(coordinator.IsApplyingScrollSelection);
     }
 }

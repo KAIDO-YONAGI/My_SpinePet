@@ -1,108 +1,84 @@
 namespace SpinePet.Views;
 
-internal readonly record struct PreviewItemGeometry(
-    int Index,
-    double Top,
-    double Bottom);
-
 internal static class PreviewNavigationRules
 {
-    public static int? FindBoundaryWheelSelectionIndex(
-        int itemCount,
-        int selectedIndex,
-        int wheelDelta,
-        double verticalOffset,
-        double maximumOffset,
-        double tolerance = 1.0)
+    public const int WheelNotchDelta = 120;
+    private const double TieTolerance = 0.001;
+
+    public static int AccumulateWheelSteps(int wheelDelta, ref int residual)
     {
-        if (itemCount <= 0 ||
-            selectedIndex < 0 ||
-            selectedIndex >= itemCount ||
-            wheelDelta == 0 ||
-            !double.IsFinite(verticalOffset) ||
-            !double.IsFinite(maximumOffset) ||
-            maximumOffset < 0 ||
-            tolerance < 0)
+        if (wheelDelta == 0)
         {
-            return null;
+            return 0;
         }
 
-        bool atTop = verticalOffset <= tolerance;
-        bool atBottom =
-            maximumOffset <= tolerance ||
-            verticalOffset >= maximumOffset - tolerance;
-        if (wheelDelta > 0 && atTop && selectedIndex > 0)
+        long accumulated = (long)residual + wheelDelta;
+        int notches = (int)(accumulated / WheelNotchDelta);
+        residual = (int)(accumulated - (long)notches * WheelNotchDelta);
+        return -notches;
+    }
+
+    public static int ClampIndex(int index, int itemCount) =>
+        itemCount <= 0 ? 0 : Math.Clamp(index, 0, itemCount - 1);
+
+    public static double GetSelectionCenteredOffset(
+        int index,
+        int columnCount,
+        double itemHeight,
+        double viewportHeight,
+        double extentHeight)
+    {
+        if (index < 0 ||
+            columnCount <= 0 ||
+            !double.IsFinite(itemHeight) ||
+            !double.IsFinite(viewportHeight) ||
+            !double.IsFinite(extentHeight) ||
+            itemHeight <= 0 ||
+            viewportHeight <= 0 ||
+            extentHeight <= 0)
         {
-            return selectedIndex - 1;
+            return double.NaN;
         }
 
-        if (wheelDelta < 0 &&
-            atTop &&
-            selectedIndex < itemCount - 1)
-        {
-            return selectedIndex + 1;
-        }
-
-        if (wheelDelta < 0 &&
-            atBottom &&
-            selectedIndex < itemCount - 1)
-        {
-            return selectedIndex + 1;
-        }
-
-        if (wheelDelta > 0 &&
-            atBottom &&
-            selectedIndex > 0)
-        {
-            return selectedIndex - 1;
-        }
-
-        return null;
+        double slotPitch = itemHeight / columnCount;
+        double slotCenter = index * slotPitch + slotPitch / 2;
+        double maximumOffset = Math.Max(0, extentHeight - viewportHeight);
+        return Math.Clamp(
+            slotCenter - viewportHeight / 2,
+            0,
+            maximumOffset);
     }
 
     public static int? FindScrollSelectionIndex(
         int itemCount,
         double verticalOffset,
         double maximumOffset,
-        IEnumerable<PreviewItemGeometry> visibleItems,
         double viewportHeight,
-        int? preferredIndex = null,
-        int columnCount = 2)
-    {
-        int? centeredIndex = FindCenterItemIndex(
-            visibleItems,
-            viewportHeight,
-            preferredIndex,
-            columnCount);
-        return centeredIndex ??
-            FindBoundaryItemIndex(
-                itemCount,
-                verticalOffset,
-                maximumOffset,
-                preferredIndex);
-    }
-
-    public static int? FindBoundaryItemIndex(
-        int itemCount,
-        double verticalOffset,
-        double maximumOffset,
+        double itemHeight,
+        int columnCount,
         int? preferredIndex = null,
         double tolerance = 1.0)
     {
         if (itemCount <= 0 ||
+            columnCount <= 0 ||
             !double.IsFinite(verticalOffset) ||
             !double.IsFinite(maximumOffset) ||
+            !double.IsFinite(viewportHeight) ||
+            !double.IsFinite(itemHeight) ||
             maximumOffset < 0 ||
+            viewportHeight <= 0 ||
+            itemHeight <= 0 ||
             tolerance < 0)
         {
             return null;
         }
 
-        int? preferred = preferredIndex is int index &&
-            index >= 0 &&
-            index < itemCount
-            ? preferredIndex
-            : null;
+        int? preferred = preferredIndex is int preferredValue &&
+            preferredValue >= 0 &&
+            preferredValue < itemCount
+                ? preferredIndex
+                : null;
+
         if (maximumOffset <= tolerance)
         {
             return preferred ?? 0;
@@ -118,105 +94,44 @@ internal static class PreviewNavigationRules
             return itemCount - 1;
         }
 
-        return null;
-    }
+        double slotPitch = itemHeight / columnCount;
+        double viewportCenter = verticalOffset + viewportHeight / 2;
+        int first = Math.Clamp(
+            (int)Math.Floor((viewportCenter - slotPitch / 2) / slotPitch),
+            0,
+            itemCount - 1);
+        int second = Math.Clamp(first + 1, 0, itemCount - 1);
+        double firstDistance = Math.Abs(
+            first * slotPitch + slotPitch / 2 - viewportCenter);
+        double secondDistance = Math.Abs(
+            second * slotPitch + slotPitch / 2 - viewportCenter);
 
-    public static int? FindCenterItemIndex(
-        IEnumerable<PreviewItemGeometry> items,
-        double viewportHeight,
-        int? preferredIndex = null,
-        int columnCount = 2)
-    {
-        if (viewportHeight <= 0 || columnCount <= 0)
+        if (Math.Abs(firstDistance - secondDistance) <= TieTolerance)
         {
-            return null;
+            if (preferred is int tiePreferred)
+            {
+                if (tiePreferred == first)
+                {
+                    return first;
+                }
+
+                if (tiePreferred == second)
+                {
+                    return second;
+                }
+            }
+
+            return Math.Min(first, second);
         }
 
-        double viewportCenter = viewportHeight / 2;
-        List<(PreviewItemGeometry Item, double Distance)> visibleItems = items
-            .Where(item =>
-                item.Bottom > 0 &&
-                item.Top < viewportHeight &&
-                item.Bottom >= item.Top)
-            .Select(item =>
-                (
-                    Item: item,
-                    Distance: Math.Abs(
-                        GetTraversalCenter(item, columnCount) -
-                        viewportCenter)
-                ))
-            .OrderBy(candidate => candidate.Item.Index)
-            .ToList();
-        if (visibleItems.Count == 0)
-        {
-            return null;
-        }
-
-        double closestDistance = visibleItems.Min(
-            candidate => candidate.Distance);
-        const double tieTolerance = 0.001;
-        if (preferredIndex is int preferred &&
-            visibleItems.Any(candidate =>
-                candidate.Item.Index == preferred &&
-                Math.Abs(candidate.Distance - closestDistance) <=
-                tieTolerance))
-        {
-            return preferred;
-        }
-
-        return visibleItems
-            .Where(candidate =>
-                Math.Abs(candidate.Distance - closestDistance) <=
-                tieTolerance)
-            .Select(candidate => (int?)candidate.Item.Index)
-            .FirstOrDefault();
-    }
-
-    private static double GetTraversalCenter(
-        PreviewItemGeometry item,
-        int columnCount)
-    {
-        double itemHeight = item.Bottom - item.Top;
-        double columnCenter = (columnCount - 1) / 2.0;
-        double columnBias =
-            (item.Index % columnCount - columnCenter) *
-            itemHeight /
-            columnCount;
-        return (item.Top + item.Bottom) / 2 + columnBias;
-    }
-
-    public static double GetCenteredVerticalOffset(
-        double currentOffset,
-        double itemTop,
-        double itemHeight,
-        double viewportHeight,
-        double extentHeight)
-    {
-        if (!double.IsFinite(currentOffset) ||
-            !double.IsFinite(itemTop) ||
-            !double.IsFinite(itemHeight) ||
-            !double.IsFinite(viewportHeight) ||
-            !double.IsFinite(extentHeight) ||
-            itemHeight <= 0 ||
-            viewportHeight <= 0 ||
-            extentHeight <= 0)
-        {
-            return currentOffset;
-        }
-
-        double maximumOffset = Math.Max(0, extentHeight - viewportHeight);
-        double centeredOffset = currentOffset +
-            itemTop +
-            itemHeight / 2 -
-            viewportHeight / 2;
-        return Math.Clamp(centeredOffset, 0, maximumOffset);
+        return firstDistance < secondDistance ? first : second;
     }
 }
 
 internal sealed class PreviewNavigationCoordinator
 {
     private string? _revealTargetId;
-    private int? _pendingScrollSelectionIndex;
+    private int _wheelResidual;
 
     public bool IsApplyingScrollSelection { get; private set; }
 
@@ -225,9 +140,13 @@ internal sealed class PreviewNavigationCoordinator
 
     public string? RevealTargetId => _revealTargetId;
 
+    public int AccumulateWheelSteps(int wheelDelta) =>
+        PreviewNavigationRules.AccumulateWheelSteps(
+            wheelDelta,
+            ref _wheelResidual);
+
     public void BeginReveal(string characterId)
     {
-        _pendingScrollSelectionIndex = null;
         if (!string.IsNullOrWhiteSpace(characterId))
         {
             _revealTargetId = characterId;
@@ -257,24 +176,6 @@ internal sealed class PreviewNavigationCoordinator
     public void ClearReveal()
     {
         _revealTargetId = null;
-        _pendingScrollSelectionIndex = null;
-    }
-
-    public void QueuePendingScrollSelection(int index)
-    {
-        _pendingScrollSelectionIndex = index;
-    }
-
-    public int? ConsumePendingScrollSelection()
-    {
-        int? pendingIndex = _pendingScrollSelectionIndex;
-        _pendingScrollSelectionIndex = null;
-        return pendingIndex;
-    }
-
-    public void ClearPendingScrollSelection()
-    {
-        _pendingScrollSelectionIndex = null;
     }
 
     public void ApplyScrollSelection(Action selection)

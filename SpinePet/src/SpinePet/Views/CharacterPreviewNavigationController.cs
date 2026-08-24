@@ -1,6 +1,5 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Threading;
 using SpinePet.ViewModels;
@@ -12,7 +11,7 @@ namespace SpinePet.Views;
 internal sealed class CharacterPreviewNavigationController
 {
     private const int PreviewColumnCount = 2;
-    private const double ScrollBoundaryTolerance = 1.0;
+    private const double PreviewItemHeight = 128;
 
     private readonly ListBox _cards;
     private readonly ICollectionView _view;
@@ -22,6 +21,7 @@ internal sealed class CharacterPreviewNavigationController
     private readonly Func<bool> _isLoaded;
     private readonly Func<CharacterViewModel?> _getSelectedCharacter;
     private readonly PreviewNavigationCoordinator _session = new();
+    private bool _suppressFollowScroll;
 
     public CharacterPreviewNavigationController(
         ListBox cards,
@@ -51,7 +51,6 @@ internal sealed class CharacterPreviewNavigationController
 
     public void SelectAndReveal(CharacterViewModel character)
     {
-        _session.ClearPendingScrollSelection();
         _cards.SelectedItem = character;
         Reveal(character);
     }
@@ -101,6 +100,7 @@ internal sealed class CharacterPreviewNavigationController
             isUpdatingSelection ||
             !_cards.HasItems ||
             _session.IsRevealing ||
+            _suppressFollowScroll ||
             (e.VerticalChange == 0 && e.HorizontalChange == 0))
         {
             return;
@@ -114,34 +114,20 @@ internal sealed class CharacterPreviewNavigationController
 
         try
         {
-            int? pendingIndex = _session.ConsumePendingScrollSelection();
-            if (pendingIndex is int pending &&
-                pending >= 0 &&
-                pending < _cards.Items.Count &&
-                _cards.Items[pending] is CharacterViewModel pendingTarget)
-            {
-                if (!ReferenceEquals(pendingTarget, _cards.SelectedItem))
-                {
-                    _session.ApplyScrollSelection(
-                        () => _cards.SelectedItem = pendingTarget);
-                }
-
-                return;
-            }
-
             double maximumOffset = Math.Max(
                 0,
                 scrollViewer.ExtentHeight - scrollViewer.ViewportHeight);
+            (int columns, double itemHeight) = GetPanelMetrics();
             int? targetIndex = PreviewNavigationRules.FindScrollSelectionIndex(
                 _cards.Items.Count,
                 scrollViewer.VerticalOffset,
                 maximumOffset,
-                GetItemGeometries(scrollViewer),
                 scrollViewer.ViewportHeight,
+                itemHeight,
+                columns,
                 _cards.SelectedIndex >= 0
                     ? _cards.SelectedIndex
-                    : null,
-                PreviewColumnCount);
+                    : null);
             if (targetIndex is int index &&
                 _cards.Items[index] is CharacterViewModel target &&
                 !ReferenceEquals(target, _cards.SelectedItem))
@@ -165,7 +151,6 @@ internal sealed class CharacterPreviewNavigationController
         if (!_isConfigMode() ||
             isUpdatingSelection ||
             !_cards.HasItems ||
-            _session.IsRevealing ||
             wheelDelta == 0)
         {
             return false;
@@ -177,41 +162,32 @@ internal sealed class CharacterPreviewNavigationController
             return false;
         }
 
-        double maximumOffset = Math.Max(
-            0,
-            scrollViewer.ExtentHeight - scrollViewer.ViewportHeight);
-        int? targetIndex =
-            PreviewNavigationRules.FindBoundaryWheelSelectionIndex(
-                _cards.Items.Count,
-                _cards.SelectedIndex,
-                wheelDelta,
-                scrollViewer.VerticalOffset,
-                maximumOffset);
-        if (targetIndex is not int index ||
-            _cards.Items[index] is not CharacterViewModel target ||
-            ReferenceEquals(target, _cards.SelectedItem))
+        if (_session.IsRevealing)
         {
-            return false;
+            _session.ClearReveal();
         }
 
-        bool atTop =
-            scrollViewer.VerticalOffset <= ScrollBoundaryTolerance;
-        bool atBottom =
-            maximumOffset <= ScrollBoundaryTolerance ||
-            scrollViewer.VerticalOffset >=
-                maximumOffset - ScrollBoundaryTolerance;
-        bool consumeWheel =
-            maximumOffset <= ScrollBoundaryTolerance ||
-            (wheelDelta > 0 && atTop) ||
-            (wheelDelta < 0 && atBottom);
-        if (!consumeWheel)
+        int steps = _session.AccumulateWheelSteps(wheelDelta);
+        int targetIndex = PreviewNavigationRules.ClampIndex(
+            Math.Max(0, _cards.SelectedIndex) + steps,
+            _cards.Items.Count);
+        if (_cards.Items[targetIndex] is CharacterViewModel target &&
+            !ReferenceEquals(target, _cards.SelectedItem))
         {
-            _session.QueuePendingScrollSelection(index);
+            _session.ApplyScrollSelection(
+                () => _cards.SelectedItem = target);
         }
 
-        _session.ApplyScrollSelection(
-            () => _cards.SelectedItem = target);
-        return consumeWheel;
+        (int columns, double itemHeight) = GetPanelMetrics();
+        double centeredOffset =
+            PreviewNavigationRules.GetSelectionCenteredOffset(
+                targetIndex,
+                columns,
+                itemHeight,
+                scrollViewer.ViewportHeight,
+                scrollViewer.ExtentHeight);
+        ScrollToCenteredOffset(scrollViewer, centeredOffset);
+        return true;
     }
 
     private void ScheduleRevealCompletion(CharacterViewModel character)
@@ -240,27 +216,25 @@ internal sealed class CharacterPreviewNavigationController
 
         _cards.UpdateLayout();
         ScrollViewer? scrollViewer = GetScrollViewer();
-        if (scrollViewer == null ||
-            _cards.ItemContainerGenerator.ContainerFromItem(character)
-                is not ListBoxItem item)
+        int index = _cards.Items.IndexOf(character);
+        if (scrollViewer == null || index < 0)
         {
             _session.ClearReveal();
             return;
         }
 
-        System.Windows.Point location = item.TranslatePoint(
-            new System.Windows.Point(0, 0),
-            scrollViewer);
+        (int columns, double itemHeight) = GetPanelMetrics();
         double centeredOffset =
-            PreviewNavigationRules.GetCenteredVerticalOffset(
-                scrollViewer.VerticalOffset,
-                location.Y,
-                item.ActualHeight,
+            PreviewNavigationRules.GetSelectionCenteredOffset(
+                index,
+                columns,
+                itemHeight,
                 scrollViewer.ViewportHeight,
                 scrollViewer.ExtentHeight);
-        if (Math.Abs(centeredOffset - scrollViewer.VerticalOffset) > 0.001)
+        if (double.IsFinite(centeredOffset) &&
+            Math.Abs(centeredOffset - scrollViewer.VerticalOffset) > 0.001)
         {
-            scrollViewer.ScrollToVerticalOffset(centeredOffset);
+            ScrollToCenteredOffset(scrollViewer, centeredOffset);
             ScheduleRevealCompletion(character);
             return;
         }
@@ -270,12 +244,34 @@ internal sealed class CharacterPreviewNavigationController
             IsItemVisible(character, scrollViewer));
     }
 
+    private void ScrollToCenteredOffset(
+        ScrollViewer scrollViewer,
+        double offset)
+    {
+        if (!double.IsFinite(offset))
+        {
+            return;
+        }
+
+        _suppressFollowScroll = true;
+        try
+        {
+            scrollViewer.ScrollToVerticalOffset(offset);
+        }
+        finally
+        {
+            _dispatcher.BeginInvoke(
+                DispatcherPriority.Background,
+                new Action(() => _suppressFollowScroll = false));
+        }
+    }
+
     private bool IsItemVisible(
         CharacterViewModel character,
         ScrollViewer scrollViewer)
     {
         if (_cards.ItemContainerGenerator.ContainerFromItem(character)
-            is not ListBoxItem item ||
+                is not ListBoxItem item ||
             item.ActualHeight <= 0 ||
             scrollViewer.ViewportHeight <= 0)
         {
@@ -289,29 +285,19 @@ internal sealed class CharacterPreviewNavigationController
             location.Y + item.ActualHeight > 0;
     }
 
-    private List<PreviewItemGeometry> GetItemGeometries(
-        ScrollViewer scrollViewer)
+    private (int Columns, double ItemHeight) GetPanelMetrics()
     {
-        List<PreviewItemGeometry> geometries = new();
-        for (int index = 0; index < _cards.Items.Count; index++)
+        VirtualizingUniformGrid? panel =
+            FindVisualChildren<VirtualizingUniformGrid>(_cards)
+                .FirstOrDefault();
+        if (panel != null &&
+            panel.Columns > 0 &&
+            panel.ItemHeight > 0)
         {
-            if (_cards.ItemContainerGenerator.ContainerFromIndex(index)
-                is not ListBoxItem item ||
-                item.ActualHeight <= 0)
-            {
-                continue;
-            }
-
-            System.Windows.Point location = item.TranslatePoint(
-                new System.Windows.Point(0, 0),
-                scrollViewer);
-            geometries.Add(new PreviewItemGeometry(
-                index,
-                location.Y,
-                location.Y + item.ActualHeight));
+            return (panel.Columns, panel.ItemHeight);
         }
 
-        return geometries;
+        return (PreviewColumnCount, PreviewItemHeight);
     }
 
     private ScrollViewer? GetScrollViewer() =>
