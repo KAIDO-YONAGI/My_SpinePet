@@ -1,5 +1,31 @@
 # GUI Developer Log
 
+## 2026-08-24：动画状态下拉菜单隐藏可见滚动条并完成周期复查
+
+- 用户要求移除右侧动画状态选择下拉菜单展开列表的可见垂直滚动条。
+  根因是该 `ComboBox` 继承了全局模板中的内部 `ScrollViewer` 默认滚动条；
+  不是动画选项或选中状态同步错误。
+- 修复：仅为 `AnimationCombo` 设置
+  `ScrollViewer.VerticalScrollBarVisibility="Hidden"`，不修改全局
+  `ComboBox` 模板，也不影响其他下拉框。滚轮和键盘仍可继续滚动选项，
+  只是隐藏可见滚动条。
+- 回归钉住：`CharacterLibraryLayoutTests` 增加 XAML 级断言，确保该属性
+  仍只作用于动画下拉菜单；现有动画选项快照、`ItemsSource`、
+  `SelectedItem` 和 Normal/Battle 状态协调逻辑保持不变。
+- 兄弟路径核对：面板打开、卡片选中、Reset All、Scan、换肤、资源加载完成
+  和 Normal/Battle 切换均继续使用同一动画选择协调器；本次只改变控件滚动条
+  的呈现，不新增状态写入源，也不改变任何动画值。Scan 与换肤本轮完成代码
+  路径核对，未重复执行资源导入活体操作。
+- 验证：目标测试通过；Debug 全量测试 `324/324`；Release Build 0 警告、
+  0 错误；Publish 成功，发布目录为
+  `SpinePet-Release-2026-08-24-23 07 18`；运行实例 PID `22956` 持续响应。
+  UI Automation 激活配置面板后，动画下拉对应控件树中
+  `ScrollBarCount=0`。
+- 本周期累计 5 项 GUI 行为改动已复查：真实动画默认值与 Reset、下拉标题
+  同步、Normal/Battle 往返、动画选择器单一视图写入者，以及本次滚动条呈现。
+  设计文档、回归要求、DeveloperLog 与根/GUI Router 已同步；维护计数按规则
+  从 `5/5` 清零为 `0/5`。下一项 GUI 行为改动从新周期重新计数。
+
 ## 2026-08-24：Normal/Battle 往返后动画标题空白的控件层修复
 
 - 用户复报：从其他 Mode 切回 Normal 后，动画下拉的收起标题再次变空。
