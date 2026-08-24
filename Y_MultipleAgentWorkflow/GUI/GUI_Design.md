@@ -38,7 +38,8 @@
 |---|---|---|
 | 当前角色 | 显示所选角色名和当前 Skin；未选择时显示空状态。面板每次打开都会从当前配置与运行时状态重建角色库与详情；选中角色的资源加载完成、动画列表或配置动画变化时自动重新同步右侧选项，无需手动点选 | 已实现 |
 | Normal/Battle | 完整 Aim/Cover 角色可手动切换；启动及首次展示为 Normal，进入 Battle 默认 Cover；模式不持久化 | 已实现 |
-| Mode 联动选择 | Mode 与右侧选择框同一行；Normal 显示 standing 资源的真实动画名，选择后立即循环播放并保存；Battle 仅显示 `Cover`、`Aim`，继续使用现有 Battle 状态逻辑；无 Battle 资源时 Mode 禁用。选择框收起标题始终显示当前生效值（默认配置动画或更改后的选择），选项列表以差量方式重建，不清空重灌，避免标题闪空 | 已实现 |
+| Mode 联动选择 | Mode 与右侧选择框同一行；Normal 显示 standing 资源的真实动画名，选择后立即循环播放并保存；隐藏角色从 `.skel/.json + .atlas` 元数据读取动画名，不制造配置值占位项；Battle 仅显示 `Cover`、`Aim`，继续使用现有 Battle 状态逻辑；无 Battle 资源时 Mode 禁用。选择框一次发布完整选项快照，再同步选中值，收起标题与展开后的真实选中项保持一致 | 已实现 |
+| Reset All | 缩放、速度、位置与动画恢复默认；动画默认名从已加载渲染快照或隐藏角色骨骼元数据按 `idle -> idle* -> 第一动画` 解析并持久化，不能写死不存在的 `idle`。相同资源连续 Reset 得到相同配置与下拉选中项 | 已实现 |
 | Desktop frame rate | 提供 30、60、120 FPS 三档，标注为 `Global Setting`，立即应用并持久化 | 已实现 |
 | Allow dragging | iOS 风格开关，标注为 `Global Setting`；控制渲染模式是否允许拖动全部角色 | 已实现 |
 | Scale 基础比例 | 0%–100% 表示基础缩放范围 0–0.2，显示整数百分比 | 已实现 |
@@ -92,6 +93,8 @@
   纯转发语义。
 - `Services/CharacterCatalog.cs`：角色配置仓储——增删改、换肤失败回滚、
   资源同步、全局设置、持久化，并以 `CharactersChanged` 通知结构变化。
+- `Services/CharacterAnimationNameReader.cs`：以空纹理加载器读取骨骼与 atlas
+  元数据，为未加载角色提供真实动画名；读取失败返回空列表并记录日志。
 - `Services/CharacterShowCoordinator.cs`：显隐 single-flight 协调——同一
   角色同一资源复用同一加载任务，不同资源按序排队，完成后再持久化。
 - `Services/BattleInteractionController.cs`：Normal/Battle 运行时状态机
@@ -160,6 +163,10 @@ WPF 控件、配置服务和第三方 `SpineRuntime41` 不反向依赖渲染内�
   与轮廓缓存，最后释放原生窗口和图形资源。关闭后的回调及重复关闭均为空操作。
 - 配置同步与异步保存共用同一原子提交路径；旧版本不能覆盖新版本，相同内容
   不替换磁盘文件，成功提交后统一清除 `RequiresRewrite`。
+- 动画下拉的选项必须作为完整快照先于选中值发布；选中值必须来自该真实
+  快照。禁止用伪选项或修改源值为 `空 -> 当前值` 来制造标题显示。
+- Reset All 的动画默认值必须从角色真实动画列表解析。连续执行 Reset 时，
+  配置值、下拉标题和展开后的选中项必须保持一致。
 - Mode 与 Cover/Aim 是角色运行时状态。角色隐藏、移除、卸载或应用
   重启时清除；再次展示仍从 Normal/standing 开始。
 - Battle 资源在首次进入时预加载。右键释放和 `WM_CAPTURECHANGED` 共用幂等

@@ -572,12 +572,6 @@ internal sealed class CharacterLibraryController
                 CharacterSettingsDefaults.MinimumScale,
                 maximumScale);
 
-            if (animationNames.Count == 0 &&
-                !string.IsNullOrEmpty(character.ConfiguredAnimation))
-            {
-                animationNames.Add(character.ConfiguredAnimation);
-            }
-
             if (existing.TryGetValue(
                     character.Id,
                     out CharacterViewModel? viewModel))

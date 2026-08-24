@@ -379,7 +379,17 @@ internal sealed class CharacterSettingsController
                 return;
             }
 
-            foreach (string animation in _host.SelectedCharacter.AnimationNames)
+            CharacterConfig? selectedConfig = FindSelectedCharacterConfig();
+            IReadOnlyList<string> animationNames =
+                _host.SelectedCharacter.AnimationNames;
+            if (animationNames.Count == 0 && selectedConfig != null)
+            {
+                animationNames =
+                    _characterManager.GetAnimationNames(selectedConfig);
+                _host.SelectedCharacter.UpdateAnimationNames(animationNames);
+            }
+
+            foreach (string animation in animationNames)
             {
                 _host.SelectedAnimationNames.Add(animation);
             }
@@ -390,7 +400,6 @@ internal sealed class CharacterSettingsController
                     : CharacterSettingsDefaults.DefaultMaxScale,
                 CharacterSettingsDefaults.MinimumMaximumScale,
                 CharacterSettingsDefaults.DefaultMaxScale);
-            CharacterConfig? selectedConfig = FindSelectedCharacterConfig();
             if (selectedConfig == null ||
                 !TrySetSelectedScaleFromComponents(selectedConfig))
             {

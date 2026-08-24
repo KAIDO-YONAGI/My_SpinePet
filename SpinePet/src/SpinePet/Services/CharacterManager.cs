@@ -38,7 +38,8 @@ public sealed class CharacterManager
         ConfigService configService,
         CharacterIdentityService? identityService,
         ICharacterRenderHost? renderHost,
-        Rect? workArea)
+        Rect? workArea,
+        Func<CharacterConfig, IReadOnlyList<string>>? readAnimationNames = null)
     {
         _renderHost = renderHost ?? new NativeCharacterRenderHost();
         CharacterCatalog? catalog = null;
@@ -48,7 +49,8 @@ public sealed class CharacterManager
             identityService ?? new CharacterIdentityService(),
             _renderHost,
             workArea,
-            character => shows!.EnsureShownAsync(character));
+            character => shows!.EnsureShownAsync(character),
+            readAnimationNames);
         _shows = shows = new CharacterShowCoordinator(
             _renderHost,
             () => _closed,
@@ -142,6 +144,10 @@ public sealed class CharacterManager
 
     public string GetCharacterThumbnailPath(CharacterConfig character) =>
         _catalog.GetCharacterThumbnailPath(character);
+
+    public IReadOnlyList<string> GetAnimationNames(
+        CharacterConfig character) =>
+        _catalog.GetAnimationNames(character);
 
     public Task ShowCharacterAsync(CharacterConfig character) =>
         _shows.ShowAsync(character);
@@ -306,13 +312,21 @@ public sealed class CharacterManager
         }
 
         CharacterConfig? character = _catalog.FindById(characterId);
-        if (character != null &&
-            string.IsNullOrWhiteSpace(character.ConfiguredAnimation) &&
-            animations.Count > 0)
+        if (character != null && animations.Count > 0)
         {
-            character.ConfiguredAnimation =
-                NativeAnimationController.SelectIdleAnimationName(animations)
-                ?? animations[0];
+            string? selected =
+                NativeAnimationController.SelectConfiguredOrIdleAnimationName(
+                    character.ConfiguredAnimation,
+                    animations);
+            if (selected != null &&
+                !string.Equals(
+                    character.ConfiguredAnimation,
+                    selected,
+                    StringComparison.Ordinal))
+            {
+                character.ConfiguredAnimation = selected;
+                _ = _catalog.SaveAsync();
+            }
         }
 
     }

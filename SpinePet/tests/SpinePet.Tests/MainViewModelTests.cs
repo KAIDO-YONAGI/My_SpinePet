@@ -498,7 +498,7 @@ public sealed class MainViewModelTests : IDisposable
     }
 
     [Fact]
-    public void RealComboShowsConfiguredIdleAfterResetSequence()
+    public void RealComboSelectsResourceDefaultAfterShowReplacesResetState()
     {
         RunOnSta(() =>
         {
@@ -565,28 +565,34 @@ public sealed class MainViewModelTests : IDisposable
             window.Show();
             PumpCallbacks!();
 
-            // Pre-reset state: the user had picked a different animation.
-            selection.UpdateAnimationNames(["wave"]);
-            selection.ConfiguredAnimation = "wave";
+            // The previously selected character also used idle, but from a
+            // different option list.
+            selection.UpdateAnimationNames(["idle", "wave"]);
+            selection.ConfiguredAnimation = "idle";
             viewModel.SyncSelectedCharacterSettings();
             PumpCallbacks!();
-            Assert.True(
-                combo.Items.Count == 1,
-                $"items-count={combo.Items.Count}");
-            Assert.Equal(
-                "wave",
-                (string?)combo.SelectedItem);
+            Assert.Equal("idle", combo.SelectedItem);
 
-            // Reset All on a character that is not loaded: the configured
-            // animation falls back to the idle literal and the refreshed
-            // card exposes exactly that name.
-            selection.UpdateAnimationNames(["idle"]);
-            selection.ConfiguredAnimation = "idle";
+            // Selecting or showing another character replaces the items with
+            // its real animations while the source value remains "idle".
+            selection.UpdateAnimationNames(
+                ["action", "delight", "expression_0", "idle"]);
             viewModel.SyncSelectedCharacterSettings();
             PumpCallbacks!();
 
             Assert.Equal("idle", viewModel.SelectedDisplaySelection);
             Assert.Equal("idle", (string?)combo.SelectedItem);
+            combo.IsDropDownOpen = true;
+            PumpCallbacks!();
+            Assert.True(
+                ((ComboBoxItem)combo.ItemContainerGenerator
+                    .ContainerFromItem("idle")).IsSelected);
+
+            // Repeating the same refresh must preserve the same real item.
+            viewModel.SyncSelectedCharacterSettings();
+            PumpCallbacks!();
+            Assert.Equal("idle", (string?)combo.SelectedItem);
+            window.Close();
         });
     }
 

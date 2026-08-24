@@ -11,6 +11,8 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
         new(StringComparer.Ordinal);
     public HashSet<string> LoadingCharacterIds { get; } =
         new(StringComparer.Ordinal);
+    public Dictionary<string, IReadOnlyList<string>> AnimationNamesByCharacterId
+        { get; } = new(StringComparer.Ordinal);
     public List<(string CharacterId, string State, string? Idle)>
         ResourceStateChanges { get; } = [];
     public List<(
@@ -103,7 +105,8 @@ internal sealed class FakeCharacterRenderHost : ICharacterRenderHost
         LoadingCharacterIds.Contains(characterId);
     public bool IsCharacterVisible(string characterId) =>
         VisibleCharacterIds.Contains(characterId);
-    public IReadOnlyList<string> GetAnimationNames(string characterId) => [];
+    public IReadOnlyList<string> GetAnimationNames(string characterId) =>
+        AnimationNamesByCharacterId.GetValueOrDefault(characterId) ?? [];
     public double GetMaxScale(string characterId) => 2;
     public double GetCurrentScale(string characterId) => 0.2;
     public Task InitializeAsync() => Task.CompletedTask;

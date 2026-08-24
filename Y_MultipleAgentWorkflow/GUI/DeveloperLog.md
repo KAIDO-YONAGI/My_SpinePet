@@ -1,7 +1,37 @@
 # GUI Developer Log
 
+## 2026-08-24：动画下拉真实默认值与 Show/Reset 幂等修复（纠正前两次结论）
+
+- 用户指出前两次修复仍是“未 Show 时硬编码 idle、Show 后空白、展开后全白”。
+  复盘确认此前交付有两个错误：把不存在于资源列表的 `"idle"` 当作占位项，
+  以及用 `空 -> 当前值` 修改源状态来强迫 WPF 重传。二者都只让局部观察看似
+  正确，没有保证 `ComboBox.SelectedItem` 属于真实 `ItemsSource`。
+- 修复后的唯一数据链：`CharacterAnimationNameReader` 不加载纹理，只读取
+  `.skel/.json + .atlas` 元数据；`CharacterCatalog.GetAnimationNames` 对已加载
+  角色优先使用渲染快照，对隐藏角色读取元数据。角色库不再把
+  `ConfiguredAnimation` 塞成伪选项。
+- `ResetAllSettings` 从上述真实列表按 `idle -> idle* -> 第一动画` 选择并保存
+  实际名称；无法读取资源时才保留空值。连续 Reset 对同一资源得到同一结果，
+  不再写死 `"idle"`。
+- `MainViewModel.DisplaySelectionOptions` 改为一次发布不可变数组快照，先通知
+  `ItemsSource`，再通知选中值；不再原地 Clear/Insert，也不再伪造
+  `空 -> 当前值` 的源状态变化。真实 ComboBox 测试覆盖“旧列表和新列表都含
+  同名 idle”的切换与重复同步。
+- 最终发布版 UI Automation 证据（PID 19020）：
+  `Blanc Variant 03` 隐藏时标题/选中项均为 `idle`，列表为 9 个真实动画；
+  Show 加载完成后仍为 `idle`；Reset All 后界面选中项与配置
+  `CurrentAnimation` 均为 `idle`；再次 Reset 结果不变、进程持续运行。
+- 验证：Debug 全量测试 `323/323`；Release Build 0 警告 0 错误；Publish
+  `SpinePet-Release-2026-08-24-20 51 33`；新实例于
+  `2026-08-24 20:54:00` 写入 `startup-complete`。
+- 本条结论取代紧随其后的两条机制判断；旧记录保留作为失败取证，不再作为
+  现行实现说明。本次实际影响 GUI 动画选择与 Reset 行为，维护计数：
+  `2/5 -> 3/5`。
+
 ## 2026-08-24：动画下拉标题空白的真正根因——SelectedItem 绑定不重传输（活体验证）
 
+- **已由上一条纠正**：`空 -> 当前值` 重传方案未通过 Show 路径活体验证，
+  已删除，不代表现行实现。
 - 用户复报"还是空的"。上一条 Reset 修复（idle 字面值回退）只治了数据层，
   未能治愈显示。本轮改用证据链驱动：构建真实 Window+ComboBox 测试装置
   （`RunOnSta` + Dispatcher 泵），并用 UI Automation 直接驱动运行中的应用
@@ -29,6 +59,8 @@
 
 ## 2026-08-24：Reset All 后动画下拉标题空白修复
 
+- **已由本日志首条纠正**：`"idle"` 字面值回退会制造不属于资源的伪默认项，
+  已删除，不代表现行实现。
 - 用户反馈：Reset All Settings 后下拉标题回到空白状态。根因与此前
   标题修复不同：`ResetAllSettings` 对未加载（隐藏）角色调用
   `GetAnimationNames` 得到空列表，`SelectIdleAnimationName` 返回 null，

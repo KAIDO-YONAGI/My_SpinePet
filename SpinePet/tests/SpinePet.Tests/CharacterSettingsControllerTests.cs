@@ -94,6 +94,64 @@ public sealed class CharacterSettingsControllerTests : IDisposable
         Assert.Equal(2, host.SelectedScaleMultiplier);
     }
 
+    [Fact]
+    public void HiddenCharacterUsesRealResourceDefaultWithoutIdlePlaceholder()
+    {
+        Directory.CreateDirectory(_temporaryDirectory);
+        CharacterConfig character = new()
+        {
+            Id = "hidden-default",
+            Name = "Hidden Default",
+            ConfiguredAnimation = string.Empty,
+            Visible = false
+        };
+        ConfigService configService = new(Path.Combine(
+            _temporaryDirectory,
+            "hidden-default.json"));
+        configService.Save(new AppConfig
+        {
+            Characters = [character]
+        });
+        CharacterManager characterManager = new(
+            configService,
+            identityService: null,
+            renderHost: new FakeCharacterRenderHost(),
+            workArea: null,
+            readAnimationNames: _ => ["angry", "good", "smile"]);
+        CharacterViewModel selectedCharacter = new()
+        {
+            Id = character.Id,
+            Name = character.Name
+        };
+        TestSettingsHost host = new()
+        {
+            SelectedCharacter = selectedCharacter
+        };
+        CharacterSettingsController controller = new(
+            characterManager,
+            new CharacterResourceStorageService(),
+            new ObservableCollection<CharacterViewModel>
+            {
+                selectedCharacter
+            },
+            host,
+            owner: null!,
+            Dispatcher.CurrentDispatcher,
+            getKnownResources: () =>
+                new Dictionary<string, CharacterResourceFiles>(),
+            refreshKnownResources: () => { },
+            synchronizeKnownResources: () => new(0, 0, 0, 0),
+            refreshCharacterList: () => { });
+
+        controller.SyncSelectedCharacterSettings();
+
+        Assert.Equal(
+            ["angry", "good", "smile"],
+            host.SelectedAnimationNames);
+        Assert.Equal("angry", host.SelectedAnimation);
+        Assert.DoesNotContain("idle", host.SelectedAnimationNames);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_temporaryDirectory))

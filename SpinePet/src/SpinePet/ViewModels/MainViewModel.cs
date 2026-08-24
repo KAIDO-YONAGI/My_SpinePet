@@ -22,7 +22,7 @@ public sealed class MainViewModel : INotifyPropertyChanged,
     private readonly CharacterManager _characterManager;
     private readonly ObservableCollection<CharacterViewModel> _characters = new();
     private readonly ObservableCollection<string> _selectedAnimationNames = new();
-    private readonly ObservableCollection<string> _displaySelectionOptions = new();
+    private string[] _displaySelectionOptions = [];
     private bool _isRefreshingSelection;
     private bool _isUpdatingDisplaySelection;
     private CharacterViewModel? _selectedCharacter;
@@ -80,7 +80,7 @@ public sealed class MainViewModel : INotifyPropertyChanged,
     public ObservableCollection<string> SelectedAnimationNames =>
         _selectedAnimationNames;
 
-    public ObservableCollection<string> DisplaySelectionOptions =>
+    public IReadOnlyList<string> DisplaySelectionOptions =>
         _displaySelectionOptions;
 
     public string CharacterSearchText
@@ -171,7 +171,7 @@ public sealed class MainViewModel : INotifyPropertyChanged,
         HasSelectedCharacter &&
         (SelectedDisplayMode == CharacterDisplayModes.Battle
             ? HasSelectedBattle
-            : _displaySelectionOptions.Count > 0);
+            : _displaySelectionOptions.Length > 0);
 
     public bool IsUpdatingDisplaySelection =>
         _isUpdatingDisplaySelection;
@@ -497,69 +497,23 @@ public sealed class MainViewModel : INotifyPropertyChanged,
 
     private void RefreshDisplaySelectionOptions()
     {
-        // Update the option list in place instead of clearing it: a
-        // collection reset makes the combo box drop its selection, which
-        // blanks the closed title even when the value is still valid.
-        IEnumerable<string> options =
+        string[] options =
             SelectedDisplayMode == CharacterDisplayModes.Battle
-                ? BattleStateOptions
-                : SelectedAnimationNames;
-        int index = 0;
-        foreach (string option in options)
+                ? BattleStateOptions.ToArray()
+                : SelectedAnimationNames.ToArray();
+        if (!_displaySelectionOptions.SequenceEqual(
+                options,
+                StringComparer.Ordinal))
         {
-            if (index < _displaySelectionOptions.Count &&
-                string.Equals(
-                    _displaySelectionOptions[index],
-                    option,
-                    StringComparison.Ordinal))
-            {
-                index++;
-                continue;
-            }
-
-            _displaySelectionOptions.Remove(option);
-            _displaySelectionOptions.Insert(index, option);
-            index++;
+            _displaySelectionOptions = options;
+            OnPropertyChanged(nameof(DisplaySelectionOptions));
         }
 
-        while (_displaySelectionOptions.Count > index)
-        {
-            _displaySelectionOptions.RemoveAt(
-                _displaySelectionOptions.Count - 1);
-        }
-
+        // ItemsSource is published first, then the selected value. Replacing
+        // the snapshot avoids transient collection states that make WPF
+        // clear a valid same-name selection during character switches.
         OnPropertyChanged(nameof(SelectedDisplaySelection));
         OnPropertyChanged(nameof(IsDisplaySelectionEnabled));
-        ReassertDisplaySelectionBinding();
-    }
-
-    /// <summary>
-    /// A combo box cannot resolve a SelectedItem that was pushed while the
-    /// option list was stale or empty, and the binding engine will not
-    /// transfer the same value again on its own. Re-assign the effective
-    /// selection once the option list is final so the closed title always
-    /// shows the current value.
-    /// </summary>
-    private void ReassertDisplaySelectionBinding()
-    {
-        string current = SelectedDisplaySelection;
-        if (string.IsNullOrEmpty(current) ||
-            !_displaySelectionOptions.Contains(current))
-        {
-            return;
-        }
-
-        if (SelectedDisplayMode == CharacterDisplayModes.Battle)
-        {
-            _selectedBattleState = string.Empty;
-            SelectedBattleState = current;
-        }
-        else
-        {
-            _selectedAnimation = string.Empty;
-            SelectedAnimation = current;
-            OnPropertyChanged(nameof(SelectedDisplaySelection));
-        }
     }
 
     private static bool NearlyEquals(double left, double right) =>

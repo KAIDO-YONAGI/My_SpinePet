@@ -20,6 +20,8 @@ internal sealed class CharacterCatalog
     private readonly CharacterResourceCoordinator _resourceCoordinator;
     private readonly ICharacterRenderHost _renderHost;
     private readonly Func<CharacterConfig, Task> _ensureShownAsync;
+    private readonly Func<CharacterConfig, IReadOnlyList<string>>
+        _readAnimationNames;
     private readonly Rect? _workArea;
     private readonly AppConfig _config;
 
@@ -28,13 +30,16 @@ internal sealed class CharacterCatalog
         CharacterIdentityService identityService,
         ICharacterRenderHost renderHost,
         Rect? workArea,
-        Func<CharacterConfig, Task> ensureShownAsync)
+        Func<CharacterConfig, Task> ensureShownAsync,
+        Func<CharacterConfig, IReadOnlyList<string>>? readAnimationNames = null)
     {
         _configService = configService;
         _identityService = identityService;
         _renderHost = renderHost;
         _workArea = workArea;
         _ensureShownAsync = ensureShownAsync;
+        _readAnimationNames =
+            readAnimationNames ?? CharacterAnimationNameReader.Read;
         _resourceCoordinator = new CharacterResourceCoordinator(
             _identityService);
         _config = configService.Load();
@@ -60,6 +65,14 @@ internal sealed class CharacterCatalog
 
     public CharacterConfig? FindById(string characterId) =>
         _config.Characters.FirstOrDefault(item => item.Id == characterId);
+
+    public IReadOnlyList<string> GetAnimationNames(
+        CharacterConfig character)
+    {
+        IReadOnlyList<string> loaded =
+            _renderHost.GetAnimationNames(character.Id);
+        return loaded.Count > 0 ? loaded : _readAnimationNames(character);
+    }
 
     public void Save() => _configService.Save(_config);
 
@@ -364,7 +377,7 @@ internal sealed class CharacterCatalog
         foreach (CharacterConfig character in _config.Characters)
         {
             IReadOnlyList<string> animationNames =
-                _renderHost.GetAnimationNames(character.Id);
+                GetAnimationNames(character);
             string? idleAnimation =
                 NativeAnimationController.SelectIdleAnimationName(
                     animationNames);
@@ -376,11 +389,7 @@ internal sealed class CharacterCatalog
                 CharacterConfig.DefaultScaleMultiplier;
             character.AnimationSpeed =
                 CharacterConfig.DefaultAnimationSpeed;
-            // Unloaded characters expose no animation names; keep the idle
-            // literal so the reset default stays visible in the panel and
-            // resolves through the renderer's idle -> idle* -> first
-            // animation fallback once the character loads.
-            character.ConfiguredAnimation = idleAnimation ?? "idle";
+            character.ConfiguredAnimation = idleAnimation ?? string.Empty;
             character.PositionX = defaultPositionX;
             character.PositionY = defaultPositionY;
 

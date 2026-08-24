@@ -109,10 +109,9 @@ public sealed class CharacterManagerTests : IDisposable
         Assert.Equal(
             CharacterConfig.DefaultAnimationSpeed,
             reset.AnimationSpeed);
-        // The character is not loaded, so no animation names are known;
-        // the reset must still land on a visible idle default instead of
-        // wiping the configured animation to an empty string.
-        Assert.Equal("idle", reset.ConfiguredAnimation);
+        // Invalid test resources expose no animation metadata, so no
+        // default name can be selected.
+        Assert.Equal(string.Empty, reset.ConfiguredAnimation);
         Assert.Equal(960, reset.PositionX);
         Assert.Equal(1056, reset.PositionY);
         Assert.False(reset.Visible);
@@ -126,6 +125,69 @@ public sealed class CharacterManagerTests : IDisposable
             persisted.AnimationSpeed);
         Assert.Equal(960, persisted.PositionX);
         Assert.Equal(1056, persisted.PositionY);
+    }
+
+    [Fact]
+    public void ResetAllSettingsUsesRealLoadedDefaultAnimation()
+    {
+        CharacterConfig character = new()
+        {
+            Id = "reset-loaded",
+            Name = "Reset Loaded",
+            ConfiguredAnimation = "custom"
+        };
+        ConfigService configService = SaveConfig(
+            "reset-loaded.json",
+            character);
+        FakeCharacterRenderHost renderHost = new();
+        renderHost.AnimationNamesByCharacterId[character.Id] =
+            ["action", "idle_loop", "wave"];
+        CharacterManager manager = CreateManager(
+            configService,
+            renderHost);
+
+        manager.ResetAllSettings();
+
+        Assert.Equal(
+            "idle_loop",
+            Assert.Single(manager.Characters).ConfiguredAnimation);
+    }
+
+    [Fact]
+    public void ResetAllSettingsUsesMetadataDefaultIdempotentlyWhenUnloaded()
+    {
+        CharacterConfig character = new()
+        {
+            Id = "reset-unloaded",
+            Name = "Reset Unloaded",
+            ConfiguredAnimation = "custom",
+            Visible = false
+        };
+        ConfigService configService = SaveConfig(
+            "reset-unloaded.json",
+            character);
+        FakeCharacterRenderHost renderHost = new();
+        int metadataReadCount = 0;
+        CharacterManager manager = CreateManager(
+            configService,
+            renderHost,
+            _ =>
+            {
+                metadataReadCount++;
+                return ["action", "idle", "wave"];
+            });
+
+        manager.ResetAllSettings();
+        manager.ResetAllSettings();
+
+        CharacterConfig reset = Assert.Single(manager.Characters);
+        Assert.Equal("idle", reset.ConfiguredAnimation);
+        Assert.False(reset.Visible);
+        Assert.Equal(2, metadataReadCount);
+        Assert.Equal(
+            "idle",
+            Assert.Single(configService.Load().Characters)
+                .ConfiguredAnimation);
     }
 
     [Fact]
@@ -1216,7 +1278,9 @@ public sealed class CharacterManagerTests : IDisposable
 
     private static CharacterManager CreateManager(
         ConfigService configService,
-        FakeCharacterRenderHost renderHost)
+        FakeCharacterRenderHost renderHost,
+        Func<CharacterConfig, IReadOnlyList<string>>?
+            readAnimationNames = null)
     {
         return new CharacterManager(
             configService,
@@ -1227,7 +1291,8 @@ public sealed class CharacterManagerTests : IDisposable
                     ["007"] = "Neon"
                 }),
             renderHost,
-            TestWorkArea);
+            TestWorkArea,
+            readAnimationNames);
     }
 
     private ConfigService SaveConfig(
