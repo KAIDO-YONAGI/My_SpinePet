@@ -685,9 +685,13 @@
                             <Setter TargetName="ItemBorder" Property="BorderBrush" Value="{StaticResource AccentHoverBrush}" />
                             <Setter TargetName="ItemBorder" Property="Background" Value="#FF262626" />
                         </Trigger>
-                        <Trigger Property="IsKeyboardFocused" Value="True">
+                        <MultiTrigger>
+                            <MultiTrigger.Conditions>
+                                <Condition Property="IsKeyboardFocused" Value="True" />
+                                <Condition Property="IsSelected" Value="True" />
+                            </MultiTrigger.Conditions>
                             <Setter TargetName="FocusChrome" Property="Opacity" Value="1" />
-                        </Trigger>
+                        </MultiTrigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>

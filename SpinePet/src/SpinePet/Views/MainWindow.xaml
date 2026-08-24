@@ -755,6 +755,7 @@
                                     <ComboBox Grid.Column="1"
                                               x:Name="AnimationCombo"
                                               IsEnabled="{Binding IsDisplaySelectionEnabled}"
+                                              ScrollViewer.VerticalScrollBarVisibility="Hidden"
                                               Height="32"
                                               Margin="3,0,0,0"
                                               AutomationProperties.Name="Character animation or battle state" />

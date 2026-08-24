@@ -130,6 +130,50 @@ public sealed class CharacterLibraryLayoutTests
     }
 
     [Fact]
+    public void CharacterCardFocusRingRequiresTheItemToRemainSelected()
+    {
+        XDocument styles = LoadConfigPanelStyles();
+        XNamespace presentation =
+            "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace x =
+            "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        XElement focusChrome = Assert.Single(
+            styles.Descendants(presentation + "Border"),
+            element => (string?)element.Attribute(x + "Name") ==
+                "FocusChrome" &&
+                element.Ancestors(presentation + "Style").Any(style =>
+                    (string?)style.Attribute(x + "Key") ==
+                    "CharacterCardItemStyle"));
+        XElement template = Assert.Single(
+            focusChrome.Ancestors(presentation + "ControlTemplate"));
+        XElement focusTrigger = Assert.Single(
+            template.Descendants(presentation + "MultiTrigger"),
+            trigger => trigger
+                .Elements(presentation + "Setter")
+                .Any(setter =>
+                    (string?)setter.Attribute("TargetName") ==
+                        "FocusChrome" &&
+                    (string?)setter.Attribute("Property") == "Opacity" &&
+                    (string?)setter.Attribute("Value") == "1"));
+
+        XElement[] conditions = focusTrigger
+            .Descendants(presentation + "Condition")
+            .ToArray();
+        Assert.Contains(
+            conditions,
+            condition =>
+                (string?)condition.Attribute("Property") ==
+                    "IsKeyboardFocused" &&
+                (string?)condition.Attribute("Value") == "True");
+        Assert.Contains(
+            conditions,
+            condition =>
+                (string?)condition.Attribute("Property") == "IsSelected" &&
+                (string?)condition.Attribute("Value") == "True");
+    }
+
+    [Fact]
     public void CharacterLibraryExposesGlobalFolderAndDirectSkinActions()
     {
         XDocument document = LoadMainWindowXaml();
@@ -339,6 +383,26 @@ public sealed class CharacterLibraryLayoutTests
         Assert.Contains(
             draggingLabel.Parent?.Elements(presentation + "TextBlock") ?? [],
             element => (string?)element.Attribute("Text") == "Global Setting");
+    }
+
+    [Fact]
+    public void AnimationSelectionHidesItsDropDownScrollBar()
+    {
+        XDocument document = LoadMainWindowXaml();
+        XNamespace presentation =
+            "http://schemas.microsoft.com/winfx/2006/xaml/presentation";
+        XNamespace x =
+            "http://schemas.microsoft.com/winfx/2006/xaml";
+
+        XElement animationCombo = Assert.Single(
+            document.Descendants(presentation + "ComboBox"),
+            element => (string?)element.Attribute(x + "Name") ==
+                "AnimationCombo");
+
+        Assert.Equal(
+            "Hidden",
+            (string?)animationCombo.Attribute(
+                "ScrollViewer.VerticalScrollBarVisibility"));
     }
 
     [Fact]
