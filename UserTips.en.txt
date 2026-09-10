@@ -61,7 +61,8 @@ SpinePet Desktop Pet — User Guide
 - config.json: portable configuration — characters, visibility, position, scale, animation, speed, global settings.
 - res\: character resource library. The package contains **no** resources, only a placement note;
   put your resources there and press Scan (see the next section).
-- app\: application payload and internal tools — do not rename.
+- app\: application payload — do not rename.
+- tools\: runtime tools (UnityFS extractor, icon downloader, requirements.txt) — do not rename or delete.
 - Logs\: log directory created at runtime, useful for troubleshooting.
 - LICENSE / NOTICE: this project's open-source license (GPL-3.0-or-later) and copyright notice.
 - THIRD_PARTY_NOTICES.md: third-party components and licenses.

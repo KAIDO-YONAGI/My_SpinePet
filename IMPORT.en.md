@@ -392,7 +392,7 @@ Not every capability is dependency-free, though. Match the feature you need:
 | --- | --- | --- |
 | Starting the pet, rendering, interacting, placing files by hand + `Scan` | Yes | Nothing (Windows 10+) |
 | `Add` importing a `.skel` (skeleton + atlas + textures) | Yes | Nothing — pure C# path |
-| `Add` importing a **UnityFS bundle** | No | Python 3 + `pip install -r app\Tools\requirements.txt` (UnityPy, Pillow) |
+| `Add` importing a **UnityFS bundle** | No | Python 3 + `pip install -r tools\requirements.txt` (UnityPy, Pillow) |
 | Automatic / manual **icon download** | No | Same as above; the script uses the built-in `powershell.exe`, but unpacking needs Python |
 | **Battle aim/cover import** | Partly | Needs `BattleCatalogImporter`: build it with the .NET SDK, or use a package built with `-IncludeImportTools` (self-contained exe, no .NET required) |
 | zip intake / atlas cleanup / legacy layout migration | Yes | Nothing; those `.ps1` files run on **the PowerShell 5.1 that ships with Windows** (Chinese output included — UTF-8 BOM guarantees no mojibake) |
@@ -412,7 +412,7 @@ Filling the gaps:
 
 ```powershell
 # (1) UnityFS bundle import / icon download
-python -m pip install -r app\Tools\requirements.txt
+python -m pip install -r tools\requirements.txt
 
 # (2) Battle aim/cover import: on a development machine, repackage with the
 #     self-contained CLI included (the target machine then needs no .NET)

@@ -1,4 +1,4 @@
-﻿# SpinePet 运行环境自检 / environment self-check
+# SpinePet 运行环境自检 / environment self-check
 #
 # 用途：在目标机器上确认"哪些功能可用、缺什么"。不需要先装任何东西。
 # 用法（Windows 自带的 PowerShell 5.1 即可）：
@@ -98,7 +98,7 @@ if ($pythonCommand) {
     $probe = 'import UnityPy, PIL; print("UnityPy+Pillow OK")'
     $moduleOutput = (& $pythonCommand -c $probe 2>&1 | Select-Object -First 1)
     $modulesOk = ($moduleOutput -match 'OK')
-    $requirementsPath = Join-Path $PSScriptRoot 'app\Tools\requirements.txt'
+    $requirementsPath = Join-Path $PSScriptRoot 'tools\requirements.txt'
     if (-not (Test-Path -LiteralPath $requirementsPath)) {
         $requirementsPath = Join-Path (Split-Path -Parent $PSScriptRoot) 'tools\requirements.txt'
     }

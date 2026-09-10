@@ -135,7 +135,8 @@
   Launch.bat                 推荐启动入口
   config.json                便携配置（角色、显隐、位置、缩放、动画、速度、全局设置）
   res\                       角色资源库（内含一份放置说明；素材由你自行准备）
-  app\                       程序本体与内部工具，请勿改名
+  app\                       程序本体（自包含），请勿改名
+  tools\                     运行时工具：UnityFS 解包脚本、图标下载脚本、requirements.txt
   Logs\                      运行日志，排查问题用
   UserTips.txt               使用说明（中文，含本次构建信息）
   UserTips.en.txt            User guide (English)

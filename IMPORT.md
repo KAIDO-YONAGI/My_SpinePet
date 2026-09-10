@@ -359,7 +359,7 @@ Get-Content "$dir\<resource>.atlas" |
 | --- | --- | --- |
 | 启动桌宠、显示与交互、手动放文件 + `Scan` | ✅ | 无（Windows 10 及以上） |
 | `Add` 导入 `.skel`（骨架 + atlas + 贴图） | ✅ | 无，纯 C# 路径 |
-| `Add` 导入 **UnityFS bundle** | ❌ | Python 3 + `pip install -r app\Tools\requirements.txt`（UnityPy、Pillow） |
+| `Add` 导入 **UnityFS bundle** | ❌ | Python 3 + `pip install -r tools\requirements.txt`（UnityPy、Pillow） |
 | 自动 / 手动**图标下载** | ❌ | 同上；脚本本身走 Windows 自带 `powershell.exe`，但解包用 Python |
 | **射击 aim/cover 导入** | ⚠️ | 需要 `BattleCatalogImporter`：装 .NET SDK 自行编译，或使用带 `-IncludeImportTools` 的发行包（内含自包含 exe，无需 .NET） |
 | zip 入库 / atlas 清理 / 旧布局迁移 | ✅ | 无；这些 `.ps1` 已兼容 **Windows 自带的 PowerShell 5.1**（含中文输出，UTF-8 BOM 已确保不乱码） |
@@ -378,7 +378,7 @@ Windows 自带的 PowerShell，不需要预先安装任何东西。
 
 ```powershell
 # ① UnityFS bundle 导入 / 图标下载
-python -m pip install -r app\Tools\requirements.txt
+python -m pip install -r tools\requirements.txt
 
 # ② 射击 aim/cover 导入：在开发机上重新打包并附带自包含 CLI（目标机无需 .NET）
 pwsh -NoProfile -File tools\Package-Release.ps1 -IncludeImportTools

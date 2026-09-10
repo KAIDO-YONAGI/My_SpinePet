@@ -1,5 +1,6 @@
-﻿# 打包 SpinePet 便携版（时间戳目录 + app\ 子文件夹布局）：
+# 打包 SpinePet 便携版（时间戳目录 + app\ 子文件夹布局）：
 #   release\<构建名>\app\      程序本体（publish 自包含多文件，仅 zh-Hans 语言资源）
+#   release\<构建名>\tools\    运行时工具（UnityFS 解包脚本、图标下载脚本、requirements.txt）
 #   release\<构建名>\LICENSE / NOTICE / THIRD_PARTY_NOTICES.md / ASSETS.md
 #   release\<构建名>\IMPORT.md / IMPORT.en.md   素材导入指南
 #   release\<构建名>\licenses\  各第三方许可证原文（合规必需，勿删）
@@ -133,6 +134,19 @@ try {
         Remove-Item -Recurse -Force
     Get-ChildItem $AppDir -Recurse -Filter '*.pdb' | Remove-Item -Force
 
+    # 3b) 运行时工具从 app\Tools 挪到包根 tools\：应用会按“先就地、再上一级”的顺序解析
+    #     （见 AppPaths.ResolveBundledToolFile），因此包根布局与源码布局都能工作。
+    $publishedTools = Join-Path $AppDir 'Tools'
+    if (-not (Test-Path -LiteralPath $publishedTools -PathType Container)) {
+        throw "publish 未产出 app\Tools：$publishedTools"
+    }
+    Move-Item -LiteralPath $publishedTools -Destination (Join-Path $WorkRelease 'tools')
+
+    # 本地专用的第三方解包器不在仓库里，若本机存在会被 publish 一并带出，提醒确认是否要分发。
+    if (Test-Path -LiteralPath (Join-Path $WorkRelease 'tools\NikkeAssetUnpacker')) {
+        Write-Warning '包内出现 tools\NikkeAssetUnpacker（本机专用、未入库的第三方解包器）：如要分发请先确认其授权与来源。'
+    }
+
     # 4) 合规文件：许可证、声明与素材政策随发行包分发
     #    （Spine Runtimes License 要求任何形式的再分发都必须附带许可证与版权声明）
     foreach ($name in $ComplianceFiles) {
@@ -196,7 +210,7 @@ UserTips.en.txt; for asset licensing boundaries see ASSETS.md / ASSETS.en.md.
     #    因此首启为空角色库，用户导入后才出现卡片。
     $configJson = @'
 {
-  "Version": "1.6",
+  "Version": "1.9",
   "Global": {
     "AllowRenderDrag": true,
     "TargetFrameRate": 60,
@@ -280,6 +294,7 @@ UserTips.en.txt; for asset licensing boundaries see ASSETS.md / ASSETS.en.md.
     Write-Host "合规:    $($ComplianceFiles -join ', ') + licenses\（$licenseFileCount 份许可证原文）"
     Write-Host "素材:    未包含任何角色资源（res\ 内仅一份放置说明）"
     Write-Host "说明:    UserTips.txt + UserTips.en.txt + IMPORT.md / IMPORT.en.md"
+    Write-Host "工具:    tools\（运行时工具，应用按上一级目录解析）"
     Write-Host "环境:    Check-Environment.ps1 (PowerShell 5.1 即可运行)"
     if ($IncludeImportTools) {
         Write-Host "导入 CLI: tools\import\BattleCatalogImporter.exe（自包含）"

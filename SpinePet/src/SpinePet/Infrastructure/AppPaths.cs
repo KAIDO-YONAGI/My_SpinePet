@@ -24,13 +24,14 @@ internal static class AppPaths
         ResolveResourceDirectory(AppContext.BaseDirectory);
 
     public static string BundleExtractorScript { get; } =
-        ResolveBundledFile(Path.Combine("Tools", "extract_spine_bundle.py"));
+        ResolveBundledToolFile(
+            "extract_spine_bundle.py",
+            AppContext.BaseDirectory);
 
     public static string CharacterIconDownloaderScript { get; } =
-        ResolveBundledFile(Path.Combine(
-            "Tools",
-            "icons-downloader",
-            "Update-CharacterIcons.ps1"));
+        ResolveBundledToolFile(
+            Path.Combine("icons-downloader", "Update-CharacterIcons.ps1"),
+            AppContext.BaseDirectory);
 
     internal static string ResolveLocalDataDirectory(string? overridePath)
     {
@@ -126,6 +127,38 @@ internal static class AppPaths
         return null;
     }
 
-    private static string ResolveBundledFile(string outputRelativePath) =>
-        Path.Combine(AppContext.BaseDirectory, outputRelativePath);
+    // 发行包把运行时工具放在包根 tools\（app\ 的上一级），源码与构建输出布局则放在应用同级的
+    // Tools\。与 res、config.json 一致：先查就地目录，再查上一级（仅当自身目录名为 app），
+    // 都找不到时回退到就地路径，交给调用方报错。
+    // 目录名在方法内取局部变量：静态初始化按声明顺序执行，若写成静态字段会晚于上方属性的
+    // 初始化器，导致属性构造时读到 null。
+    internal static string ResolveBundledToolFile(
+        string toolRelativePath,
+        string baseDirectory)
+    {
+        // 源码与构建输出里是 Tools\，发行包根目录是 tools\；Windows 不区分大小写，
+        // 两种写法都查一遍以免依赖文件系统行为。
+        string[] toolDirectoryNames = ["Tools", "tools"];
+        string resolvedBaseDirectory = Path.GetFullPath(baseDirectory);
+        foreach (string candidate in GetPortableBaseDirectories(
+                     resolvedBaseDirectory))
+        {
+            foreach (string toolDirectoryName in toolDirectoryNames)
+            {
+                string path = Path.Combine(
+                    candidate,
+                    toolDirectoryName,
+                    toolRelativePath);
+                if (File.Exists(path))
+                {
+                    return path;
+                }
+            }
+        }
+
+        return Path.Combine(
+            resolvedBaseDirectory,
+            toolDirectoryNames[0],
+            toolRelativePath);
+    }
 }

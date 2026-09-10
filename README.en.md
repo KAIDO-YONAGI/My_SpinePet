@@ -157,7 +157,8 @@ Toolbar: `Add` (import), `Scan` (re-scan `res\`), `Folder` (open the current
   config.json                portable configuration (characters, visibility, position,
                              scale, animation, speed, global settings)
   res\                       character resource library (contains only a placeholder note; you supply assets)
-  app\                       application payload and internal tools — do not rename
+  app\                       application payload (self-contained) — do not rename
+  tools\                     runtime tools: UnityFS extractor, icon downloader, requirements.txt
   Logs\                      runtime logs, useful for troubleshooting
   UserTips.txt               user guide (Chinese, includes this build's info)
   UserTips.en.txt            user guide (English, includes this build's info)
