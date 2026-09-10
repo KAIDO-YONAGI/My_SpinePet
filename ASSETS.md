@@ -1,5 +1,7 @@
 # 素材来源与授权边界 / Assets Policy
 
+**中文** | [English](ASSETS.en.md)
+
 一句话：**本项目只提供"播放器"，不提供"内容"。**
 
 ## 1. 本项目不分发任何游戏素材
@@ -31,13 +33,16 @@ Spine 骨架、图集、贴图、图标等素材，版权归 **Shift Up Corp.** 
 
 ## 4. 关于 nikke-db
 
-本仓库中的工具 `tools/build-nikkedb-contact-sheets.ps1` 会读取本地
-`resources/nikkedb/` 镜像（精灵图与 L2D 资源）生成角色预览核对表；角色命名与皮肤
-编号的核对也参考了该项目的公开素材与索引。
+开发期间的角色命名与皮肤编号核对，参考了该项目公开的精灵图与 L2D 素材及索引；
+当时使用的辅助脚本与 `resources/nikkedb/` 本地镜像都是本机工具，均未纳入本仓库。
 
 nikke-db（https://github.com/Nikke-db/Nikke-db.github.io）是一个长期免费、无广告、
 无赞助入口的社区项目。**它同样不拥有游戏素材**，本项目在此仅作来源致谢，
 不表示它对本项目有任何授权或背书。
+
+另外，`tools/nikke-extract/extract_skillcut.py` 中的 NKAB 解密算法移植自
+[FZFalzar/svatyvabin NikkeTools](https://github.com/FZFalzar/svatyvabin)（MIT, 2022），
+该移植代码属于本仓库，归属声明见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
 
 ## 5. 免费承诺
 

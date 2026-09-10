@@ -1,5 +1,7 @@
 # 第三方组件与授权清单 / Third-Party Notices
 
+**中文** | [English](THIRD_PARTY_NOTICES.en.md)
+
 本文件列出 SpinePet 使用的全部第三方组件、各自的权利人、许可证，以及**是否随发行包分发**。
 所有许可证原文存放在 `licenses/` 目录（发行包的根目录下同样带一份）。
 
@@ -18,7 +20,8 @@
 | xunit | 2.9.3 | xUnit.net contributors | Apache-2.0 | 否（仅测试工程） |
 | xunit.runner.visualstudio | 3.1.5 | xUnit.net contributors | Apache-2.0 | 否（仅测试工程） |
 | Microsoft.NET.Test.Sdk | 17.14.1 | Microsoft Corporation | MIT | 否（仅测试工程） |
-| SpineSkeletonDataConverter | 本地内置 | wang606（https://github.com/wang606/SpineSkeletonDataConverter） | **PolyForm Noncommercial License 1.0.0** | 否（仅 `tools/` 下的本地工具） |
+| pycryptodome | 3.x | Legrandin and contributors | Public Domain（部分文件 BSD-2-Clause） | 否（由使用者自行 `pip install`） |
+| NikkeTools 解密算法（移植入 `tools/nikke-extract/extract_skillcut.py`） | 2022 | FZFalzar / svatyvabin（https://github.com/FZFalzar/svatyvabin） | MIT | 否（不随产物分发，但移植代码属于本仓库） |
 
 许可证原文位置：
 
@@ -29,7 +32,6 @@ licenses/vortice-windows-MIT.txt             MIT
 licenses/dotnet-runtime-MIT.txt              MIT
 licenses/unitypy-MIT.txt                     MIT
 licenses/pillow-MIT-CMU.txt                  MIT-CMU (HPND)
-licenses/polyform-noncommercial-1.0.0.txt    PolyForm Noncommercial 1.0.0
 ```
 
 xunit / Microsoft.NET.Test.Sdk 仅用于 `tests/`，不进入任何发行产物，其许可证以各自的
@@ -54,13 +56,16 @@ NuGet 包与上游仓库为准。
 （`SpinePet/src/SpineRuntime41/SpineRuntime41.csproj` 只是把该目录的源码收集进独立程序集）。
 本项目的 GPL-3.0-or-later 授权**不覆盖**该目录及其编译产物。
 
-### 2. PolyForm Noncommercial License 1.0.0（禁止商业用途）
+### 2. 开发期外部工具（不属于本仓库）
 
-`tools/SpineSkeletonDataConverter/` 内置的上游工具使用 PolyForm Noncommercial 1.0.0，
-该许可证只允许**非商业用途**（个人研究、实验、测试、私人娱乐、爱好者项目，
-以及非营利组织、教育机构等）。该组件不随发行包分发，但它位于本仓库中，
-因此**本仓库整体的商业使用是不被许可的**（至少就含该组件的部分而言）。
-再分发该目录时，必须一并传递该许可证条款或它的 URL。
+本仓库早前版本内置过
+[SpineSkeletonDataConverter](https://github.com/wang606/SpineSkeletonDataConverter)
+（C++ CLI 工具，**PolyForm Noncommercial License 1.0.0**），以及它 `data/` 目录下整套
+Spine 官方示例工程。这些内容已从本仓库及其历史中移除。
+
+它只是开发期的辅助工具：不属于应用本体、不参与解决方案构建、不进入任何发行包。
+你若自行获取并使用它，需遵守它的非商业条款；把它交给别人时，必须一并传递该许可证
+条款或它的 URL。由于它已不属于本仓库，`licenses/` 中也不再附带它的许可证原文。
 
 ## 如果你要再分发本项目的构建产物
 

@@ -1,0 +1,143 @@
+# Spine版本差异记录（JSON格式）
+
+## 4.1相对4.2
+
+去掉 referenceScale
+
+bone.inherit 键名由"inherit"改为"transform"
+
+去掉 bone.icon
+
+去掉 bone.visible
+
+去掉 slot.visible
+
+去掉 physics
+
+去掉 skin.physics
+
+去掉 animation.bone.inherit
+
+去掉 animation.physics
+
+## 4.0相对4.1
+
+去掉所有 sequence
+
+skin.attachment.linkedmesh.timelines 键名由"timelines"改为"deform"
+
+animation.slot.attachment.name 如果为空，4.1将取消键，4.0则取值为null
+
+animation.attachment 由MultiTimeline改为Timeline，也即取消sequence这一Timeline。并且键名由"attachments"改为"deform"
+
+## 3.8相对4.0
+
+curve 由数组改为四个键值："curve","c2","c3","c4"，且数值归一化了（4.x版本的curve控制点和两端数值有关，而3.8版本的curve控制点固定是(0,0)-(1,1)）
+
+~~去掉 bone.color~~
+
+PathConstraint::PositionMode 没有 Proportional 枚举值，用 Length 降级平替
+
+transform.mixRotate 键名由"mixRotate"改为"rotateMix"
+
+transform.mixX和mixY 键名由"mixX"和"mixY"合并为"translateMix"
+
+transform.mixScaleX和mixScaleY 键名由"mixScaleX"和"mixScaleY"合并为"scaleMix"
+
+transfomr.mixShearY 键名为"mixShearY"改为"shearMix"
+
+path.mixRotate 键名为"mixRotate"改为"rotateMix"
+
+path.mixX和mixY 键名由"mixX"和"mixY"合并为"translateMix"
+
+~~去掉 skin.attachment.boundingbox.color~~
+
+~~去掉 skin.attachment.path.color~~
+
+~~去掉 skin.attachment.point.color~~
+
+~~去掉 skin.attachment.clipping.color~~
+
+animation.slot.rgba 键名由"rgba"改为"color"
+
+animation.slot.rgba2 键名由"rgba2"改为"twoColor"
+
+去掉 animation.slot.rgb/rgb2/alpha
+
+animation.bone.rotate 键名由"value"改为"angle"
+
+animation.bone.rotate 的含义有变化，3.x 在相邻关键帧之间按最短路径解释旋转，180度歧义偏向正向；4.x 的rotate值可以表示相对setup pose的展开角度，如360、540等。3.x->4.x需要展开隐式旋转，4.x->3.x需要在连续大角度段中插入辅助key；stepped不需要拆分，因为它本来就是到下一帧瞬间跳变。
+
+去掉 animation.bone.translatex/translatey/scalex/scaley/shearx/sheary
+
+animation.transform.value1 键名由"mixRotate"改为"rotateMix"
+
+animation.transform.value2和value3 键名由"mixX"和"mixY"合并为"translateMix"
+
+animation.transform.value4和value5 键名由"mixScaleX"和"mixScaleY"合并为"scaleMix"
+
+animation.transform.value6 键名由"mixShearY"改为"shearMix"
+
+animation.path.position 键名由"value"改为"position"
+
+animation.path.spacing 键名由"value"改为"spacing"
+
+animation.path.mix.value1 键名由"mixRotate"改为"rotateMix"
+
+animation.path.mix.value2和value3 键名由"mixX"和"mixY"改为"translateMix"
+
+animation.drawOrder 键名除了"drawOrder"还可能为"draworder"
+
+## 3.7相对3.8
+
+去掉 readStringRef
+
+curve 又由四个键值改为数组
+
+去掉 x,y
+
+去掉 bone.skin
+
+去掉 ik.skin
+
+去掉 ik.softness
+
+去掉 transform.skin
+
+去掉 path.skin
+
+去掉 skin.bone/ik/transform/path，skin.attachment直接就变成了skin
+
+skin.linkedmesh.skin 键值可能不存在
+
+去掉 animation.ik.softness
+
+animation.bone.scale.x/y 默认值由1.0变成了0.0
+
+animation.path变成了paths
+
+animation中的有些默认值不省略~~（忽略得了，太麻烦，反正不影响读取）~~（还是加上吧，尊重版本特点）
+
+具体而言是animation中涉及time和order还有angle,x,y的默认值（即0）不省略，但paths.position省了（不是很想单独尊重这一点了
+
+## 3.6相对3.7
+
+去掉 skeleton.fps,audio
+
+去掉 nonessential（但是二进制有，服了，干脆只要是json就设置nonessential为true）
+
+去掉 ik.compress,stretch,uniform
+
+去掉 events.audio,volume,balance
+
+又有一些默认值不省略了：animations.drawOrder.time
+
+## 3.5相对3.6
+
+无
+
+---
+
+> 本笔记是 SpinePet 开发期整理的 Spine JSON 格式版本差异，用于判断一份骨架能否被
+> 4.1 运行时读取。它原先放在本地第三方工具 `tools/SpineSkeletonDataConverter/` 内，
+> 该工具已从本仓库移除，因此把这份自有笔记移入 `docs/` 保留。

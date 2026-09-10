@@ -1,14 +1,12 @@
 # 大体积资源镜像（外部来源，可重新拉取），不入库
 /resources/
 
-# 本地工具与会话产物
-.zcode/*
-!.zcode/agents/
-!.zcode/agents/**
-!.zcode/skills/
-!.zcode/skills/**
+# 本地工具与会话产物（不入库）
+.zcode/
+.codegraph/
 .fetch-cache/
-.codegraph
+AGENTS.md
+CLAUDE.md
 prompts.txt
 *.code-workspace
 
@@ -24,3 +22,11 @@ desktop.ini
 # 自包含打包产物（可重新构建），不入库
 /release/
 /dist/
+
+# 本地专用第三方工具与脚本（不入库，仅本机保留）
+/tools/SpineSkeletonDataConverter/
+/tools/build-nikkedb-contact-sheets.ps1
+
+# Python 编译产物
+__pycache__/
+*.pyc

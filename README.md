@@ -5,9 +5,19 @@
 
 程序**只负责渲染，不提供任何游戏素材**。本项目永久免费：没有广告、没有赞助入口、没有付费墙。
 
-- 面向使用者的说明：本文档
-- 面向开发者的说明（目录结构、构建细节、导入工具、面板实现）：[`SpinePet/README.md`](SpinePet/README.md)
-- 素材与授权：[`ASSETS.md`](ASSETS.md) · [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)
+**中文** | [English](README.en.md)
+
+## 文档导航
+
+| 文档 | 中文 | English |
+| --- | --- | --- |
+| 使用说明 | **README.md** | [README.en.md](README.en.md) |
+| 素材政策 | [ASSETS.md](ASSETS.md) | [ASSETS.en.md](ASSETS.en.md) |
+| 第三方组件与许可证 | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) | [THIRD_PARTY_NOTICES.en.md](THIRD_PARTY_NOTICES.en.md) |
+| 项目许可证 / 版权声明 | [LICENSE](LICENSE)、[NOTICE](NOTICE) | 同文件（英文） |
+| 开发者文档（目录结构、构建细节、内部工具） | [SpinePet/README.md](SpinePet/README.md) | 同文件（英文） |
+| Spine JSON 版本差异（参考） | [docs/spine-version-differences.md](docs/spine-version-differences.md) | 同文件（中文） |
+| 发行包内使用说明 | [UserTips.txt](UserTips.txt) | 目前仅中文 |
 
 ## 目录
 
@@ -77,6 +87,22 @@ res\
   目录整个消失时会回退到 `app\res`。
 - `SpinePet\tools\battle-catalog-importer` 可批量审计/导入完整的 Aim/Cover 组合，
   但必须显式给出资源目录；不完整或非 4.1 的组合会被跳过。
+
+### 方式 C：爆裂（skillcut）动画
+
+`tools\nikke-extract\extract_skillcut.py` 是爆裂动画的提取管线：扫描游戏 `eb` 目录、
+解密 `NKAB` bundle、用 UnityPy 枚举名字含 `skillcut` 的 TextAsset，并把
+`.skel` / `.atlas` / 被引用的贴图导出为 PNG，输出到
+`<输出目录>\<cXXX[_skin]>\<cXXX[_skin]_skillcut>.{skel,atlas,png}`。
+
+```powershell
+py -3.12 tools\nikke-extract\extract_skillcut.py <游戏 eb 目录或游戏根目录> --out <输出目录>
+```
+
+需要 Python 3.12 与 `UnityPy`、`pycryptodome`、`Pillow` 三个包。
+**脚本只处理你自己持有的游戏文件**，不会替你寻找、下载或解锁任何内容；
+其中的 NKAB 解密算法移植自 [FZFalzar/svatyvabin NikkeTools](https://github.com/FZFalzar/svatyvabin)
+（MIT, 2022），归属声明见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
 
 ## 桌面交互
 
@@ -192,7 +218,8 @@ dotnet run --project SpinePet\src\SpinePet\SpinePet.csproj
 - 本项目**不含任何游戏素材**；角色素材版权归各自权利人（NIKKE 相关素材归
   Shift Up Corp.），不在本项目授权范围内，本项目无权为你授权。详见 [`ASSETS.md`](ASSETS.md)。
 - Spine 运行时是独立第三方组件，其许可证要求**每个使用者自行持有 Spine Editor 授权**；
-  `tools\SpineSkeletonDataConverter` 使用 PolyForm Noncommercial 1.0.0，**禁止商业用途**。
+  带非商业条款的第三方工具（例如开发期用过的 SpineSkeletonDataConverter）不属于本仓库、
+  也不随任何产物分发；你若自行获取并使用它们，需遵守其各自的条款。
   详见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
 
 ## English summary

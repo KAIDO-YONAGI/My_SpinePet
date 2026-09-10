@@ -162,9 +162,11 @@ Spine runtime usage is subject to the license in
 The application's own code is licensed **GPL-3.0-or-later**; see `LICENSE` and
 `NOTICE` at the repository root. Third-party components keep their own licenses:
 the Spine 4.1 runtime in `third_party/spine-csharp-4.1` is a separate component
-whose license requires every user to hold their own Spine Editor license, and
-`tools/SpineSkeletonDataConverter` is licensed under PolyForm Noncommercial
-1.0.0. See `THIRD_PARTY_NOTICES.md` and `licenses/`.
+whose license requires every user to hold their own Spine Editor license.
+Development-time external tools with noncommercial terms (such as
+SpineSkeletonDataConverter) are not part of this repository and are not
+distributed. The repository's own code is licensed GPL-3.0-or-later; see
+`THIRD_PARTY_NOTICES.md` and `licenses/`.
 
 This project ships **no game assets**: `res/` is git-ignored, and the release
 packaging no longer copies character resources into the distributed archive.
