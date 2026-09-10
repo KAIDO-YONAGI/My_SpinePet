@@ -19,7 +19,7 @@ forever: no ads, no donations, no paywall.
 | Project license / copyright | [LICENSE](LICENSE), [NOTICE](NOTICE) | same files (English) |
 | Developer documentation | [SpinePet/README.md](SpinePet/README.md) | same file (English) |
 | Spine JSON version differences (reference) | [docs/spine-version-differences.md](docs/spine-version-differences.md) | same file (中文) |
-| End-user tips shipped in the release | [UserTips.txt](UserTips.txt) | 中文 only for now |
+| End-user tips shipped in the release | [UserTips.txt](UserTips.txt) | [UserTips.en.txt](UserTips.en.txt) |
 
 ## Contents
 
@@ -172,6 +172,8 @@ Toolbar: `Add` (import), `Scan` (re-scan `res\`), `Folder` (open the current
   res\                       character resource library (contains only a placeholder note; you supply assets)
   app\                       application payload and internal tools — do not rename
   Logs\                      runtime logs, useful for troubleshooting
+  UserTips.txt               user guide (Chinese, includes this build's info)
+  UserTips.en.txt            user guide (English, includes this build's info)
   LICENSE / NOTICE           project license (GPL-3.0-or-later) and copyright notice
   THIRD_PARTY_NOTICES.md     third-party components and licenses
   ASSETS.md                  asset sourcing and licensing boundaries

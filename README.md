@@ -17,7 +17,7 @@
 | 项目许可证 / 版权声明 | [LICENSE](LICENSE)、[NOTICE](NOTICE) | 同文件（英文） |
 | 开发者文档（目录结构、构建细节、内部工具） | [SpinePet/README.md](SpinePet/README.md) | 同文件（英文） |
 | Spine JSON 版本差异（参考） | [docs/spine-version-differences.md](docs/spine-version-differences.md) | 同文件（中文） |
-| 发行包内使用说明 | [UserTips.txt](UserTips.txt) | 目前仅中文 |
+| 发行包内使用说明 | [UserTips.txt](UserTips.txt) | [UserTips.en.txt](UserTips.en.txt) |
 
 ## 目录
 
@@ -145,6 +145,8 @@ res\
   res\                       角色资源库（内含一份放置说明；素材由你自行准备）
   app\                       程序本体与内部工具，请勿改名
   Logs\                      运行日志，排查问题用
+  UserTips.txt               使用说明（中文，含本次构建信息）
+  UserTips.en.txt            User guide (English)
   LICENSE / NOTICE           本项目许可证（GPL-3.0-or-later）与版权声明
   THIRD_PARTY_NOTICES.md     第三方组件与授权清单
   ASSETS.md                  素材来源与授权边界

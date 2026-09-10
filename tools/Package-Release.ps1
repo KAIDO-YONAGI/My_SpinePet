@@ -3,7 +3,7 @@
 #   release\<构建名>\LICENSE / NOTICE / THIRD_PARTY_NOTICES.md / ASSETS.md
 #   release\<构建名>\licenses\  各第三方许可证原文（合规必需，勿删）
 #   release\<构建名>\res\       空目录 + 放置说明（素材由使用者自行准备）
-#   release\<构建名>\config.json / Launch.bat / UserTips.txt
+#   release\<构建名>\config.json / Launch.bat / UserTips.txt / UserTips.en.txt
 #   → dist\<构建名>.zip
 #
 # 重要：本脚本不再把任何角色资源打进发行包。res\ 以空目录（含放置说明）随包分发，
@@ -28,6 +28,7 @@ $AppDir = Join-Path $WorkRelease 'app'
 $Dist = Join-Path $Root 'dist'
 $Project = Join-Path $Root 'SpinePet\src\SpinePet\SpinePet.csproj'
 $UserTipsSource = Join-Path $Root 'UserTips.txt'
+$UserTipsEnglishSource = Join-Path $Root 'UserTips.en.txt'
 $LicenseSource = Join-Path $Root 'LICENSE'
 $LicenseDirectory = Join-Path $Root 'licenses'
 $ComplianceFiles = @(
@@ -48,6 +49,9 @@ if (Test-Path $Release) {
 }
 if (-not (Test-Path -LiteralPath $UserTipsSource -PathType Leaf)) {
     throw "使用说明不存在：$UserTipsSource"
+}
+if (-not (Test-Path -LiteralPath $UserTipsEnglishSource -PathType Leaf)) {
+    throw "英文使用说明不存在：$UserTipsEnglishSource"
 }
 
 # 合规前置检查：授权文件缺失时直接失败，避免产出不含许可证的发行包。
@@ -135,7 +139,11 @@ SpinePet 角色资源目录
 皮肤编号缺省时可使用 00。也可以直接用面板上的 Add 导入 .skel 或 UnityFS bundle。
 
 请保留本目录本身（里面的说明文件可以删除）：应用按此目录解析资源位置。
-素材来源与授权边界见 ASSETS.md，完整使用说明见 UserTips.txt。
+素材来源与授权边界见 ASSETS.md，完整使用说明见 UserTips.txt / UserTips.en.txt。
+
+Keep this directory itself (the note file inside may be deleted): the application
+resolves its resource location from it. For the English user guide see
+UserTips.en.txt; for asset licensing boundaries see ASSETS.md / ASSETS.en.md.
 '@
     Set-Content `
         -LiteralPath (Join-Path $WorkRelease 'res\README.txt') `
@@ -170,21 +178,41 @@ SpinePet 角色资源目录
     $launcher = "@echo off`r`nif not defined WINDIR if defined SystemRoot set `"WINDIR=%SystemRoot%`"`r`nstart `"`" `"%~dp0app\SpinePet.exe`" >nul 2>&1`r`n"
     [IO.File]::WriteAllText((Join-Path $WorkRelease 'Launch.bat'), $launcher)
 
-    # 8) 使用根目录 UserTips.txt 作为唯一说明来源，并附加本次打包信息
+    # 8) 使用根目录 UserTips.txt / UserTips.en.txt 作为唯一说明来源，并附加本次打包信息
+    $buildStamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz'
     $userTips = [IO.File]::ReadAllText($UserTipsSource).TrimEnd()
     $packageInfo = @"
 
 
 【本发布包】
-- 构建时间：$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss zzz')
+- 构建时间：$buildStamp
 - 角色素材：无。发行包不含任何游戏素材，res\ 内只有一份放置说明，请自行准备后导入。
 - 授权：本项目代码 GPL-3.0-or-later（见 LICENSE）；第三方组件见 THIRD_PARTY_NOTICES.md。
 - 对应源码：https://gitee.com/KAIDOYONAGI/my_-spine-pet
             https://github.com/KAIDO-YONAGI/My_SpinePet
+- 英文说明：UserTips.en.txt
 "@
     Set-Content `
         -LiteralPath (Join-Path $WorkRelease 'UserTips.txt') `
         -Value ($userTips + $packageInfo) `
+        -Encoding utf8BOM
+
+    $userTipsEnglish = [IO.File]::ReadAllText($UserTipsEnglishSource).TrimEnd()
+    $packageInfoEnglish = @"
+
+
+[About this package]
+- Built   : $buildStamp
+- Assets  : none. The package ships no game assets; res\ holds only a placement note — supply your own.
+- License : this project's own code is GPL-3.0-or-later (see LICENSE); third-party components are
+            listed in THIRD_PARTY_NOTICES.md.
+- Source  : https://gitee.com/KAIDOYONAGI/my_-spine-pet
+            https://github.com/KAIDO-YONAGI/My_SpinePet
+- Chinese : UserTips.txt
+"@
+    Set-Content `
+        -LiteralPath (Join-Path $WorkRelease 'UserTips.en.txt') `
+        -Value ($userTipsEnglish + $packageInfoEnglish) `
         -Encoding utf8BOM
 
     # 9) 打 zip（顶层带时间戳目录，防止解压时文件散落）
@@ -210,6 +238,7 @@ SpinePet 角色资源目录
     Write-Host "release: $Release（根目录 $rootEntryCount 项，app 内 $appFileCount 个文件）"
     Write-Host "合规:    $($ComplianceFiles -join ', ') + licenses\（$licenseFileCount 份许可证原文）"
     Write-Host "素材:    未包含任何角色资源（res\ 内仅一份放置说明）"
+    Write-Host "说明:    UserTips.txt + UserTips.en.txt"
     Write-Host "zip:     $zipPath（$zipSizeMb MB）"
 }
 finally {

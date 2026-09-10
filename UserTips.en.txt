@@ -1,0 +1,84 @@
+SpinePet Desktop Pet — User Guide
+=================================
+
+(中文版见 UserTips.txt / Chinese version: UserTips.txt)
+
+[Startup and exit]
+- To run a release package, double-click Launch.bat, or start app\SpinePet.exe directly.
+- Double-click the tray icon, or choose Open Panel from the tray menu, to open the configuration panel.
+- Finish Configuration, Alt+F4 or closing the window saves settings and hides the panel; the pet keeps running.
+- The tray menu also offers Show All, Hide All and Exit.
+- Emergency exit shortcut: Ctrl+Alt+Shift+F12.
+
+[Desktop characters]
+- Left click: plays the character's click animation; keeps the current animation when none matches.
+- Hold the left button and drag: moves the character and saves its position; requires "Allow dragging in render mode".
+- Right click a character:
+  · Panel closed: opens the panel and selects / scrolls to that character's entry on the left.
+  · Panel already open: saves and closes the panel.
+
+[Character library (left side)]
+- Click a character card: selects the character and shows its details on the right.
+- Show / Hide: toggles that character's visibility and switches the details pane to it, without forcing the list to scroll.
+- Position: restores that character's default position and switches the details pane to it, without forcing the list to scroll.
+- A white Show/Hide button means the character is currently visible; while Loading, the action cannot be repeated.
+- While you scroll the list, the details pane follows the character at the center of the two-column viewport.
+- Search matches character names and skin information. Ctrl+F focuses it, Down/Enter moves into the results, Esc clears it.
+- Arrow keys select a character; Enter/Space toggles visibility; right-click a card or press Shift+F10 to switch skins.
+- The preview size slider adjusts card size between 50% and 150%.
+
+[Settings (right side)]
+- Animation: chooses and loops one of the character's animations.
+- Desktop frame rate: 30 / 60 / 120 FPS, applied globally.
+- Allow dragging in render mode: controls whether desktop characters can be dragged, applied globally.
+- Scale:
+  · The first value is a base ratio of 0%–100%; 100% corresponds to a base scale of 0.2.
+  · The second is an independent 1.0–5.0 multiplier; it does not change the first value.
+  · Final scale = base ratio ÷ 100 × 0.2 × multiplier, bounded by the character's maximum size.
+  · Reset restores 100% and 1.0×.
+- Animation Speed: 0.10–2.00×; Reset restores 1.00×.
+- Delete Current Skin: after confirmation, sends the current skin directory to the Windows Recycle Bin.
+
+[Adding and managing resources]
+- Add: imports a .skel file, or a UnityFS bundle that follows the naming rules.
+- Scan: re-scans res and reconciles resources you added, deleted or replaced by hand.
+- Folder: opens the res directory currently in use; it is created automatically when missing.
+- When placing resources by hand, use the layout below; 00 may be used when a skin code is absent:
+    res\<character name>\<skin code>\standing\<resource name>.skel
+    res\<character name>\<skin code>\standing\<resource name>.atlas
+    res\<character name>\<skin code>\standing\<resource name>.png
+    res\<character name>\<skin code>\icons\<resource name>_icon.png
+- Icons are optional; press Scan after placing resources to refresh the character library.
+
+[Release package layout]
+- Launch.bat: recommended entry point.
+- config.json: portable configuration — characters, visibility, position, scale, animation, speed, global settings.
+- res\: character resource library. The package contains **no** resources, only a placement note;
+  put your resources there and press Scan (see the next section).
+- app\: application payload and internal tools — do not rename.
+- Logs\: log directory created at runtime, useful for troubleshooting.
+- LICENSE / NOTICE: this project's open-source license (GPL-3.0-or-later) and copyright notice.
+- THIRD_PARTY_NOTICES.md: third-party components and licenses.
+- ASSETS.md: asset sourcing and licensing boundaries.
+- licenses\: verbatim third-party license texts — do not delete.
+
+[Assets and licensing]
+- This package contains no game character assets (.skel / .atlas / .png); you must supply your own.
+- Character assets are owned by their respective rights holders (for example, NIKKE-related assets belong to
+  Shift Up Corp.). They are not covered by this project's open-source license, and this project has no
+  authority to license them to you.
+- Make sure yourself that the assets you hold come from a lawful source and that your use of them is permitted
+  where you live. The bundled import/unpack tools only process files you lawfully hold; they do not download
+  or unlock anything for you.
+- This project is free forever: no ads, no donations, no paywall, and it distributes no assets.
+- The project's own code is licensed GPL-3.0-or-later; third-party components keep their own licenses.
+  The Spine runtime in particular requires every user to hold their own Spine Editor license —
+  see THIRD_PARTY_NOTICES.md.
+
+[Windows and multiple instances]
+- The configuration window is borderless: drag empty areas to move it, drag its edges to resize it.
+- Launching the application twice from the same directory activates the existing instance.
+- EXEs in different build directories use independent instances and can run side by side.
+
+[Uninstalling]
+- A portable package can simply be deleted as a whole folder; configuration, resources and logs all live inside it.

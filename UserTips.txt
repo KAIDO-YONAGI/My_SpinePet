@@ -1,6 +1,8 @@
 SpinePet 桌宠使用说明
 ====================
 
+（English version: UserTips.en.txt）
+
 【启动与退出】
 - 发布包请双击 Launch.bat，或直接运行 app\SpinePet.exe。
 - 双击托盘图标，或在托盘菜单选择 Open Panel，可打开配置面板。
