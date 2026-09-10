@@ -25,6 +25,7 @@ desktop.ini
 
 # 本地专用第三方工具与脚本（不入库，仅本机保留）
 /tools/SpineSkeletonDataConverter/
+/tools/nikke-extract/
 /tools/build-nikkedb-contact-sheets.ps1
 
 # Python 编译产物

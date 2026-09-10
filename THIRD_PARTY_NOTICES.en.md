@@ -19,11 +19,11 @@ license texts live in `licenses/` (release packages ship a copy of that folder t
 | .NET 9 Runtime (`win-x64` self-contained publish) | 9.x | .NET Foundation and Contributors | MIT | **Yes** (self-contained publish embeds the runtime) |
 | UnityPy | 1.24.1 | K0lb3 | MIT | No (installed by the user with `pip`) |
 | Pillow | 12.0.0 | Secret Labs AB / Fredrik Lundh / Jeffrey A. Clark and contributors | MIT-CMU (HPND) | No (installed by the user with `pip`) |
-| pycryptodome | 3.x | Legrandin and contributors | Public Domain (some files BSD-2-Clause) | No (installed by the user with `pip`) |
+
 | xunit | 2.9.3 | xUnit.net contributors | Apache-2.0 | No (test project only) |
 | xunit.runner.visualstudio | 3.1.5 | xUnit.net contributors | Apache-2.0 | No (test project only) |
 | Microsoft.NET.Test.Sdk | 17.14.1 | Microsoft Corporation | MIT | No (test project only) |
-| NikkeTools decryption routine (ported into `tools/nikke-extract/extract_skillcut.py`) | 2022 | FZFalzar / svatyvabin — https://github.com/FZFalzar/svatyvabin | MIT | Not distributed, but the ported code is part of this repository |
+
 
 License texts:
 
@@ -37,10 +37,9 @@ licenses/pillow-MIT-CMU.txt                  MIT-CMU (HPND)
 ```
 
 For components that are never redistributed (xunit, Microsoft.NET.Test.Sdk,
-pycryptodome, NikkeTools, UnityPy, Pillow), the license shown is taken from the
-respective package metadata or upstream repository; obtain the authoritative text
-from those projects. UnityPy, Pillow and pycryptodome are installed by the user
-with `pip` and are not bundled.
+UnityPy, Pillow), the license shown is taken from the respective package metadata
+or upstream repository; obtain the authoritative text from those projects.
+UnityPy and Pillow are installed by the user with `pip` and are not bundled.
 
 ## Two components that need particular attention
 

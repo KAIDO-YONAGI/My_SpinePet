@@ -88,22 +88,6 @@ res\
 - `SpinePet\tools\battle-catalog-importer` 可批量审计/导入完整的 Aim/Cover 组合，
   但必须显式给出资源目录；不完整或非 4.1 的组合会被跳过。
 
-### 方式 C：爆裂（skillcut）动画
-
-`tools\nikke-extract\extract_skillcut.py` 是爆裂动画的提取管线：扫描游戏 `eb` 目录、
-解密 `NKAB` bundle、用 UnityPy 枚举名字含 `skillcut` 的 TextAsset，并把
-`.skel` / `.atlas` / 被引用的贴图导出为 PNG，输出到
-`<输出目录>\<cXXX[_skin]>\<cXXX[_skin]_skillcut>.{skel,atlas,png}`。
-
-```powershell
-py -3.12 tools\nikke-extract\extract_skillcut.py <游戏 eb 目录或游戏根目录> --out <输出目录>
-```
-
-需要 Python 3.12 与 `UnityPy`、`pycryptodome`、`Pillow` 三个包。
-**脚本只处理你自己持有的游戏文件**，不会替你寻找、下载或解锁任何内容；
-其中的 NKAB 解密算法移植自 [FZFalzar/svatyvabin NikkeTools](https://github.com/FZFalzar/svatyvabin)
-（MIT, 2022），归属声明见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
-
 ## 桌面交互
 
 | 操作 | 行为 |

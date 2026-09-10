@@ -20,8 +20,7 @@
 | xunit | 2.9.3 | xUnit.net contributors | Apache-2.0 | 否（仅测试工程） |
 | xunit.runner.visualstudio | 3.1.5 | xUnit.net contributors | Apache-2.0 | 否（仅测试工程） |
 | Microsoft.NET.Test.Sdk | 17.14.1 | Microsoft Corporation | MIT | 否（仅测试工程） |
-| pycryptodome | 3.x | Legrandin and contributors | Public Domain（部分文件 BSD-2-Clause） | 否（由使用者自行 `pip install`） |
-| NikkeTools 解密算法（移植入 `tools/nikke-extract/extract_skillcut.py`） | 2022 | FZFalzar / svatyvabin（https://github.com/FZFalzar/svatyvabin） | MIT | 否（不随产物分发，但移植代码属于本仓库） |
+
 
 许可证原文位置：
 

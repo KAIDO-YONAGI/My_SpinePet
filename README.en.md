@@ -106,23 +106,6 @@ character shows up as one card in the panel.
   sets in bulk, but it requires an explicit resource directory list; incomplete
   or non-4.1 pairs are skipped.
 
-### Option C: burst (skill cut-in) animations
-
-`tools\nikke-extract\extract_skillcut.py` is an auxiliary extraction pipeline for
-NIKKE burst animations. It scans an `eb` directory, decrypts `NKAB` bundles,
-enumerates `skillcut` TextAssets through UnityPy and exports
-`.skel` / `.atlas` / referenced textures as PNG into
-`<out>\<cXXX[_skin]>\<cXXX[_skin]_skillcut>.{skel,atlas,png}`.
-
-```powershell
-py -3.12 tools\nikke-extract\extract_skillcut.py <game eb directory or game root> --out <output directory>
-```
-
-It requires Python 3.12 with `UnityPy`, `pycryptodome` and `Pillow`. **You must
-supply your own game files** — the script locates, downloads and unlocks nothing.
-Its NKAB decryption routine is ported from
-[FZFalzar/svatyvabin NikkeTools](https://github.com/FZFalzar/svatyvabin) (MIT,
-2022); see [THIRD_PARTY_NOTICES.en.md](THIRD_PARTY_NOTICES.en.md).
 
 ## Desktop interaction
 
