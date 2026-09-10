@@ -12,6 +12,166 @@ the battle state model in [`Aim_Cover_Proposal.md`](Y_MultipleAgentWorkflow/Reso
 This document is a **user-facing summary** of those; where they disagree, the
 specification wins.
 
+## Complete worked example: one import, start to finish
+
+> Sections 0–7 are the rules; **this section is a walkthrough you can follow directly**.
+> Every resulting path below comes from real resources on this machine and can be
+> checked against `SpinePet\res` directly.
+
+### The shared skeleton (identical for all four kinds)
+
+```text
+(1) Intake     zip → zip-intake script; folders → move into resources\Characters\<normalised name>
+(2) List       write down exactly which resources this run touches (never scan the whole library)
+(3) Pre-check  Spine 4.1? all three files present? identity and new ID? icon source?
+(4) Write      res\<full resource name>\<skin code>\<state>\
+(5) Register   add the new ID to CharacterNames.json → only takes effect after dotnet build
+(6) Verify     exit the app → write → start it → Scan → see section 5
+```
+
+### Example 1: standing (the easy path, in-app Add)
+
+- **Input**: `c472_00.skel` + `c472_00.atlas` + `c472_00.png` (same Spine 4.1 export, same base name)
+- **Action**: pick `c472_00.skel` with **Add**; the app validates skeleton/atlas/textures and
+  writes **transactionally**, taking the display name from `CharacterNames.json`
+  (`472 → Scarlet Overload`), then tries to fetch that skin's icon
+- **Result** (real):
+
+```text
+res\Scarlet Overload\00\standing\c472_00.skel
+res\Scarlet Overload\00\standing\c472_00.atlas
+res\Scarlet Overload\00\standing\c472_00.png
+res\Scarlet Overload\00\icons\c472_00_icon.png
+```
+
+- **Verify**: press `Scan` → the `Scarlet Overload` card appears, default animation `idle`,
+  scale 100% / 1.0×, hidden by default (never auto-shown)
+
+### Example 2: a standing variant (you must renumber: `191_02` → `19102`)
+
+- **Input**: source resource `Alice Variant 02`, skeleton originally `c191_02_00.skel`
+  (source character ID `191`, skin `02`)
+- **Action**:
+  1. New ID = `191` + `02` = `19102`; **only the character digit field changes, the skin
+     number keeps its source value `02`**
+  2. `c191_02_00.skel` → `c19102_02_00.skel`, and rename the same-named `.atlas` too
+  3. Rename the **page PNG names declared in the atlas header** and the texture files
+     accordingly — page names follow the atlas declaration and **need not equal the
+     skeleton base name**: this set has skeleton `c19102_02_00.skel` but pages
+     `c19102_02.png` and `c19102_02_2.png` (multi-page atlases get `_2`, `_3` suffixes)
+  4. Add `"19102": "Alice Variant 02"` to `CharacterNames.json`
+  5. `dotnet build src\SpinePet\SpinePet.csproj -c Release`
+- **Result** (real):
+
+```text
+res\Alice Variant 02\02\standing\c19102_02_00.skel
+res\Alice Variant 02\02\standing\c19102_02_00.atlas
+res\Alice Variant 02\02\standing\c19102_02.png        <- page 1 as declared by the atlas
+res\Alice Variant 02\02\standing\c19102_02_2.png      <- page 2 as declared by the atlas
+res\Alice Variant 02\02\icons\c19102_02_icon.png
+```
+
+### Example 3: battle (pairwise, audit before import)
+
+- **Input**: the `standing` / `aim` / `cover` sets of one skin (example: `Anis Star`, ID `0170`)
+- **Commands**:
+
+```powershell
+# (1) audit only — writes nothing
+dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- `
+  --audit resources\Characters "Anis Star"
+
+# (2) import once every audited item is confirmed
+dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- `
+  resources\Characters SpinePet\res "Anis Star"
+```
+
+- **What the audit output looks like** (fields as observed): `CompleteSets` carries
+  `Identity: ResourceName=c0170_aim, CharacterCode=0170, SkinCode=aim, DisplayName=Anis Star`,
+  and only entries with `Standing` / `Aim` / `Cover` all present are counted
+- **Result** (real):
+
+```text
+res\Anis Star\00\standing\c0170_00.skel / .atlas / .png
+res\Anis Star\00\aim\c0170_aim_00.skel / .atlas / .png
+res\Anis Star\00\cover\c0170_cover_00.skel / .atlas / .png
+res\Anis Star\00\icons\c0170_00_icon.png
+```
+
+- **Note**: with only one side present (for example aim alone) **do not import it** — it stays
+  an ordinary standing character. Single-state resources (favorites) are skipped by the audit
+  outright: specifying `Bay Favorite` put it in `SkippedEntries` (aim/cover both false) in testing.
+
+### Example 4: burst (zip intake → take Lobby → renumber)
+
+- **Input zip**: `PC _ Computer - Goddess of Victory_ Nikke - Burst - Helm_ Aquamarine.zip`
+- **Command**:
+
+```powershell
+pwsh -NoProfile -File 'SpinePet\tools\zip-intake\Import-ResourceZip.ps1' -Zip '<full path to zip>'
+```
+
+- **Observed output** (the script run against that real zip in a temporary directory):
+
+```text
+=== skeleton set analysis ===
+  Battle\Sprite Sheet and Other Assets\c353_00_skillcut.skel  character 353  atlas:OK
+  Lobby\Sprite Sheet and Other Assets\c353_00_skillcut.skel   character 353  atlas:OK
+
+archived: resources\Characters\Helm - Aquamarine Burst\Aquamarine
+zip moved to: resources\zips
+```
+
+- **Then**: Battle and Lobby skillcut are identical → **take Lobby**; the directory name ends
+  with ` Burst`; renumbering follows Example 2
+- **Result** (the real Cinderella set; source `515_00` → local `5150`):
+
+```text
+res\Cinderella Crystal Wave Burst\00\standing\c5150_00_skillcut.skel
+res\Cinderella Crystal Wave Burst\00\standing\c5150_00_skillcut.atlas
+res\Cinderella Crystal Wave Burst\00\standing\c5150_00_skillcut.png
+res\Cinderella Crystal Wave Burst\00\standing\c5150_00_skillcut.attachments.exclude   (only if cleaned)
+res\Cinderella Crystal Wave Burst\00\icons\c5150_00_icon.png
+CharacterNames.json: "5150": "Cinderella Crystal Wave Burst"
+```
+
+- **Note**: a skillcut `idle` may show only the upper body — that is the source design, not an
+  import error
+
+### Example 5: favorite (prefix the local ID with 9)
+
+- **Input**: `favorite_c072_00.skel` + `.atlas` + `.png` (original number `072` = Diesel)
+- **Action**:
+  1. Local ID = `9` + `072` = `9072`, skin always `00`, display name `Diesel Favorite`
+  2. Rename atlas page references and the texture to `c9072_00.png`
+  3. Look the icon up with the **original** number `si_c072_00_s.png`, copy it as `c9072_00_icon.png`
+  4. Add `"9072": "Diesel Favorite"` to `CharacterNames.json`
+- **Result** (real):
+
+```text
+res\Diesel Favorite\00\standing\c9072_00.skel
+res\Diesel Favorite\00\standing\c9072_00.atlas
+res\Diesel Favorite\00\standing\c9072_00.png
+res\Diesel Favorite\00\icons\c9072_00_icon.png
+```
+
+- **Note**: never enters battle and gets no aim/cover directories; its resident animation is
+  exactly `idle_merged`, and clicking falls back to `expression_merged`
+
+### Verifying everything once the imports are done
+
+```powershell
+# per resource: are all texture pages declared by the atlas present? (spec section 5 script)
+$dir = 'SpinePet\res\<full resource name>\<skin code>\standing'
+Get-Content "$dir\<resource>.atlas" |
+  Where-Object { $_.Trim() -match '\.(png|jpg|jpeg|webp)$' } |
+  Select-Object -Unique | ForEach-Object {
+    if (-not (Test-Path "$dir\$($_.Trim())")) { Write-Error "Missing atlas page: $($_.Trim())" } }
+```
+
+Then start SpinePet → `Scan` → confirm per card: name, icon, default `idle`, click animation and
+drag bounds.
+
 ## 0. Three things to remember first
 
 1. The application accepts exactly one layout: `res\<full resource name>\<skin code>\<state>\`,

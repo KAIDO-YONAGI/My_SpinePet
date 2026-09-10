@@ -10,6 +10,160 @@
 射击状态模型见 [`Aim_Cover_Proposal.md`](Y_MultipleAgentWorkflow/Resources/StateSupport/Aim_Cover_Proposal.md)）。
 本文是它们的**使用者视角汇总**；两者冲突时以规范文档为准。
 
+## 完整示例：一次导入从头到尾
+
+> 第 0–7 节是规范条文，**这一节是照着就能做的完整示例**。
+> 下面所有落地路径都取自本机真实资源（可在 `SpinePet\res` 里直接对照）。
+
+### 通用骨架（四类资源都一样）
+
+```text
+① 入库        zip → zip-intake 脚本；文件夹 → 剪切到 resources\Characters\<规范名>
+② 定清单      这次只处理哪几套，写下来（禁止扫描全库）
+③ 预检        骨骼 Spine 4.1？三件套齐全？身份与新 ID？头像来源？
+④ 写入        res\<资源全名>\<皮肤编号>\<状态>\
+⑤ 登记        CharacterNames.json 加新 ID → dotnet build 才生效
+⑥ 验收        退出应用 → 写入 → 启动 → Scan → 见 §5
+```
+
+### 示例 1：待机（最省事，走应用内 Add）
+
+- **输入**：`c472_00.skel` + `c472_00.atlas` + `c472_00.png`（同一次 Spine 4.1 导出，三件套同名）
+- **动作**：面板 `Add` 选中 `c472_00.skel`；应用校验骨骼/atlas/贴图后**事务写入**，
+  显示名来自 `CharacterNames.json` 的 `472 → Scarlet Overload`，随后自动尝试补该皮肤图标
+- **落地结果**（真实）：
+
+```text
+res\Scarlet Overload\00\standing\c472_00.skel
+res\Scarlet Overload\00\standing\c472_00.atlas
+res\Scarlet Overload\00\standing\c472_00.png
+res\Scarlet Overload\00\icons\c472_00_icon.png
+```
+
+- **验收**：点 `Scan` → 卡片 `Scarlet Overload` 出现，默认动画 `idle`，缩放 100% / 1.0 倍，
+  默认隐藏（不自动显示）
+
+### 示例 2：待机变体（要自己改号：`191_02` → `19102`）
+
+- **输入**：源资源 `Alice Variant 02`，骨骼原名 `c191_02_00.skel`（源角色 ID `191`、皮肤 `02`）
+- **动作**：
+  1. 新 ID = `191` + `02` = `19102`；**只改角色数字段，皮肤号保留 `02`**
+  2. `c191_02_00.skel` → `c19102_02_00.skel`，同名 `.atlas` 一并改名
+  3. atlas 首行声明的**页面 png 名**与贴图文件名按新编号同步改名
+     —— 页面名以 atlas 自身声明为准，**不一定等于骨骼名**：本机这套骨骼是
+     `c19102_02_00.skel`，而页面是 `c19102_02.png` 与 `c19102_02_2.png`
+     （多页 atlas 会自动带 `_2`、`_3` 后缀）
+  4. `CharacterNames.json` 加 `"19102": "Alice Variant 02"`
+  5. `dotnet build src\SpinePet\SpinePet.csproj -c Release`
+- **落地结果**（真实）：
+
+```text
+res\Alice Variant 02\02\standing\c19102_02_00.skel
+res\Alice Variant 02\02\standing\c19102_02_00.atlas
+res\Alice Variant 02\02\standing\c19102_02.png        ← atlas 声明的第 1 页
+res\Alice Variant 02\02\standing\c19102_02_2.png      ← atlas 声明的第 2 页
+res\Alice Variant 02\02\icons\c19102_02_icon.png
+```
+
+### 示例 3：射击（成对，先审计后导入）
+
+- **输入**：同一皮肤下的 `standing` / `aim` / `cover` 三套（示例：`Anis Star`，ID `0170`）
+- **命令**：
+
+```powershell
+# ① 只审计，不写任何文件
+dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- `
+  --audit resources\Characters "Anis Star"
+
+# ② 审计逐项确认后再导入
+dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- `
+  resources\Characters SpinePet\res "Anis Star"
+```
+
+- **审计输出长这样**（字段实测）：`CompleteSets` 里出现
+  `Identity: ResourceName=c0170_aim, CharacterCode=0170, SkinCode=aim, DisplayName=Anis Star`，
+  `Standing` / `Aim` / `Cover` 三套齐全才会计入
+- **落地结果**（真实）：
+
+```text
+res\Anis Star\00\standing\c0170_00.skel / .atlas / .png
+res\Anis Star\00\aim\c0170_aim_00.skel / .atlas / .png
+res\Anis Star\00\cover\c0170_cover_00.skel / .atlas / .png
+res\Anis Star\00\icons\c0170_00_icon.png
+```
+
+- **注意**：只有一边（例如只有 aim）时**不要导入**，它就当普通待机角色用；
+  单状态资源（如珍藏品）会被审计直接跳过——实测指定 `Bay Favorite` 时进入
+  `SkippedEntries`（aim/cover 均为 false）
+
+### 示例 4：爆裂（zip 入库 → 取 Lobby → 改号）
+
+- **输入 zip**：`PC _ Computer - Goddess of Victory_ Nikke - Burst - Helm_ Aquamarine.zip`
+- **命令**：
+
+```powershell
+pwsh -NoProfile -File 'SpinePet\tools\zip-intake\Import-ResourceZip.ps1' -Zip '<zip 完整路径>'
+```
+
+- **实测输出**（脚本在临时目录里跑同一个真实 zip 的结果）：
+
+```text
+=== 骨骼集分析 ===
+  Battle\Sprite Sheet and Other Assets\c353_00_skillcut.skel  角色 353  atlas:OK
+  Lobby\Sprite Sheet and Other Assets\c353_00_skillcut.skel   角色 353  atlas:OK
+
+已入库：resources\Characters\Helm - Aquamarine Burst\Aquamarine
+zip 已移至：resources\zips
+```
+
+- **接着做**：Battle 与 Lobby 的 skillcut 相同 → **取 Lobby**；目录名以 ` Burst` 结尾；
+  改号规则同示例 2
+- **落地结果**（真实的 Cinderella 那套，源 `515_00` → 本地 `5150`）：
+
+```text
+res\Cinderella Crystal Wave Burst\00\standing\c5150_00_skillcut.skel
+res\Cinderella Crystal Wave Burst\00\standing\c5150_00_skillcut.atlas
+res\Cinderella Crystal Wave Burst\00\standing\c5150_00_skillcut.png
+res\Cinderella Crystal Wave Burst\00\standing\c5150_00_skillcut.attachments.exclude   （做过清理才有）
+res\Cinderella Crystal Wave Burst\00\icons\c5150_00_icon.png
+CharacterNames.json: "5150": "Cinderella Crystal Wave Burst"
+```
+
+- **注意**：skillcut 的 `idle` 可能只有半身，这是源资源设计，不是导入错误
+
+### 示例 5：珍藏品（本地编号前加 9）
+
+- **输入**：`favorite_c072_00.skel` + `.atlas` + `.png`（原编号 `072` = Diesel）
+- **动作**：
+  1. 本地编号 = `9` + `072` = `9072`，皮肤固定 `00`，显示名 `Diesel Favorite`
+  2. atlas 页引用与贴图改名 `c9072_00.png`
+  3. 图标用**原编号**查 `si_c072_00_s.png`，复制后命名为 `c9072_00_icon.png`
+  4. `CharacterNames.json` 加 `"9072": "Diesel Favorite"`
+- **落地结果**（真实）：
+
+```text
+res\Diesel Favorite\00\standing\c9072_00.skel
+res\Diesel Favorite\00\standing\c9072_00.atlas
+res\Diesel Favorite\00\standing\c9072_00.png
+res\Diesel Favorite\00\icons\c9072_00_icon.png
+```
+
+- **注意**：不进 Battle、不建 aim/cover；默认常驻动画是精确 `idle_merged`，
+  点击动画回退到 `expression_merged`
+
+### 全部导入完成后统一验收
+
+```powershell
+# 逐套检查 atlas 声明的贴图页是否齐全（规范 §5 的脚本）
+$dir = 'SpinePet\res\<资源全名>\<皮肤编号>\standing'
+Get-Content "$dir\<resource>.atlas" |
+  Where-Object { $_.Trim() -match '\.(png|jpg|jpeg|webp)$' } |
+  Select-Object -Unique | ForEach-Object {
+    if (-not (Test-Path "$dir\$($_.Trim())")) { Write-Error "Missing atlas page: $($_.Trim())" } }
+```
+
+然后启动 SpinePet → `Scan` → 逐张确认：名称、头像、默认 `idle`、点击动画、拖动边界。
+
 ## 0. 先记住三件事
 
 1. 程序只认一种布局：`res\<资源全名>\<皮肤编号>\<状态>\`，骨骼文件名必须带
