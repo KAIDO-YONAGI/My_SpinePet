@@ -10,7 +10,7 @@ development and automated pipelines lives in
 cleanup in [`SpineResource_Match_Clean_Guide.md`](Y_MultipleAgentWorkflow/Resources/MatchClean/SpineResource_Match_Clean_Guide.md),
 the battle state model in [`Aim_Cover_Proposal.md`](Y_MultipleAgentWorkflow/Resources/StateSupport/Aim_Cover_Proposal.md)).
 This document is a **user-facing summary** of those; where they disagree, the
-specification wins.
+specification wins. Runtime and bare-Windows dependencies are listed in [section 8](#8-runtime-requirements-bare-windows).
 
 ## Complete worked example: one import, start to finish
 
@@ -378,3 +378,47 @@ overwrite files while the application is running; or query nikkedb with a `9NNN`
 - **Cleanup is optional**: off by default; if you do it, work on a staging copy,
   prefer `.attachments.exclude` over texture masking, and never delete `*_eyebg`
   (eye whites).
+
+## 8. Runtime requirements (bare Windows)
+
+The application itself is a **self-contained publish**: the target machine needs
+**no .NET installation** and **no VC++ redistributable** (the package carries
+`hostfxr.dll`, `coreclr.dll`, `PresentationFramework.dll`, `vcruntime140_cor3.dll`
+and `D3DCompiler_47_cor3.dll`). Windows 10 or later is required.
+
+Not every capability is dependency-free, though. Match the feature you need:
+
+| Capability | Runs on bare Windows? | What it needs |
+| --- | --- | --- |
+| Starting the pet, rendering, interacting, placing files by hand + `Scan` | Yes | Nothing (Windows 10+) |
+| `Add` importing a `.skel` (skeleton + atlas + textures) | Yes | Nothing — pure C# path |
+| `Add` importing a **UnityFS bundle** | No | Python 3 + `pip install -r app\Tools\requirements.txt` (UnityPy, Pillow) |
+| Automatic / manual **icon download** | No | Same as above; the script uses the built-in `powershell.exe`, but unpacking needs Python |
+| **Battle aim/cover import** | Partly | Needs `BattleCatalogImporter`: build it with the .NET SDK, or use a package built with `-IncludeImportTools` (self-contained exe, no .NET required) |
+| zip intake / atlas cleanup / legacy layout migration | Yes | Nothing; those `.ps1` files run on **the PowerShell 5.1 that ships with Windows** (Chinese output included — UTF-8 BOM guarantees no mojibake) |
+| Building from source / packaging a release | No | .NET 9 SDK (packaging additionally uses `pwsh` 7, see `tools\Publish.bat`) |
+
+Run the self-check first on any new machine — it reports item by item what is
+missing and which feature each gap costs you:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File Check-Environment.ps1
+```
+
+The script sits in the release package root and prints `[OK] / [--] / [!!]` lines
+with a conclusion; it only needs the PowerShell that Windows already has.
+
+Filling the gaps:
+
+```powershell
+# (1) UnityFS bundle import / icon download
+python -m pip install -r app\Tools\requirements.txt
+
+# (2) Battle aim/cover import: on a development machine, repackage with the
+#     self-contained CLI included (the target machine then needs no .NET)
+pwsh -NoProfile -File tools\Package-Release.ps1 -IncludeImportTools
+```
+
+**You can skip Python entirely**: place `.skel` + the same-named `.atlas` + every
+texture page into `res\`, or import the `.skel` directly with `Add`, then press
+`Scan` — neither path touches Python.

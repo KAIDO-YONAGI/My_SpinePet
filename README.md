@@ -41,6 +41,8 @@
 - 从源码构建：.NET 9 SDK。
 - 角色资源：Spine 4.1 导出的 `.skel` / `.atlas` / `.png`，或符合命名规则的 UnityFS bundle。
 - 用 Add 导入 UnityFS bundle 时需要本机 Python 环境（UnityPy + Pillow）。
+- 裸机部署不需要 VC++ 运行库；包内 `Check-Environment.ps1` 可一键自检缺什么、缺了影响哪个功能，
+  完整依赖清单（含“哪些能力零依赖、哪些需要 Python”）见 [`IMPORT.md` 第 8 节](IMPORT.md)。
 
 ## 快速开始
 
@@ -138,6 +140,8 @@
   UserTips.txt               使用说明（中文，含本次构建信息）
   UserTips.en.txt            User guide (English)
   IMPORT.md / IMPORT.en.md   素材导入指南（四类资源、格式改造、工具、AI 辅助、排查）
+  Check-Environment.ps1      运行环境自检（Windows 自带 PowerShell 即可运行）
+  tools\import\              可选：自包含的射击 aim/cover 导入工具（用 -IncludeImportTools 打包才有）
   LICENSE / NOTICE           本项目许可证（GPL-3.0-or-later）与版权声明
   THIRD_PARTY_NOTICES.md     第三方组件与授权清单
   ASSETS.md                  素材来源与授权边界
@@ -186,6 +190,10 @@ dotnet run --project SpinePet\src\SpinePet\SpinePet.csproj
   且导出为 Spine 4.1；若两个角色 ID 会映射到相同的显示名与皮肤目录，导入会停止，
   需要先修正 `CharacterNames.json`。
 - **界面语言**：自包含发布只保留 `zh-Hans` 语言资源。
+- **没有 Python / 装不上 Python？** 仍然可用：手工把 `.skel` + 同名 `.atlas` + 全部贴图页放进
+  `res\`，或用 `Add` 直接导入 `.skel`，再点 `Scan`。受影响的只有 UnityFS bundle 导入与图标自动下载。
+- **不确定目标机缺什么？** 在包内运行
+  `powershell -NoProfile -ExecutionPolicy Bypass -File Check-Environment.ps1`。
 
 ## 素材与授权
 

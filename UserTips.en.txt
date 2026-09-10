@@ -68,6 +68,10 @@ SpinePet Desktop Pet — User Guide
 - ASSETS.md: asset sourcing and licensing boundaries.
 - licenses\: verbatim third-party license texts — do not delete.
 - IMPORT.md / IMPORT.en.md: asset import guide (four kinds, format rework, tooling, AI assistance, troubleshooting).
+- Check-Environment.ps1: environment self-check. Inside the package run
+    powershell -NoProfile -ExecutionPolicy Bypass -File Check-Environment.ps1
+  It lists what is missing and which feature each gap costs (for example, no Python means
+  no UnityFS bundle import and no automatic icon download).
 
 [Assets and licensing]
 - This package contains no game character assets (.skel / .atlas / .png); you must supply your own.

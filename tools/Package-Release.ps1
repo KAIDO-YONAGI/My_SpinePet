@@ -1,4 +1,4 @@
-# 打包 SpinePet 便携版（时间戳目录 + app\ 子文件夹布局）：
+﻿# 打包 SpinePet 便携版（时间戳目录 + app\ 子文件夹布局）：
 #   release\<构建名>\app\      程序本体（publish 自包含多文件，仅 zh-Hans 语言资源）
 #   release\<构建名>\LICENSE / NOTICE / THIRD_PARTY_NOTICES.md / ASSETS.md
 #   release\<构建名>\IMPORT.md / IMPORT.en.md   素材导入指南
@@ -15,7 +15,8 @@
 [CmdletBinding()]
 param(
     [string] $ReleaseName = ('SpinePet-Release-' + (Get-Date -Format 'yyyy-MM-dd-HH mm ss')),
-    [string] $Character = ''
+    [string] $Character = '',
+    [switch] $IncludeImportTools
 )
 
 $ErrorActionPreference = 'Stop'
@@ -42,6 +43,7 @@ $GuideFiles = @(
     'IMPORT.md',
     'IMPORT.en.md'
 )
+$EnvironmentCheckFile = 'SpinePet\tools\Check-Environment.ps1'
 $stage = $null
 $tempZipPath = $null
 
@@ -72,6 +74,10 @@ foreach ($name in $GuideFiles) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
         throw "导入指南不存在：$path"
     }
+}
+
+if (-not (Test-Path -LiteralPath (Join-Path $Root $EnvironmentCheckFile) -PathType Leaf)) {
+    throw "环境自检脚本不存在：$EnvironmentCheckFile"
 }
 
 if (-not (Test-Path -LiteralPath $LicenseDirectory -PathType Container)) {
@@ -137,6 +143,22 @@ try {
     # 4c) 素材导入指南（四类资源、格式改造、工具、AI 辅助、排查）
     foreach ($name in $GuideFiles) {
         Copy-Item -LiteralPath (Join-Path $Root $name) -Destination $WorkRelease -Force
+    }
+
+    # 4d) 环境自检脚本：Windows 自带 PowerShell 5.1 即可运行
+    Copy-Item -LiteralPath (Join-Path $Root $EnvironmentCheckFile) -Destination $WorkRelease -Force
+
+    # 4e) 可选（-IncludeImportTools）：自包含的导入 CLI，目标机无需 .NET SDK
+    if ($IncludeImportTools) {
+        $importToolsDir = Join-Path $WorkRelease 'tools\import'
+        New-Item -ItemType Directory -Path $importToolsDir -Force | Out-Null
+        & dotnet publish (Join-Path $Root 'SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj') `
+            -c Release -f net9.0-windows -r win-x64 --self-contained true `
+            -p:DebugType=none -p:SatelliteResourceLanguages=zh-Hans -o $importToolsDir
+        if ($LASTEXITCODE -ne 0) {
+            throw "dotnet publish (import tools) failed (exit $LASTEXITCODE)"
+        }
+        Get-ChildItem $importToolsDir -Recurse -Filter '*.pdb' | Remove-Item -Force
     }
 
     # 5) 空的 res\ 目录 + 放置说明：让应用把资源目录解析为 <发布包>\res
@@ -258,6 +280,12 @@ UserTips.en.txt; for asset licensing boundaries see ASSETS.md / ASSETS.en.md.
     Write-Host "合规:    $($ComplianceFiles -join ', ') + licenses\（$licenseFileCount 份许可证原文）"
     Write-Host "素材:    未包含任何角色资源（res\ 内仅一份放置说明）"
     Write-Host "说明:    UserTips.txt + UserTips.en.txt + IMPORT.md / IMPORT.en.md"
+    Write-Host "环境:    Check-Environment.ps1 (PowerShell 5.1 即可运行)"
+    if ($IncludeImportTools) {
+        Write-Host "导入 CLI: tools\import\BattleCatalogImporter.exe（自包含）"
+    } else {
+        Write-Host "导入 CLI: 未附带（加 -IncludeImportTools 可随包附带，用于射击 aim/cover 导入）"
+    }
     Write-Host "zip:     $zipPath（$zipSizeMb MB）"
 }
 finally {

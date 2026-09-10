@@ -46,6 +46,10 @@ forever: no ads, no donations, no paywall.
   UnityFS bundle that follows the naming rules below.
 - Importing UnityFS bundles with `Add` also needs a local Python environment
   (UnityPy + Pillow).
+- A bare Windows machine needs no VC++ redistributable; run `Check-Environment.ps1`
+  from the package to see item by item what is missing and which feature that costs you.
+  The full dependency matrix (which capabilities are dependency-free and which need
+  Python) is in [section 8 of IMPORT.en.md](IMPORT.en.md).
 
 ## Quick start
 
@@ -158,6 +162,8 @@ Toolbar: `Add` (import), `Scan` (re-scan `res\`), `Folder` (open the current
   UserTips.txt               user guide (Chinese, includes this build's info)
   UserTips.en.txt            user guide (English, includes this build's info)
   IMPORT.md / IMPORT.en.md   asset import guide (four kinds, format rework, tooling, AI assistance, troubleshooting)
+  Check-Environment.ps1      environment self-check (runs on the PowerShell shipped with Windows)
+  tools\import\              optional: self-contained battle aim/cover import tool (only with -IncludeImportTools)
   LICENSE / NOTICE           project license (GPL-3.0-or-later) and copyright notice
   THIRD_PARTY_NOTICES.md     third-party components and licenses
   ASSETS.md                  asset sourcing and licensing boundaries
@@ -216,6 +222,11 @@ bulk Aim/Cover import. See [SpinePet/README.md](SpinePet/README.md) for details.
   directory, the import stops and asks you to fix `CharacterNames.json` first.
 - **UI language**: the self-contained release keeps only the `zh-Hans` satellite
   resources.
+- **No Python, or cannot install it?** Still fine: place `.skel` + the same-named `.atlas`
+  + every texture page into `res\`, or import the `.skel` directly with `Add`, then press
+  `Scan`. Only UnityFS bundle import and automatic icon download are affected.
+- **Not sure what a target machine lacks?** Run
+  `powershell -NoProfile -ExecutionPolicy Bypass -File Check-Environment.ps1` inside the package.
 
 ## Assets and licensing
 

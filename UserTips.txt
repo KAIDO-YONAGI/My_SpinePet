@@ -66,6 +66,9 @@ SpinePet 桌宠使用说明
 - ASSETS.md：素材来源与授权边界说明。
 - licenses\：各第三方许可证原文，请勿删除。
 - IMPORT.md / IMPORT.en.md：素材导入指南（四类资源、格式改造、工具、AI 辅助、排查）。
+- Check-Environment.ps1：运行环境自检。在包内执行
+    powershell -NoProfile -ExecutionPolicy Bypass -File Check-Environment.ps1
+  它会列出缺什么、以及缺了会损失哪个功能（例如没装 Python 就不能用 UnityFS bundle 导入）。
 
 【素材与授权】
 - 本发布包不含任何游戏角色素材（.skel / .atlas / .png），需要你自行准备。

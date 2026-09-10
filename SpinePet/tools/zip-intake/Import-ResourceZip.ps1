@@ -1,4 +1,4 @@
-# 从下载的 Nikke Spine 资源压缩包一键入库。
+﻿# 从下载的 Nikke Spine 资源压缩包一键入库。
 # 用法：./Import-ResourceZip.ps1 -Zip "D:\下载\DOWNLOAD\PC _ Computer - Goddess of Victory_ Nikke - Burst - Helm_ Aquamarine.zip"
 #
 # 做三件事：

@@ -8,7 +8,7 @@
 [`Favorite_Interactive_Import_Guide.md`](Y_MultipleAgentWorkflow/Resources/Load/Favorite_Interactive_Import_Guide.md)，
 清理见 [`SpineResource_Match_Clean_Guide.md`](Y_MultipleAgentWorkflow/Resources/MatchClean/SpineResource_Match_Clean_Guide.md)，
 射击状态模型见 [`Aim_Cover_Proposal.md`](Y_MultipleAgentWorkflow/Resources/StateSupport/Aim_Cover_Proposal.md)）。
-本文是它们的**使用者视角汇总**；两者冲突时以规范文档为准。
+本文是它们的**使用者视角汇总**；两者冲突时以规范文档为准。运行环境与裸机依赖清单见 [第 8 节](#8-运行环境要求裸机)。
 
 ## 完整示例：一次导入从头到尾
 
@@ -346,3 +346,43 @@ Get-Content "$dir\<resource>.atlas" |
 - **珍藏品不进 Battle**：`Favorite` 资源只有单状态，不要为它建 aim/cover。
 - **清理是可选动作**：默认不清理；要做也只在暂存副本上做，
   `.attachments.exclude` 优先于贴图遮罩，`*_eyebg`（眼白）永远不要删。
+
+## 8. 运行环境要求（裸机）
+
+应用本体是**自包含发布**：目标机**不需要**安装 .NET，也**不需要** VC++ 运行库
+（包内自带 `hostfxr.dll`、`coreclr.dll`、`PresentationFramework.dll`、
+`vcruntime140_cor3.dll`、`D3DCompiler_47_cor3.dll`），系统要求 Windows 10 或更高。
+
+但并非所有能力都零依赖，按你要用的功能对号入座：
+
+| 能力 | 裸机可跑？ | 需要什么 |
+| --- | --- | --- |
+| 启动桌宠、显示与交互、手动放文件 + `Scan` | ✅ | 无（Windows 10 及以上） |
+| `Add` 导入 `.skel`（骨架 + atlas + 贴图） | ✅ | 无，纯 C# 路径 |
+| `Add` 导入 **UnityFS bundle** | ❌ | Python 3 + `pip install -r app\Tools\requirements.txt`（UnityPy、Pillow） |
+| 自动 / 手动**图标下载** | ❌ | 同上；脚本本身走 Windows 自带 `powershell.exe`，但解包用 Python |
+| **射击 aim/cover 导入** | ⚠️ | 需要 `BattleCatalogImporter`：装 .NET SDK 自行编译，或使用带 `-IncludeImportTools` 的发行包（内含自包含 exe，无需 .NET） |
+| zip 入库 / atlas 清理 / 旧布局迁移 | ✅ | 无；这些 `.ps1` 已兼容 **Windows 自带的 PowerShell 5.1**（含中文输出，UTF-8 BOM 已确保不乱码） |
+| 从源码构建 / 打包发布 | ❌ | .NET 9 SDK（打包脚本还需 `pwsh` 7，见 `tools\Publish.bat`） |
+
+上机先跑一次自检，它会逐项报告缺什么、以及缺了会损失哪个功能：
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File Check-Environment.ps1
+```
+
+脚本在发行包根目录，输出 `[OK] / [--] / [!!]` 三态并在末尾给结论；它自身只依赖
+Windows 自带的 PowerShell，不需要预先安装任何东西。
+
+补依赖：
+
+```powershell
+# ① UnityFS bundle 导入 / 图标下载
+python -m pip install -r app\Tools\requirements.txt
+
+# ② 射击 aim/cover 导入：在开发机上重新打包并附带自包含 CLI（目标机无需 .NET）
+pwsh -NoProfile -File tools\Package-Release.ps1 -IncludeImportTools
+```
+
+**完全不装 Python 也可用**：把 `.skel` + 同名 `.atlas` + 全部贴图页按布局放进 `res\`，
+或用 `Add` 直接导入 `.skel`，再点 `Scan`——这两条路径不碰 Python。
