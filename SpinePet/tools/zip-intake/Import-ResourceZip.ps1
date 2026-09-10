@@ -1,4 +1,4 @@
-﻿# 从下载的 Nikke Spine 资源压缩包一键入库。
+# 从下载的 Nikke Spine 资源压缩包一键入库。
 # 用法：./Import-ResourceZip.ps1 -Zip "D:\下载\DOWNLOAD\PC _ Computer - Goddess of Victory_ Nikke - Burst - Helm_ Aquamarine.zip"
 #
 # 做三件事：
@@ -32,7 +32,7 @@ if ([string]::IsNullOrWhiteSpace($ZipsDir)) {
 }
 
 if (-not (Test-Path -LiteralPath $Zip)) {
-    throw "zip 不存在：$Zip"
+    throw "zip 不存在：$Zip`n详见 IMPORT.md「出错看哪里」与 §2.1（入库命名规范）"
 }
 $Zip = (Resolve-Path -LiteralPath $Zip).Path
 
@@ -50,7 +50,7 @@ $inner = ($outer -replace ' Burst$', '') -replace '^[A-Za-z]+ - ', ''
 
 $dest = Join-Path $CharactersDir "$outer\$inner"
 if (Test-Path -LiteralPath $dest) {
-    throw "目标已存在，先人工处理：$dest"
+    throw "目标已存在，先人工处理：$dest`n脚本不覆盖已有归档；确认后改名或删除目标，或先看 IMPORT.md §2.1"
 }
 
 # 2. 解压到临时目录，校验顶层只有一个文件夹，然后改名搬入 Characters
@@ -59,7 +59,7 @@ Expand-Archive -LiteralPath $Zip -DestinationPath $tmp
 $tops = Get-ChildItem -LiteralPath $tmp
 if ($tops.Count -ne 1 -or -not $tops[0].PSIsContainer) {
     Remove-Item -LiteralPath $tmp -Recurse -Force
-    throw "zip 顶层不是唯一文件夹，中止：$($tops.Name -join ', ')"
+    throw "zip 顶层不是唯一文件夹，中止：$($tops.Name -join ', ')`n请确认压缩包结构，详见 IMPORT.md §2.1"
 }
 
 New-Item -ItemType Directory -Path (Split-Path $dest -Parent) -Force | Out-Null

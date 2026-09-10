@@ -29,4 +29,7 @@ Console.Error.WriteLine(
     "<resource-directory> [<resource-directory> ...]");
 Console.Error.WriteLine(
     "The resource directory list is required; full-catalog import is disabled.");
+Console.Error.WriteLine(
+    "See IMPORT.md (sections 1.2 and 3.1) for the audit/import workflow and " +
+    "the expected JSON fields.");
 return 2;

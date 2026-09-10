@@ -272,7 +272,10 @@ internal sealed class CharacterLibraryController
                 message += Environment.NewLine + Environment.NewLine +
                     "The standing resources were imported, but the card icon " +
                     "could not be downloaded automatically." +
-                    Environment.NewLine + iconDownload.ErrorMessage;
+                    Environment.NewLine + iconDownload.ErrorMessage +
+                    Environment.NewLine +
+                    "See IMPORT.md section 8: icon download (and UnityFS import) " +
+                    "needs Python plus the packages in tools\\requirements.txt.";
                 messageImage = MessageBoxImage.Warning;
             }
 
@@ -296,7 +299,10 @@ internal sealed class CharacterLibraryController
                 $"bundle-import-failed message={exception.Message}");
             MessageBox.Show(
                 _owner,
-                exception.Message,
+                exception.Message +
+                    Environment.NewLine + Environment.NewLine +
+                    "See IMPORT.md in the release package: section 5 lists the " +
+                    "troubleshooting order, section 1 explains the four resource kinds.",
                 "Character Import Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
@@ -450,7 +456,10 @@ internal sealed class CharacterLibraryController
                 $"skeleton-import-failed message={exception.Message}");
             MessageBox.Show(
                 _owner,
-                exception.Message,
+                exception.Message +
+                    Environment.NewLine + Environment.NewLine +
+                    "See IMPORT.md in the release package: section 5 lists the " +
+                    "troubleshooting order, section 1 explains the four resource kinds.",
                 "Character Import Failed",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);

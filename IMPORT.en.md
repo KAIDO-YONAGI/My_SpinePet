@@ -12,6 +12,51 @@ the battle state model in [`Aim_Cover_Proposal.md`](Y_MultipleAgentWorkflow/Reso
 This document is a **user-facing summary** of those; where they disagree, the
 specification wins. Runtime and bare-Windows dependencies are listed in [section 8](#8-runtime-requirements-bare-windows).
 
+## Import flow at a glance (read this first)
+
+### The six steps
+
+| Step | What you do | Command / result |
+| --- | --- | --- |
+| 1. List | Write down exactly which resources this run touches | A written list — **never** scan the whole library |
+| 2. Intake | zips via the script; folders are **moved** into the archive | `Import-ResourceZip.ps1 -Zip '<zip>'` → `resources\Characters\` |
+| 3. Pre-check | Spine 4.1? all three files? identity and new ID? icon source? | Any gap stays outside `res\` |
+| 4. Write | Lay files out as `res\<full resource name>\<skin code>\<state>\` | Standing / burst / favorite: `Add` or by hand; battle: audit + import commands |
+| 5. Register | Add the new ID to `CharacterNames.json` | Then `dotnet build`, or the name will not apply |
+| 6. Verify | Exit the app → write → start it → `Scan` | Use "where to look when it fails" below, plus sections 4.1 and 5 |
+
+The four kinds in one line each:
+
+- **Standing**: import the `.skel` with `Add`, or drop files into `<skin>\standing\` → `Scan`.
+- **Battle (aim / cover)**: run `battle-catalog-importer --audit` first, then import; the app
+  **generates the battle configuration** for you.
+- **Burst (skillcut)**: import it like standing, with a directory name ending in ` Burst`;
+  prefer Lobby when Battle and Lobby skillcut match.
+- **Favorite**: local ID gets a leading `9`, skin is always `00`, standing only, **never** battle.
+
+### Where to look when it fails
+
+| Symptom / error | Where to look |
+| --- | --- |
+| `Scan` shows nothing at all | Section 5, the 8-step troubleshooting order |
+| `Missing atlas page: xxx.png` | Section 5 step 3; example 2: **page names follow the atlas declaration**, not the skeleton name |
+| The card appears with a wrong or empty name | Section 2.4 — rebuild after editing the name map |
+| "character ID not in the name map" | Section 2.4; for favorites see 1.4 (local ID `9NNN`) |
+| `A character resource already exists` | Section 5, conflict semantics: nothing is overwritten, back up and decide |
+| Rejected: unsupported skeleton version | Section 7 — must be Spine 4.1.x |
+| Two cards swallow each other / a model will not open | Section 2 — never share a prefix or a display name |
+| Wrong icon (very tall image, clearly the wrong art) | Section 7, "pick the icon from the right source" |
+| Icon download failed | Section 8 (no Python); the app falls back to the standing texture, so nothing breaks |
+| Battle resources will not import | Sections 1.2 and 3.1 — use the audit/import commands, `Add` **does not** accept aim/cover |
+| Overwriting files in `res` fails (`Device or resource busy`) | Section 4 — exit SpinePet first |
+| zip intake says the target already exists | Section 2.1 — the script never overwrites; confirm by hand |
+| Not sure what a target machine lacks | `Check-Environment.ps1` in the package; section 8 |
+| You want the authoritative development/automation spec | `Y_MultipleAgentWorkflow\Resources\Load\SpinePet_Resources_Load_Guide.md` |
+
+**One rule of thumb**: start with the matching section of this file; if this file does not say
+enough, section 3.1 explains each tool's output; beyond that, consult the authoritative specs
+under `Y_MultipleAgentWorkflow\`.
+
 ## Complete worked example: one import, start to finish
 
 > Sections 0–7 are the rules; **this section is a walkthrough you can follow directly**.
@@ -184,6 +229,22 @@ drag bounds.
    references, all exported by the same **Spine 4.1.x**. If anything is missing it
    stays in `resources\` and must not enter `res\`.
 
+
+**Rules that apply throughout (condensed from the specification):**
+
+1. Identity comes from the **file name prefix** `c<character ID>_<skin ID>` only — never guess
+   from a directory name.
+2. **Without an explicit list you must not scan or import the whole library** — handle only the
+   resources you wrote down.
+3. Files written into `res\` are **copied verbatim**: no content edits, no line-ending changes,
+   unless cleanup was explicitly requested.
+4. Source resources are **intaken once**; later adjustments change `res\` or the name map only,
+   never the source archive.
+5. Icons are part of the **pre-check**, not a later patch-up: when no icon can be located,
+   report `MissingIcon` and stop that item.
+6. At runtime the application only touches its `res\` and the package-root `tools\` — it never
+   scans `resources\` or an upstream mirror.
+
 ## 1. The four resource kinds
 
 | Kind | Directory signature | Skeleton / animations | How to import | Key notes |
@@ -192,6 +253,23 @@ drag bounds.
 | **Battle** aim / cover | `<skin>\aim\` + `<skin>\cover\` | both required to build Battle | `battle-catalog-importer` (**explicit list required**) | One missing side ⇒ plain standing character; **Add does not accept aim/cover** |
 | **Burst** skillcut | directory name ends with ` Burst` | close-up framing | same as standing | Battle and Lobby skillcut are usually byte-identical, so **prefer Lobby**; `idle` may show only the upper body — that is the source design, not an import error |
 | **Favorite** | directory name ends with ` Favorite`; source file `favorite_cNNN_00` | usually only `idle` and `expression_merged` | same as standing | Local ID is always `9NNN`, skin always `00`; **never enters Battle**, produces no aim/cover; resident animation is exactly `idle_merged`, click falls back to `expression_merged` |
+
+### 1.0 Directory responsibilities and path mapping
+
+This table is what keeps files from landing in the wrong place:
+
+| Location | In the repository | In a release package | Responsibility |
+| --- | --- | --- | --- |
+| **Runtime resource root** | `SpinePet\res\` | `res\` | The only directory the app scans; all four resource kinds land here |
+| **Name map** | `SpinePet\src\SpinePet\Data\CharacterNames.json` | compiled into `app\SpinePet.dll` | Character ID → display name; **rebuild after editing** |
+| **Source archive** | `resources\Characters\` | — | Development machines only; sources are archived here and the app cannot see them |
+| **zip archive** | `resources\zips\` | — | Original zips kept after intake |
+| **Upstream evidence mirror** | `resources\nikkedb\` | — | Development machines only (not in the repo, ~14 GB): apparel ID tables, indexes, icon sources |
+| **Tools** | `SpinePet\tools\` | `tools\` | Every script listed below; at the package root in a release |
+| **Optional import CLI** | `SpinePet\tools\battle-catalog-importer` | `tools\import\` | Self-contained publish, used for battle aim/cover |
+
+The key distinction: **`resources\` is an archive, `res\` is the runtime resource**. Putting files
+in the wrong one shows up as "I pressed Scan and nothing happened".
 
 ### 1.1 Standing
 
@@ -273,6 +351,67 @@ but **must not be added to**; migrate it with
 `SpinePet\tools\resource-layout\Migrate-CharacterResources.ps1` (preview with
 `-WhatIf` first).
 
+### 2.1 Normalising names at intake (zip / folder)
+
+Downloaded names are usually messy, so intake normalises them before archiving:
+
+**zip** (derived automatically by `Import-ResourceZip.ps1`):
+
+1. Strip the `PC _ Computer - Goddess of Victory_ Nikke - ` prefix;
+2. replace `_ ` (underscore + space) with ` - `;
+3. **name first, Burst last**: a name starting with `Burst - ` becomes `<name> Burst`
+   (`Burst - Helm_ Aquamarine` → `Helm - Aquamarine Burst`, see example 4);
+4. the inner directory name is the outer name without the trailing ` Burst` and without the
+   leading rarity prefix;
+5. the archive must contain exactly one top-level folder; if the target already exists the script
+   **errors instead of overwriting**, so you can decide by hand.
+
+**folder** (manual archiving — **move**, do not copy):
+
+```text
+YYYY-MM-DD__name [cNNN_NN]   →   resources\Characters\name
+e.g. 2025-12-30__Quency Escape Queen Variant 01 [c403_01]
+     → resources\Characters\Quency Escape Queen Variant 01
+```
+
+### 2.2 Change only what must change
+
+- `.skel` / `.atlas` / `.png` are copied **verbatim** — content and line endings untouched
+  (cleanup is a separate, opt-in step; see section 7);
+- an existing target file is **never overwritten**; confirm by hand first;
+- one source resource is **intaken once**; all later changes go to `res\` or the name map.
+
+### 2.3 The exception to "always allocate a new ID"
+
+"Always allocate a fresh ID" has one exception: when the resource **is the character's first
+model**, the source character ID is kept (e.g. `Cinderella Crystal Wave` keeps `515`,
+`Scarlet Overload` keeps `472`). As soon as that source character already has any base or variant
+card, every later import — **even with skin code `00`** — must be given a new ID.
+
+### 2.4 Hard constraints on `CharacterNames.json`
+
+These get an import rejected:
+
+- the display name is the **full resource name** and must equal the `res\` directory name;
+- **no leading or trailing whitespace**;
+- it must be a **valid directory name**: no `\ / : * ? " < > |`;
+- it must not duplicate an existing display name;
+- keys are character ID strings (e.g. `"19102": "Alice Variant 02"`);
+- after editing you must run `dotnet build src\SpinePet\SpinePet.csproj -c Release`, or the
+  name simply will not apply.
+
+### 2.5 Defaults after import (spec sections 4.4 / 4.5)
+
+Newly imported cards run with these defaults; no manual configuration is needed:
+
+- **Default animation**: the card ends up on `idle` (never preset to `action` or similar);
+  startup and first display always enter Normal/standing and play `idle`; when the skeleton has no
+  `idle`, the first animation in the list is used; an animation the user picked in the panel wins.
+- **Scale**: `ScaleBasePercent = 100`, `ScaleMultiplier = 1`, `Scale = 0.2` (first slider at max,
+  second at 1×).
+- **Visibility**: `Visible = false` — new cards start hidden and are **never** auto-shown on
+  import or on scan completion.
+
 ## 3. Import tooling shipped with the project
 
 | Tool | Path | Purpose |
@@ -292,6 +431,72 @@ UnityFS import needs the Python packages:
 python -m pip install -r SpinePet\tools\requirements.txt
 ```
 
+
+### 3.1 Tool command reference
+
+Run these from the **repository root**; in a release package replace `SpinePet\tools\` with `tools\`.
+Every `.ps1` also runs on the PowerShell 5.1 that ships with Windows.
+
+**One-step zip intake**
+
+```powershell
+pwsh -NoProfile -File 'SpinePet\tools\zip-intake\Import-ResourceZip.ps1' -Zip '<full path to zip>'
+# optional: -CharactersDir <archive dir>  -ZipsDir <zip archive dir>
+```
+It prints `=== skeleton set analysis ===` listing each `c<character ID>_<skin ID>*.skel` with
+`atlas:OK`, followed by "archived: …" and "zip moved to: …".
+
+**Battle aim/cover audit and import**
+
+```powershell
+# (1) audit — writes nothing
+dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- `
+  --audit resources\Characters "<resource dir name>" "<another resource dir name>"
+# (2) import
+dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- `
+  resources\Characters SpinePet\res "<resource dir name>" "<another resource dir name>"
+# inside a release package (self-contained, no .NET needed)
+tools\import\BattleCatalogImporter.exe --audit resources\Characters "Anis Star"
+```
+Argument order: **source directory → target `res` → list of resource directory names (required)**.
+JSON output: the audit reports `SourceDirectoryCount` / `CompleteSets` (with `Identity`) /
+`SkippedEntries`; the import adds `CompleteSetCount` / `ImportedBattleCount` /
+`AddedCharacterCount` / `AlreadyPresentCount`.
+
+**Icon download (precise selection, no whole-library mode)**
+
+```powershell
+pwsh -NoProfile -File 'SpinePet\tools\icons-downloader\Update-CharacterIcons.ps1' `
+  -ResourceId 'c0170_00' -TargetSkinDirectory 'SpinePet\res\Anis Star\00'
+# other parameters: -ListOnly (list candidates, no download)  -Force (overwrite an existing icon)
+#                   -PythonCommand (default python)  -ResourceDirectory
+```
+Requires Python (it calls `extract_icon.py` internally) and network access. After `Add` imports a
+standing resource the application does exactly the same thing **automatically**.
+
+**Atlas cleanup and masking (opt-in)**
+
+```powershell
+pwsh -NoProfile -File 'SpinePet\tools\atlas-cleaner\Clean-Atlas.ps1' -Folder '<skin\standing dir>' -WhatIf
+# drop -WhatIf to actually write; -CreateBackup defaults to $true
+```
+
+**Legacy layout migration**
+
+```powershell
+pwsh -NoProfile -File 'SpinePet\tools\resource-layout\Migrate-CharacterResources.ps1' -WhatIf
+# optional: -ResourceDirectory <res dir>  -CharacterNamesPath <CharacterNames.json>
+```
+
+**Skeleton attachment inspector**
+
+```powershell
+dotnet run --project SpinePet\tools\skeleton-inspector\SkeletonInspector.csproj -- `
+  '<skeleton.skel>' '<same-named.atlas>'
+```
+Prints animation names plus the attachment/timeline inventory, useful for checking click regions
+and whether an animation exists at all.
+
 ## 4. Recommended flow (spec: explicit list → intake → pre-check → import → verify)
 
 1. **Decide the list**: exactly which resources this run touches. Write it down.
@@ -307,6 +512,47 @@ python -m pip install -r SpinePet\tools\requirements.txt
 
 **Close SpinePet before overwriting existing files in `res`** (Windows file locks
 cause `Device or resource busy`).
+
+
+### 4.1 What the application should write once the import is done
+
+From a real release test: after importing `Anis Star` and `Alice Variant 02`, the first launch
+scanned `res\` and wrote a `config.json` like this:
+
+```json
+{
+  "Version": "1.9",
+  "Characters": [
+    {
+      "Name": "Anis Star",
+      "SkelPath": "...\\res\\Anis Star\\00\\standing\\c0170_00.skel",
+      "TexturePath": "...\\c0170_00.png",
+      "ExtraTexturePaths": [],
+      "Visible": false, "ScaleBasePercent": 100, "ScaleMultiplier": 1, "Scale": 0.2,
+      "Battle": {
+        "Aim":   { "SkelPath": "...\\00\\aim\\c0170_aim_00.skel" },
+        "Cover": { "SkelPath": "...\\00\\cover\\c0170_cover_00.skel" },
+        "Animations": {
+          "AimIdle": "aim_idle", "ToAim": "to_aim",
+          "AimFireLayers": [ { "Animation": "aim_fire", "Blend": "Replace", "Loop": true,
+                               "ExcludeTimelines": [ "RotateTimeline@bone:gun_8" ] } ],
+          "CoverIdle": "cover_idle", "ToCover": "to_cover", "ReloadSequence": [ "cover_reload" ]
+        }
+      }
+    }
+  ]
+}
+```
+
+Check these points:
+
+- one entry per resource, with `Name` equal to the display name you put in the name map;
+- paths point into `res\` (**not** `resources\`);
+- **a second atlas page lands in `ExtraTexturePaths`** (e.g. `c19102_02_2.png`);
+- the `Battle` block is **generated by the application** — never hand-write it; it only appears
+  when aim and cover exist as a pair;
+- `Visible=false`, `ScaleBasePercent=100`, `ScaleMultiplier=1`, `Scale=0.2` match the spec;
+- `Version` equals the application's current configuration version (`1.9` at the time of writing).
 
 ## 5. Verification and troubleshooting
 
@@ -336,6 +582,22 @@ If it does not show up, check in this order:
 7. Is it under `<full resource name>\<skin code>\standing`?
 8. Is the same character+skin prefix occupied by two skeletons (duplicates get
    de-duplicated and the card is swallowed)?
+
+
+**Conflict and repeat-import semantics** (in-app Add and the import CLI behave the same way):
+
+- an existing target is **rejected** — even when the source and target are byte-identical, or when
+  you pick the same file from the target directory again, it is not a successful import;
+- failure or cancellation rolls back the files and empty directories created by that run and
+  always cleans up the `.SpinePet-Import-*` temporary directory; anything that existed before the
+  import is left untouched;
+- importing the same resource twice reports `AlreadyPresent` and does not create a duplicate card;
+- a skeleton sitting in a **retired state directory** is rejected — migrate it to the canonical
+  layout as described in section 6.2.
+
+**One more look at `config.json`**: the number of entries should equal the number of characters
+recognisable under `res\`; paths must point at `res\`, not `resources\`; and the `Battle` block
+appears only when aim and cover exist as a pair.
 
 ## 6. AI-assisted import (recommended)
 
@@ -378,6 +640,25 @@ overwrite files while the application is running; or query nikkedb with a `9NNN`
 - **Cleanup is optional**: off by default; if you do it, work on a staging copy,
   prefer `.attachments.exclude` over texture masking, and never delete `*_eyebg`
   (eye whites).
+
+
+- **Pick icons from the right source**: a card thumbnail that is a very tall image
+  (height > width × 1.25, e.g. 488×953) means the game's portrait art was used by mistake
+  (`resources\Characters\<resource>\Icons\c*_NN.png`). The correct source is the square index
+  image `si_c<original character ID>_<skin ID>_00_s.png` (~128×128; lookup order
+  `_00_s` → `_s` → `_00` → no suffix).
+- **The upstream icon mirror is not in the repository**: `resources\nikkedb\` is roughly 14 GB
+  and only exists on development machines. Ordinary users should rely on the **automatic download
+  in the app** or on `icons-downloader` (both need Python + network). When no icon is available the
+  app falls back to the standing texture as the thumbnail — nothing breaks.
+- **Legacy-layout cards use a different icon convention**: the icon sits next to the skeleton,
+  named `<skeleton base name>_icon.png` (e.g. `Blanc_WhiteRabbit_icon.png`), not inside an
+  `icons\` subdirectory.
+- **Favorite click-animation chain**: `action → click → touch → tap → reaction → interact →
+  skillcut`, first one that exists; only when none exist does it fall back to
+  `expression_merged`; after the click finishes it returns to the current resident animation.
+- **A bad name-map edit fails silently**: if you change `CharacterNames.json` and do not rebuild,
+  the card keeps its old name.
 
 ## 8. Runtime requirements (bare Windows)
 
