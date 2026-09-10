@@ -43,7 +43,7 @@ SpinePet 桌宠使用说明
 - 支持四类资源：待机 standing、射击 aim/cover（成对，用 battle-catalog-importer 导入）、
   爆裂 skillcut（目录名以 " Burst" 结尾）、珍藏品 Favorite（编号固定 9NNN、皮肤 00，不进 Battle）。
 - 游戏导出的原始资源需要先改目录名与 c<角色ID>_<皮肤ID> 文件名才能导入；
-  四类资源的完整规范、工具用法与排查清单见包内 IMPORT.md。
+  四类资源的完整规范、工具用法与排查清单见包内 IMPORT.zh-CN.md（英文 IMPORT.md）。
 - Add：导入 .skel 或符合命名规则的 UnityFS bundle。
 - Scan：重新扫描 res，同步手动添加、删除或替换的资源。
 - Folder：打开当前使用的 res 目录；目录不存在时会自动创建。
@@ -63,10 +63,10 @@ SpinePet 桌宠使用说明
 - tools\：运行时工具（UnityFS 解包脚本、图标下载脚本、requirements.txt），请勿改名或删除。
 - Logs\：运行后生成的日志目录，用于排查问题。
 - LICENSE / NOTICE：本项目的开源许可证（GPL-3.0-or-later）与版权声明。
-- THIRD_PARTY_NOTICES.md：第三方组件与授权清单。
-- ASSETS.md：素材来源与授权边界说明。
+- THIRD_PARTY_NOTICES.zh-CN.md（英：THIRD_PARTY_NOTICES.md）：第三方组件与授权清单。
+- ASSETS.zh-CN.md（英：ASSETS.md）：素材来源与授权边界说明。
 - licenses\：各第三方许可证原文，请勿删除。
-- IMPORT.md / IMPORT.en.md：素材导入指南（四类资源、格式改造、工具、AI 辅助、排查）。
+- IMPORT.zh-CN.md（英：IMPORT.md）：素材导入指南（四类资源、格式改造、工具、AI 辅助、排查）。
 - Check-Environment.ps1：运行环境自检。在包内执行
     powershell -NoProfile -ExecutionPolicy Bypass -File Check-Environment.ps1
   它会列出缺什么、以及缺了会损失哪个功能（例如没装 Python 就不能用 UnityFS bundle 导入）。
@@ -80,7 +80,7 @@ SpinePet 桌宠使用说明
 - 本项目永久免费：没有广告、没有赞助、没有付费墙，也不分发素材。
 - 本项目自身代码按 GPL-3.0-or-later 授权；第三方组件各自保留其许可证。
   其中 Spine 运行时要求每个使用者自行持有 Spine Editor 授权，
-  详见 THIRD_PARTY_NOTICES.md。
+  详见 THIRD_PARTY_NOTICES.zh-CN.md。
 
 【窗口与多实例】
 - 配置窗口无边框，拖动空白区域可移动窗口，拖动边缘可调整大小。

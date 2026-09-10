@@ -1,79 +1,90 @@
-# SpinePet 素材导入指南 / Asset Import Guide
+# SpinePet Asset Import Guide
 
-[English](IMPORT.en.md) | **中文**
+**English** | [中文](IMPORT.zh-CN.md)
 
-面向使用者的导入说明。**开发/自动化流程的权威规范**在
+A user-facing guide to importing assets. The **authoritative specification** for
+development and automated pipelines lives in
 [`Y_MultipleAgentWorkflow/Resources/Load/SpinePet_Resources_Load_Guide.md`](Y_MultipleAgentWorkflow/Resources/Load/SpinePet_Resources_Load_Guide.md)
-（珍藏品另有
-[`Favorite_Interactive_Import_Guide.md`](Y_MultipleAgentWorkflow/Resources/Load/Favorite_Interactive_Import_Guide.md)，
-清理见 [`SpineResource_Match_Clean_Guide.md`](Y_MultipleAgentWorkflow/Resources/MatchClean/SpineResource_Match_Clean_Guide.md)，
-射击状态模型见 [`Aim_Cover_Proposal.md`](Y_MultipleAgentWorkflow/Resources/StateSupport/Aim_Cover_Proposal.md)）。
-本文是它们的**使用者视角汇总**；两者冲突时以规范文档为准。运行环境与裸机依赖清单见 [第 8 节](#8-运行环境要求裸机)。
+(favorites additionally in
+[`Favorite_Interactive_Import_Guide.md`](Y_MultipleAgentWorkflow/Resources/Load/Favorite_Interactive_Import_Guide.md),
+cleanup in [`SpineResource_Match_Clean_Guide.md`](Y_MultipleAgentWorkflow/Resources/MatchClean/SpineResource_Match_Clean_Guide.md),
+the battle state model in [`Aim_Cover_Proposal.md`](Y_MultipleAgentWorkflow/Resources/StateSupport/Aim_Cover_Proposal.md)).
+This document is a **user-facing summary** of those; where they disagree, the
+specification wins. Runtime and bare-Windows dependencies are listed in [section 8](#8-runtime-requirements-bare-windows).
 
-## 导入流程速览（先看这一节）
+Related: [README.md](README.md) (usage) · [ASSETS.md](ASSETS.md) (asset policy) ·
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) (third-party licenses) ·
+[中文版 IMPORT.zh-CN.md](IMPORT.zh-CN.md). Runtime and bare-Windows dependencies are listed in [section 8](#8-runtime-requirements-bare-windows).
 
-### 六步
+## Import flow at a glance (read this first)
 
-| 步骤 | 做什么 | 命令 / 产物 |
+### The six steps
+
+| Step | What you do | Command / result |
 | --- | --- | --- |
-| ① 定清单 | 写明这次只处理哪几套资源 | 一张清单——**禁止**扫描全库 |
-| ② 入库 | zip 用脚本；文件夹**剪切**归档 | `Import-ResourceZip.ps1 -Zip '<zip>'` → `resources\Characters\` |
-| ③ 预检 | Spine 4.1 ？三件套齐全？身份与新 ID？图标来源？ | 缺一项就停在外面，**不进** `res\` |
-| ④ 写入 | 放成 `res\<资源全名>\<皮肤编号>\<状态>\` | 待机/爆裂/珍藏品：`Add` 或手工放；射击：审计 + 导入两条命令 |
-| ⑤ 登记 | `CharacterNames.json` 加新 ID | 之后必须 `dotnet build`，否则名字不生效 |
-| ⑥ 验收 | 退出应用 → 写入 → 启动 → `Scan` | 对照「出错看哪里」与 §4.1、§5 |
+| 1. List | Write down exactly which resources this run touches | A written list — **never** scan the whole library |
+| 2. Intake | zips via the script; folders are **moved** into the archive | `Import-ResourceZip.ps1 -Zip '<zip>'` → `resources\Characters\` |
+| 3. Pre-check | Spine 4.1? all three files? identity and new ID? icon source? | Any gap stays outside `res\` |
+| 4. Write | Lay files out as `res\<full resource name>\<skin code>\<state>\` | Standing / burst / favorite: `Add` or by hand; battle: audit + import commands |
+| 5. Register | Add the new ID to `CharacterNames.json` | Then `dotnet build`, or the name will not apply |
+| 6. Verify | Exit the app → write → start it → `Scan` | Use "where to look when it fails" below, plus sections 4.1 and 5 |
 
-四类资源怎么走（一句话版）：
+The four kinds in one line each:
 
-- **待机 standing**：`Add` 导入 `.skel`，或手工放进 `<皮肤>\standing\` → `Scan`。
-- **射击 aim / cover**：`battle-catalog-importer --audit` 通过后执行导入；应用**自动生成** Battle 配置。
-- **爆裂 skillcut**：当成待机导入，目录名以 ` Burst` 结尾；Battle 与 Lobby 相同就取 Lobby。
-- **珍藏品 Favorite**：编号前加 `9`、皮肤固定 `00`，只放 `standing\`，**不进** Battle。
+- **Standing**: import the `.skel` with `Add`, or drop files into `<skin>\standing\` → `Scan`.
+- **Battle (aim / cover)**: run `battle-catalog-importer --audit` first, then import; the app
+  **generates the battle configuration** for you.
+- **Burst (skillcut)**: import it like standing, with a directory name ending in ` Burst`;
+  prefer Lobby when Battle and Lobby skillcut match.
+- **Favorite**: local ID gets a leading `9`, skin is always `00`, standing only, **never** battle.
 
-### 出错看哪里
+### Where to look when it fails
 
-| 症状 / 报错 | 看哪里 |
+| Symptom / error | Where to look |
 | --- | --- |
-| 点 `Scan` 什么都不出现 | 本文 §5 排查顺序（8 步） |
-| `Missing atlas page: xxx.png` | 本文 §5 第 3 步；示例 2：**页面名以 atlas 声明为准**，不一定等于骨骼名 |
-| 卡片出现了但名字不对 / 是空的 | 本文 §2.4 → 改完名字表必须重新构建 |
-| 提示角色 ID 不在名字表 | 本文 §2.4；珍藏品看 §1.4（本地编号 `9NNN`） |
-| `A character resource already exists` | 本文 §5「冲突语义」：不覆盖，先备份再决定 |
-| 导入被拒：骨骼版本不支持 | 本文 §7：必须 Spine 4.1.x |
-| 两张卡互相吞掉 / 打不开 | 本文 §2：禁止共用前缀或显示名 |
-| 头像不对（超高竖图、明显不是角色） | 本文 §7「图标别取错源」 |
-| 图标下载失败 | 本文 §8（缺 Python）；应用会回退用立绘贴图，不影响使用 |
-| 射击资源导不进去 | 本文 §1.2 与 §3.1：必须走审计/导入命令，`Add` **不接受** aim/cover |
-| 覆盖 `res` 文件失败（`Device or resource busy`） | 本文 §4：先退出 SpinePet |
-| zip 入库报「目标已存在」 | 本文 §2.1：脚本不覆盖，先人工确认 |
-| 不知道目标机缺什么 | 发行包内 `Check-Environment.ps1`；本文 §8 |
-| 想看开发/自动化流程的权威规范 | `Y_MultipleAgentWorkflow\Resources\Load\SpinePet_Resources_Load_Guide.md` |
+| `Scan` shows nothing at all | Section 5, the 8-step troubleshooting order |
+| `Missing atlas page: xxx.png` | Section 5 step 3; example 2: **page names follow the atlas declaration**, not the skeleton name |
+| The card appears with a wrong or empty name | Section 2.4 — rebuild after editing the name map |
+| "character ID not in the name map" | Section 2.4; for favorites see 1.4 (local ID `9NNN`) |
+| `A character resource already exists` | Section 5, conflict semantics: nothing is overwritten, back up and decide |
+| Rejected: unsupported skeleton version | Section 7 — must be Spine 4.1.x |
+| Two cards swallow each other / a model will not open | Section 2 — never share a prefix or a display name |
+| Wrong icon (very tall image, clearly the wrong art) | Section 7, "pick the icon from the right source" |
+| Icon download failed | Section 8 (no Python); the app falls back to the standing texture, so nothing breaks |
+| Battle resources will not import | Sections 1.2 and 3.1 — use the audit/import commands, `Add` **does not** accept aim/cover |
+| Overwriting files in `res` fails (`Device or resource busy`) | Section 4 — exit SpinePet first |
+| zip intake says the target already exists | Section 2.1 — the script never overwrites; confirm by hand |
+| Not sure what a target machine lacks | `Check-Environment.ps1` in the package; section 8 |
+| You want the authoritative development/automation spec | `Y_MultipleAgentWorkflow\Resources\Load\SpinePet_Resources_Load_Guide.md` |
 
-**一句话**：出错先看本文对应小节；本文没写清的，去 §3.1 查该工具的输出说明；再不够，查
-`Y_MultipleAgentWorkflow\` 下的权威规范。
+**One rule of thumb**: start with the matching section of this file; if this file does not say
+enough, section 3.1 explains each tool's output; beyond that, consult the authoritative specs
+under `Y_MultipleAgentWorkflow\`.
 
-## 完整示例：一次导入从头到尾
+## Complete worked example: one import, start to finish
 
-> 第 0–7 节是规范条文，**这一节是照着就能做的完整示例**。
-> 下面所有落地路径都取自本机真实资源（可在 `SpinePet\res` 里直接对照）。
+> Sections 0–7 are the rules; **this section is a walkthrough you can follow directly**.
+> Every resulting path below comes from real resources on this machine and can be
+> checked against `SpinePet\res` directly.
 
-### 通用骨架（四类资源都一样）
+### The shared skeleton (identical for all four kinds)
 
 ```text
-① 入库        zip → zip-intake 脚本；文件夹 → 剪切到 resources\Characters\<规范名>
-② 定清单      这次只处理哪几套，写下来（禁止扫描全库）
-③ 预检        骨骼 Spine 4.1？三件套齐全？身份与新 ID？头像来源？
-④ 写入        res\<资源全名>\<皮肤编号>\<状态>\
-⑤ 登记        CharacterNames.json 加新 ID → dotnet build 才生效
-⑥ 验收        退出应用 → 写入 → 启动 → Scan → 见 §5
+(1) Intake     zip → zip-intake script; folders → move into resources\Characters\<normalised name>
+(2) List       write down exactly which resources this run touches (never scan the whole library)
+(3) Pre-check  Spine 4.1? all three files present? identity and new ID? icon source?
+(4) Write      res\<full resource name>\<skin code>\<state>\
+(5) Register   add the new ID to CharacterNames.json → only takes effect after dotnet build
+(6) Verify     exit the app → write → start it → Scan → see section 5
 ```
 
-### 示例 1：待机（最省事，走应用内 Add）
+### Example 1: standing (the easy path, in-app Add)
 
-- **输入**：`c472_00.skel` + `c472_00.atlas` + `c472_00.png`（同一次 Spine 4.1 导出，三件套同名）
-- **动作**：面板 `Add` 选中 `c472_00.skel`；应用校验骨骼/atlas/贴图后**事务写入**，
-  显示名来自 `CharacterNames.json` 的 `472 → Scarlet Overload`，随后自动尝试补该皮肤图标
-- **落地结果**（真实）：
+- **Input**: `c472_00.skel` + `c472_00.atlas` + `c472_00.png` (same Spine 4.1 export, same base name)
+- **Action**: pick `c472_00.skel` with **Add**; the app validates skeleton/atlas/textures and
+  writes **transactionally**, taking the display name from `CharacterNames.json`
+  (`472 → Scarlet Overload`), then tries to fetch that skin's icon
+- **Result** (real):
 
 ```text
 res\Scarlet Overload\00\standing\c472_00.skel
@@ -82,50 +93,52 @@ res\Scarlet Overload\00\standing\c472_00.png
 res\Scarlet Overload\00\icons\c472_00_icon.png
 ```
 
-- **验收**：点 `Scan` → 卡片 `Scarlet Overload` 出现，默认动画 `idle`，缩放 100% / 1.0 倍，
-  默认隐藏（不自动显示）
+- **Verify**: press `Scan` → the `Scarlet Overload` card appears, default animation `idle`,
+  scale 100% / 1.0×, hidden by default (never auto-shown)
 
-### 示例 2：待机变体（要自己改号：`191_02` → `19102`）
+### Example 2: a standing variant (you must renumber: `191_02` → `19102`)
 
-- **输入**：源资源 `Alice Variant 02`，骨骼原名 `c191_02_00.skel`（源角色 ID `191`、皮肤 `02`）
-- **动作**：
-  1. 新 ID = `191` + `02` = `19102`；**只改角色数字段，皮肤号保留 `02`**
-  2. `c191_02_00.skel` → `c19102_02_00.skel`，同名 `.atlas` 一并改名
-  3. atlas 首行声明的**页面 png 名**与贴图文件名按新编号同步改名
-     —— 页面名以 atlas 自身声明为准，**不一定等于骨骼名**：本机这套骨骼是
-     `c19102_02_00.skel`，而页面是 `c19102_02.png` 与 `c19102_02_2.png`
-     （多页 atlas 会自动带 `_2`、`_3` 后缀）
-  4. `CharacterNames.json` 加 `"19102": "Alice Variant 02"`
+- **Input**: source resource `Alice Variant 02`, skeleton originally `c191_02_00.skel`
+  (source character ID `191`, skin `02`)
+- **Action**:
+  1. New ID = `191` + `02` = `19102`; **only the character digit field changes, the skin
+     number keeps its source value `02`**
+  2. `c191_02_00.skel` → `c19102_02_00.skel`, and rename the same-named `.atlas` too
+  3. Rename the **page PNG names declared in the atlas header** and the texture files
+     accordingly — page names follow the atlas declaration and **need not equal the
+     skeleton base name**: this set has skeleton `c19102_02_00.skel` but pages
+     `c19102_02.png` and `c19102_02_2.png` (multi-page atlases get `_2`, `_3` suffixes)
+  4. Add `"19102": "Alice Variant 02"` to `CharacterNames.json`
   5. `dotnet build src\SpinePet\SpinePet.csproj -c Release`
-- **落地结果**（真实）：
+- **Result** (real):
 
 ```text
 res\Alice Variant 02\02\standing\c19102_02_00.skel
 res\Alice Variant 02\02\standing\c19102_02_00.atlas
-res\Alice Variant 02\02\standing\c19102_02.png        ← atlas 声明的第 1 页
-res\Alice Variant 02\02\standing\c19102_02_2.png      ← atlas 声明的第 2 页
+res\Alice Variant 02\02\standing\c19102_02.png        <- page 1 as declared by the atlas
+res\Alice Variant 02\02\standing\c19102_02_2.png      <- page 2 as declared by the atlas
 res\Alice Variant 02\02\icons\c19102_02_icon.png
 ```
 
-### 示例 3：射击（成对，先审计后导入）
+### Example 3: battle (pairwise, audit before import)
 
-- **输入**：同一皮肤下的 `standing` / `aim` / `cover` 三套（示例：`Anis Star`，ID `0170`）
-- **命令**：
+- **Input**: the `standing` / `aim` / `cover` sets of one skin (example: `Anis Star`, ID `0170`)
+- **Commands**:
 
 ```powershell
-# ① 只审计，不写任何文件
+# (1) audit only — writes nothing
 dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- `
   --audit resources\Characters "Anis Star"
 
-# ② 审计逐项确认后再导入
+# (2) import once every audited item is confirmed
 dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- `
   resources\Characters SpinePet\res "Anis Star"
 ```
 
-- **审计输出长这样**（字段实测）：`CompleteSets` 里出现
-  `Identity: ResourceName=c0170_aim, CharacterCode=0170, SkinCode=aim, DisplayName=Anis Star`，
-  `Standing` / `Aim` / `Cover` 三套齐全才会计入
-- **落地结果**（真实）：
+- **What the audit output looks like** (fields as observed): `CompleteSets` carries
+  `Identity: ResourceName=c0170_aim, CharacterCode=0170, SkinCode=aim, DisplayName=Anis Star`,
+  and only entries with `Standing` / `Aim` / `Cover` all present are counted
+- **Result** (real):
 
 ```text
 res\Anis Star\00\standing\c0170_00.skel / .atlas / .png
@@ -134,54 +147,55 @@ res\Anis Star\00\cover\c0170_cover_00.skel / .atlas / .png
 res\Anis Star\00\icons\c0170_00_icon.png
 ```
 
-- **注意**：只有一边（例如只有 aim）时**不要导入**，它就当普通待机角色用；
-  单状态资源（如珍藏品）会被审计直接跳过——实测指定 `Bay Favorite` 时进入
-  `SkippedEntries`（aim/cover 均为 false）
+- **Note**: with only one side present (for example aim alone) **do not import it** — it stays
+  an ordinary standing character. Single-state resources (favorites) are skipped by the audit
+  outright: specifying `Bay Favorite` put it in `SkippedEntries` (aim/cover both false) in testing.
 
-### 示例 4：爆裂（zip 入库 → 取 Lobby → 改号）
+### Example 4: burst (zip intake → take Lobby → renumber)
 
-- **输入 zip**：`PC _ Computer - Goddess of Victory_ Nikke - Burst - Helm_ Aquamarine.zip`
-- **命令**：
+- **Input zip**: `PC _ Computer - Goddess of Victory_ Nikke - Burst - Helm_ Aquamarine.zip`
+- **Command**:
 
 ```powershell
-pwsh -NoProfile -File 'SpinePet\tools\zip-intake\Import-ResourceZip.ps1' -Zip '<zip 完整路径>'
+pwsh -NoProfile -File 'SpinePet\tools\zip-intake\Import-ResourceZip.ps1' -Zip '<full path to zip>'
 ```
 
-- **实测输出**（脚本在临时目录里跑同一个真实 zip 的结果）：
+- **Observed output** (the script run against that real zip in a temporary directory):
 
 ```text
-=== 骨骼集分析 ===
-  Battle\Sprite Sheet and Other Assets\c353_00_skillcut.skel  角色 353  atlas:OK
-  Lobby\Sprite Sheet and Other Assets\c353_00_skillcut.skel   角色 353  atlas:OK
+=== skeleton set analysis ===
+  Battle\Sprite Sheet and Other Assets\c353_00_skillcut.skel  character 353  atlas:OK
+  Lobby\Sprite Sheet and Other Assets\c353_00_skillcut.skel   character 353  atlas:OK
 
-已入库：resources\Characters\Helm - Aquamarine Burst\Aquamarine
-zip 已移至：resources\zips
+archived: resources\Characters\Helm - Aquamarine Burst\Aquamarine
+zip moved to: resources\zips
 ```
 
-- **接着做**：Battle 与 Lobby 的 skillcut 相同 → **取 Lobby**；目录名以 ` Burst` 结尾；
-  改号规则同示例 2
-- **落地结果**（真实的 Cinderella 那套，源 `515_00` → 本地 `5150`）：
+- **Then**: Battle and Lobby skillcut are identical → **take Lobby**; the directory name ends
+  with ` Burst`; renumbering follows Example 2
+- **Result** (the real Cinderella set; source `515_00` → local `5150`):
 
 ```text
 res\Cinderella Crystal Wave Burst\00\standing\c5150_00_skillcut.skel
 res\Cinderella Crystal Wave Burst\00\standing\c5150_00_skillcut.atlas
 res\Cinderella Crystal Wave Burst\00\standing\c5150_00_skillcut.png
-res\Cinderella Crystal Wave Burst\00\standing\c5150_00_skillcut.attachments.exclude   （做过清理才有）
+res\Cinderella Crystal Wave Burst\00\standing\c5150_00_skillcut.attachments.exclude   (only if cleaned)
 res\Cinderella Crystal Wave Burst\00\icons\c5150_00_icon.png
 CharacterNames.json: "5150": "Cinderella Crystal Wave Burst"
 ```
 
-- **注意**：skillcut 的 `idle` 可能只有半身，这是源资源设计，不是导入错误
+- **Note**: a skillcut `idle` may show only the upper body — that is the source design, not an
+  import error
 
-### 示例 5：珍藏品（本地编号前加 9）
+### Example 5: favorite (prefix the local ID with 9)
 
-- **输入**：`favorite_c072_00.skel` + `.atlas` + `.png`（原编号 `072` = Diesel）
-- **动作**：
-  1. 本地编号 = `9` + `072` = `9072`，皮肤固定 `00`，显示名 `Diesel Favorite`
-  2. atlas 页引用与贴图改名 `c9072_00.png`
-  3. 图标用**原编号**查 `si_c072_00_s.png`，复制后命名为 `c9072_00_icon.png`
-  4. `CharacterNames.json` 加 `"9072": "Diesel Favorite"`
-- **落地结果**（真实）：
+- **Input**: `favorite_c072_00.skel` + `.atlas` + `.png` (original number `072` = Diesel)
+- **Action**:
+  1. Local ID = `9` + `072` = `9072`, skin always `00`, display name `Diesel Favorite`
+  2. Rename atlas page references and the texture to `c9072_00.png`
+  3. Look the icon up with the **original** number `si_c072_00_s.png`, copy it as `c9072_00_icon.png`
+  4. Add `"9072": "Diesel Favorite"` to `CharacterNames.json`
+- **Result** (real):
 
 ```text
 res\Diesel Favorite\00\standing\c9072_00.skel
@@ -190,289 +204,324 @@ res\Diesel Favorite\00\standing\c9072_00.png
 res\Diesel Favorite\00\icons\c9072_00_icon.png
 ```
 
-- **注意**：不进 Battle、不建 aim/cover；默认常驻动画是精确 `idle_merged`，
-  点击动画回退到 `expression_merged`
+- **Note**: never enters battle and gets no aim/cover directories; its resident animation is
+  exactly `idle_merged`, and clicking falls back to `expression_merged`
 
-### 全部导入完成后统一验收
+### Verifying everything once the imports are done
 
 ```powershell
-# 逐套检查 atlas 声明的贴图页是否齐全（规范 §5 的脚本）
-$dir = 'SpinePet\res\<资源全名>\<皮肤编号>\standing'
+# per resource: are all texture pages declared by the atlas present? (spec section 5 script)
+$dir = 'SpinePet\res\<full resource name>\<skin code>\standing'
 Get-Content "$dir\<resource>.atlas" |
   Where-Object { $_.Trim() -match '\.(png|jpg|jpeg|webp)$' } |
   Select-Object -Unique | ForEach-Object {
     if (-not (Test-Path "$dir\$($_.Trim())")) { Write-Error "Missing atlas page: $($_.Trim())" } }
 ```
 
-然后启动 SpinePet → `Scan` → 逐张确认：名称、头像、默认 `idle`、点击动画、拖动边界。
+Then start SpinePet → `Scan` → confirm per card: name, icon, default `idle`, click animation and
+drag bounds.
 
-## 0. 先记住三件事
+## 0. Three things to remember first
 
-1. 程序只认一种布局：`res\<资源全名>\<皮肤编号>\<状态>\`，骨骼文件名必须带
-   `c<角色ID>_<皮肤ID>` 前缀。
-2. **游戏导出的原始资源几乎不能直接用**——目录名、角色编号、atlas 页引用、
-   图标来源都要改，这正是"导入不方便"的根源（见第 2 节）。
-3. 一套资源要能被 Scan 到，必须同目录同时具备：
-   `<资源名>.skel` + **同名** `.atlas` + atlas 引用的**全部**贴图页，
-   且由同一次 **Spine 4.1.x** 导出。缺一样就停在 `resources\`，不要放进 `res\`。
+1. The application accepts exactly one layout: `res\<full resource name>\<skin code>\<state>\`,
+   and skeleton file names must carry the `c<character ID>_<skin ID>` prefix.
+2. **Raw game exports are almost never directly usable** — directory names,
+   character IDs, atlas page references and icon sources all have to be changed.
+   That is the real source of the "importing is inconvenient" complaint (section 2).
+3. For a resource to be picked up by Scan it must contain, in one directory:
+   `<resource>.skel` + a **same-named** `.atlas` + **every** texture page the atlas
+   references, all exported by the same **Spine 4.1.x**. If anything is missing it
+   stays in `resources\` and must not enter `res\`.
 
-**全程原则（规范原文，简化版）：**
 
-1. 身份只看**文件名前缀** `c<角色ID>_<皮肤ID>`，不看目录名猜。
-2. **没有指定清单，不得扫描或导入整个资源库**——每次只处理你写明的那几套。
-3. 写进 `res\` 的文件**原样复制**：不改内容、不改行尾，除非明确要求清理。
-4. 源资源**只入库一次**；之后的调整只改 `res\` 或名字表，**不回写源**。
-5. 图标属于**导入前预检**，不是事后补漏：定位不到就报 `MissingIcon` 并停该项。
-6. 应用运行时只访问运行时的 `res\` 与包根 `tools\`，**不会**去扫 `resources\` 或上游镜像。
+**Rules that apply throughout (condensed from the specification):**
 
-## 1. 四种资源类型
+1. Identity comes from the **file name prefix** `c<character ID>_<skin ID>` only — never guess
+   from a directory name.
+2. **Without an explicit list you must not scan or import the whole library** — handle only the
+   resources you wrote down.
+3. Files written into `res\` are **copied verbatim**: no content edits, no line-ending changes,
+   unless cleanup was explicitly requested.
+4. Source resources are **intaken once**; later adjustments change `res\` or the name map only,
+   never the source archive.
+5. Icons are part of the **pre-check**, not a later patch-up: when no icon can be located,
+   report `MissingIcon` and stop that item.
+6. At runtime the application only touches its `res\` and the package-root `tools\` — it never
+   scans `resources\` or an upstream mirror.
 
-| 类型 | 目录特征 | 骨骼/动画 | 导入方式 | 关键注意 |
+## 1. The four resource kinds
+
+| Kind | Directory signature | Skeleton / animations | How to import | Key notes |
 | --- | --- | --- | --- | --- |
-| **待机** standing | `<皮肤>\standing\` | `idle` 常驻 | 应用内 **Add**（`.skel` 或 UnityFS bundle），或手工放入 | 最常规的一类 |
-| **射击** aim / cover | `<皮肤>\aim\` + `<皮肤>\cover\` | 成对完整才生成 Battle | `battle-catalog-importer`（**必须给指定清单**） | 单边缺失就只当普通待机角色；**Add 不接受 aim/cover** |
-| **爆裂** skillcut | 目录名以 ` Burst` 结尾 | 特写取景 | 同待机 | Battle 与 Lobby 的 skillcut 通常逐字节相同，**默认取 Lobby**；`idle` 可能只有半身，这是源资源设计而非导入错误 |
-| **珍藏品** Favorite | 目录名以 ` Favorite` 结尾；源文件名 `favorite_cNNN_00` | 通常只有 `idle` 与 `expression_merged` | 同待机 | 本地编号固定 `9NNN`、皮肤固定 `00`；**不进 Battle**，不生成 aim/cover；默认常驻动画是精确 `idle_merged`，点击动画回退到 `expression_merged` |
+| **Standing** | `<skin>\standing\` | `idle` as the resident animation | In-app **Add** (`.skel` or UnityFS bundle), or place files by hand | The ordinary case |
+| **Battle** aim / cover | `<skin>\aim\` + `<skin>\cover\` | both required to build Battle | `battle-catalog-importer` (**explicit list required**) | One missing side ⇒ plain standing character; **Add does not accept aim/cover** |
+| **Burst** skillcut | directory name ends with ` Burst` | close-up framing | same as standing | Battle and Lobby skillcut are usually byte-identical, so **prefer Lobby**; `idle` may show only the upper body — that is the source design, not an import error |
+| **Favorite** | directory name ends with ` Favorite`; source file `favorite_cNNN_00` | usually only `idle` and `expression_merged` | same as standing | Local ID is always `9NNN`, skin always `00`; **never enters Battle**, produces no aim/cover; resident animation is exactly `idle_merged`, click falls back to `expression_merged` |
 
-### 1.0 目录职责与路径对照
+### 1.0 Directory responsibilities and path mapping
 
-看懂这张表就不会把文件放错地方：
+This table is what keeps files from landing in the wrong place:
 
-| 位置 | 仓库里 | 发行包里 | 职责 |
+| Location | In the repository | In a release package | Responsibility |
 | --- | --- | --- | --- |
-| **运行时资源根** | `SpinePet\res\` | `res\` | 应用唯一扫描的目录，四类资源都落到这里 |
-| **名字表** | `SpinePet\src\SpinePet\Data\CharacterNames.json` | 编译进 `app\SpinePet.dll` | 角色 ID → 显示名；**改完必须重新构建** |
-| **源归档区** | `resources\Characters\` | —— | 只存在于开发机；源资源在这里留档，应用看不见 |
-| **zip 归档** | `resources\zips\` | —— | 入库后的原始 zip 留档 |
-| **上游证据镜像** | `resources\nikkedb\` | —— | 仅开发机（未入库，约 14 GB）：服装 ID 对照、索引、头像源 |
-| **工具** | `SpinePet\tools\` | `tools\` | 下表所有脚本；包内位置在包根 |
-| **可选导入 CLI** | `SpinePet\tools\battle-catalog-importer` | `tools\import\` | 自包含发布，用于射击 aim/cover |
+| **Runtime resource root** | `SpinePet\res\` | `res\` | The only directory the app scans; all four resource kinds land here |
+| **Name map** | `SpinePet\src\SpinePet\Data\CharacterNames.json` | compiled into `app\SpinePet.dll` | Character ID → display name; **rebuild after editing** |
+| **Source archive** | `resources\Characters\` | — | Development machines only; sources are archived here and the app cannot see them |
+| **zip archive** | `resources\zips\` | — | Original zips kept after intake |
+| **Upstream evidence mirror** | `resources\nikkedb\` | — | Development machines only (not in the repo, ~14 GB): apparel ID tables, indexes, icon sources |
+| **Tools** | `SpinePet\tools\` | `tools\` | Every script listed below; at the package root in a release |
+| **Optional import CLI** | `SpinePet\tools\battle-catalog-importer` | `tools\import\` | Self-contained publish, used for battle aim/cover |
 
-关键区别：**`resources\` 是留档区，`res\` 才是运行时资源**。放错地方的表现是"点 Scan 什么也没有"。
+The key distinction: **`resources\` is an archive, `res\` is the runtime resource**. Putting files
+in the wrong one shows up as "I pressed Scan and nothing happened".
 
-### 1.1 待机（standing）
+### 1.1 Standing
 
 ```text
-res\<资源全名>\<皮肤编号>\standing\
-  c<角色ID>_<皮肤ID>.skel
-  c<角色ID>_<皮肤ID>.atlas
-  <atlas 引用的全部纹理页>.png
-  c<角色ID>_<皮肤ID>.attachments.exclude   （可选，仅清理过才有）
+res\<full resource name>\<skin code>\standing\
+  c<character ID>_<skin ID>.skel
+  c<character ID>_<skin ID>.atlas
+  <every texture page referenced by the atlas>.png
+  c<character ID>_<skin ID>.attachments.exclude   (optional, only if cleaned)
 ```
 
-### 1.2 射击（aim / cover）
+### 1.2 Battle (aim / cover)
 
-同一皮肤下 **Aim 与 Cover 都完整**时才生成 Battle；只有 standing，或只补齐了一边，
-就仍按普通 Normal 角色使用。用指定清单工具审计通过后再写入：
+Battle is generated only when **both Aim and Cover are complete** for the same
+skin; standing-only, or only one side completed, stays an ordinary Normal
+character. Audit first, then write:
 
 ```powershell
-# 先只审计（不写任何文件）
+# audit only (writes nothing)
 dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- `
-  --audit resources\Characters "<资源目录名>" "<另一个资源目录名>"
+  --audit resources\Characters "<resource directory name>" "<another directory name>"
 
-# 审计逐项确认后再导入
+# import once every audited item is confirmed
 dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- `
-  resources\Characters SpinePet\res "<资源目录名>" "<另一个资源目录名>"
+  resources\Characters SpinePet\res "<resource directory name>" "<another directory name>"
 ```
 
-资源目录清单是**必填**项，只填 `resources\Characters` 下的精确直属目录名。
-审计只识别精确命名的 `Standing`/`Aim`/`Cover` 目录，像
-`Aim (Chinese Censored Version)` 这种变体目录不会混进主资源。
+The directory list is **mandatory** and must name exact direct children of
+`resources\Characters`. The audit recognises only exactly named
+`Standing`/`Aim`/`Cover` directories; variants such as
+`Aim (Chinese Censored Version)` will not be mixed into the main resource.
 
-### 1.3 爆裂（skillcut / Burst）
+### 1.3 Burst (skillcut)
 
-- 骨骼集选择顺序：**Standing > Lobby > Battle**；有 Standing 就选 Standing。
-- Battle 与 Lobby 的 skillcut 通常相同，默认取 Lobby。
-- skillcut 是特写取景，`idle` 可能只有半身，属正常现象。
-- 目录名以 ` Burst` 结尾，例如 `Cinderella Crystal Wave Burst`。
+- Skeleton pick order: **Standing > Lobby > Battle**; use Standing when present.
+- Battle and Lobby skillcut are usually identical, so prefer Lobby.
+- skillcut is close-up framing; `idle` may only cover the upper body — normal.
+- The directory name ends with ` Burst`, e.g. `Cinderella Crystal Wave Burst`.
 
-### 1.4 珍藏品（Favorite）
+### 1.4 Favorite
 
-- 源文件名形如 `favorite_cNNN_00`：从文件名取三位原编号 `NNN`。
-- **本地编号 = `9NNN`**（原编号前加 `9`），皮肤固定 `00`，显示名为 `<Name> Favorite`。
-  例：`favorite_c072_00` → Diesel → 本地 `9072` → `res\Diesel Favorite\00\standing\c9072_00.skel`。
-- 查头像用**原编号**（`si_c072_00_s.png`），不能用 `9NNN` 反查——那个编号只属于本项目。
-- 只有 `idle` 与 `expression_merged` 两个动画，属单状态互动资源。
+- Source file names look like `favorite_cNNN_00`; take the three-digit original
+  number `NNN` from the file name.
+- **Local ID = `9NNN`** (prefix a `9`), skin is always `00`, display name is
+  `<Name> Favorite`. Example: `favorite_c072_00` → Diesel → local `9072` →
+  `res\Diesel Favorite\00\standing\c9072_00.skel`.
+- Look the icon up with the **original** number (`si_c072_00_s.png`); never query
+  by the `9NNN` ID — that number exists only in this project.
+- These resources carry only `idle` and `expression_merged`; they are
+  single-state interactive resources.
 
-## 2. 原始格式要改什么（"不方便"的具体来源）
+## 2. What has to be changed in raw exports
 
-| 要改的东西 | 规则 |
+| Item | Rule |
 | --- | --- |
-| **目录名** | 必须用**资源全名**（角色+皮肤/变体名），Burst 以 ` Burst` 结尾；**禁止只写角色名**；同一角色的不同变体各占一个目录 |
-| **文件名前缀** | `c<角色ID>_<皮肤ID>`，程序按此前缀识别与去重 |
-| **角色编号** | 每次导入**一律分配新 ID**：新 ID = `<源角色ID><皮肤号>` 拼接（`191_02` → `19102`、`260_80` → `26080`、`515_00` → `5150`）；只改角色数字段，**皮肤号保持源文件原值**（`c191_02_00.skel` → `c19102_02_00.skel`） |
-| **atlas** | 首行引用的页面 png 名、`.attachments.exclude` 文件名同步改名 |
-| **CharacterNames.json** | 为新 ID 加条目，显示名 = 资源全名（Burst 以 ` Burst` 结尾）；改完**必须重新构建**才生效（`dotnet build src\SpinePet\SpinePet.csproj -c Release`） |
-| **禁令** | 禁止发明 `00cut` 之类皮肤代号；禁止两套骨骼共用同一前缀或同一显示名——**重名的模型打不开** |
-| **图标** | 取索引方形图，不要用部件贴图，也不要用游戏竖版立绘（高 > 宽 × 1.25 说明取错了源） |
+| **Directory name** | Must be the **full resource name** (character + skin/variant), Burst ending with ` Burst`; **never just the character name**; each variant of a character gets its own directory |
+| **File name prefix** | `c<character ID>_<skin ID>` — the application identifies and de-duplicates by this prefix |
+| **Character ID** | **Always allocate a fresh ID on import**: new ID = `<source character ID><skin number>` concatenated (`191_02` → `19102`, `260_80` → `26080`, `515_00` → `5150`); only the character digit field changes, the **skin number keeps its source value** (`c191_02_00.skel` → `c19102_02_00.skel`) |
+| **Atlas** | Rename the page PNG references in the atlas header and the `.attachments.exclude` file name to match |
+| **CharacterNames.json** | Add an entry for the new ID with the display name = full resource name (Burst ends with ` Burst`); the change **only takes effect after a rebuild** (`dotnet build src\SpinePet\SpinePet.csproj -c Release`) |
+| **Forbidden** | Do not invent codes like `00cut`; never let two skeletons share one prefix or one display name — **duplicate names make a model unopenable** |
+| **Icons** | Use the square index image, not part textures, and not the game's tall portrait art (if height > width × 1.25 you picked the wrong source) |
 
-图标的查找位置与顺序（离线查询 nikkedb 证据库，应用运行时不访问它）：
+Icon lookup location and order (queried offline from the nikkedb evidence store;
+the application never touches it at runtime):
 
 ```text
 resources\nikkedb\github-repository\images\sprite\
-  si_c<原角色ID>_<皮肤ID>_00_s.png  →  _s  →  _00  →  无后缀
+  si_c<original character ID>_<skin ID>_00_s.png  →  _s  →  _00  →  no suffix
 ```
 
-命中后复制为 `<皮肤目录>\icons\<资源前缀>_icon.png`；皮肤没有专属头像时回退本体图标
-`si_c<原角色ID>_00_s.png`。**找不到头像就不要先导本体**——报告 `MissingIcon` 而不是
-事后无限期补图。
+Copy the hit to `<skin directory>\icons\<resource prefix>_icon.png`; when a skin
+has no dedicated icon, fall back to the base icon `si_c<original ID>_00_s.png`.
+**If no icon can be located, do not import the body first** — report
+`MissingIcon` instead of patching it up indefinitely afterwards.
 
-旧布局 `res\<角色>\standing\<自定义文件名>.skel` 仍可被扫描，但**不要新增**；
-用 `SpinePet\tools\resource-layout\Migrate-CharacterResources.ps1`（先 `-WhatIf` 预览）迁移。
+The legacy layout `res\<character>\standing\<custom name>.skel` is still scannable
+but **must not be added to**; migrate it with
+`SpinePet\tools\resource-layout\Migrate-CharacterResources.ps1` (preview with
+`-WhatIf` first).
 
-### 2.1 入库时的命名规范化（zip / 文件夹）
+### 2.1 Normalising names at intake (zip / folder)
 
-下载来的目录名与 zip 名一般是乱的，入库脚本会先规范化再归档：
+Downloaded names are usually messy, so intake normalises them before archiving:
 
-**zip**（`Import-ResourceZip.ps1` 自动推导）：
+**zip** (derived automatically by `Import-ResourceZip.ps1`):
 
-1. 去掉 `PC _ Computer - Goddess of Victory_ Nikke - ` 前缀；
-2. 剩余部分里的 `_ `（下划线+空格）替换为 ` - `；
-3. **名字在前、Burst 放末尾**：以 `Burst - ` 开头时改为 `<名称> Burst`
-   （`Burst - Helm_ Aquamarine` → `Helm - Aquamarine Burst`，实测见示例 4）；
-4. 内层目录名 = 外层名去掉结尾 ` Burst`、再去掉首个稀有度前缀；
-5. 解压前校验顶层只有一个文件夹；目标已存在则**报错不覆盖**，人工确认后再处理。
+1. Strip the `PC _ Computer - Goddess of Victory_ Nikke - ` prefix;
+2. replace `_ ` (underscore + space) with ` - `;
+3. **name first, Burst last**: a name starting with `Burst - ` becomes `<name> Burst`
+   (`Burst - Helm_ Aquamarine` → `Helm - Aquamarine Burst`, see example 4);
+4. the inner directory name is the outer name without the trailing ` Burst` and without the
+   leading rarity prefix;
+5. the archive must contain exactly one top-level folder; if the target already exists the script
+   **errors instead of overwriting**, so you can decide by hand.
 
-**文件夹**（手工归档，注意是**剪切**不是复制）：
+**folder** (manual archiving — **move**, do not copy):
 
 ```text
-YYYY-MM-DD__名称 [cNNN_NN]   →   resources\Characters\名称
-例：2025-12-30__Quency Escape Queen Variant 01 [c403_01]
-    → resources\Characters\Quency Escape Queen Variant 01
+YYYY-MM-DD__name [cNNN_NN]   →   resources\Characters\name
+e.g. 2025-12-30__Quency Escape Queen Variant 01 [c403_01]
+     → resources\Characters\Quency Escape Queen Variant 01
 ```
 
-### 2.2 只改该改的，其余原样
+### 2.2 Change only what must change
 
-- `.skel` / `.atlas` / `.png` 一律**原样复制**，内容与行尾都不动（清理是独立步骤，见 §7）；
-- 目标已存在同名文件时**不覆盖**，先人工确认；
-- 同一套源资源**只入库一次**，后续所有调整改 `res\` 或名字表。
+- `.skel` / `.atlas` / `.png` are copied **verbatim** — content and line endings untouched
+  (cleanup is a separate, opt-in step; see section 7);
+- an existing target file is **never overwritten**; confirm by hand first;
+- one source resource is **intaken once**; all later changes go to `res\` or the name map.
 
-### 2.3 保留源角色 ID 的例外
+### 2.3 The exception to "always allocate a new ID"
 
-"每次导入都分配新 ID"有一个例外：**当这套资源本身就是角色的首个模型**时，保留源角色 ID
-（如 `Cinderella Crystal Wave` 保留 `515`、`Scarlet Overload` 保留 `472`）。
-只要同一源角色已经存在任意本体或变体卡片，后续导入——**即使皮肤号是 `00`**——都必须分配新 ID。
+"Always allocate a fresh ID" has one exception: when the resource **is the character's first
+model**, the source character ID is kept (e.g. `Cinderella Crystal Wave` keeps `515`,
+`Scarlet Overload` keeps `472`). As soon as that source character already has any base or variant
+card, every later import — **even with skin code `00`** — must be given a new ID.
 
-### 2.4 `CharacterNames.json` 的硬约束
+### 2.4 Hard constraints on `CharacterNames.json`
 
-改名字表时踩这几条会被导入拒绝：
+These get an import rejected:
 
-- 显示名 = **资源全名**，必须与 `res` 下的目录名一致；
-- **不得含首尾空白**；
-- 必须是**合法目录名**：不能出现 `\ / : * ? " < > |`；
-- 不得与已有显示名重复；
-- 数值键是角色 ID 字符串（如 `"19102": "Alice Variant 02"`）；
-- 改完必须 `dotnet build src\SpinePet\SpinePet.csproj -c Release`，否则名字不生效。
+- the display name is the **full resource name** and must equal the `res\` directory name;
+- **no leading or trailing whitespace**;
+- it must be a **valid directory name**: no `\ / : * ? " < > |`;
+- it must not duplicate an existing display name;
+- keys are character ID strings (e.g. `"19102": "Alice Variant 02"`);
+- after editing you must run `dotnet build src\SpinePet\SpinePet.csproj -c Release`, or the
+  name simply will not apply.
 
-### 2.5 导入后的默认值（规范 §4.4 / §4.5）
+### 2.5 Defaults after import (spec sections 4.4 / 4.5)
 
-新导入的卡片按以下默认运行，不需要手工配置：
+Newly imported cards run with these defaults; no manual configuration is needed:
 
-- **默认动画**：导入完成时默认状态是 `idle`（不预设 `action` 等）；
-  启动与首次展示固定进入 Normal/standing 并播放 `idle`；骨骼里没有 `idle` 时用动画列表第一个；
-  用户在面板里选过的动画优先于默认值。
-- **缩放**：`ScaleBasePercent = 100`、`ScaleMultiplier = 1`、`Scale = 0.2`（即第一条拉满、第二条 1 倍）。
-- **显隐**：`Visible = false`——新卡默认隐藏，导入或扫描完成后**不会**自动显示。
+- **Default animation**: the card ends up on `idle` (never preset to `action` or similar);
+  startup and first display always enter Normal/standing and play `idle`; when the skeleton has no
+  `idle`, the first animation in the list is used; an animation the user picked in the panel wins.
+- **Scale**: `ScaleBasePercent = 100`, `ScaleMultiplier = 1`, `Scale = 0.2` (first slider at max,
+  second at 1×).
+- **Visibility**: `Visible = false` — new cards start hidden and are **never** auto-shown on
+  import or on scan completion.
 
-## 3. 项目提供的导入工具
+## 3. Import tooling shipped with the project
 
-| 工具 | 路径 | 作用 |
+| Tool | Path | Purpose |
 | --- | --- | --- |
-| 应用内 **Add** | 配置面板 | 导入 standing 的 `.skel` 或 UnityFS bundle（文件名需以 `c<ID>_<皮肤ID>_<standing\|icons>_` 开头）；带事务、冲突不覆盖、失败回滚 |
-| 应用内 **Scan / Folder** | 配置面板 | 重扫 `res\` 同步手工改动；打开当前资源目录（不存在会自动创建） |
-| zip 一键入库 | `SpinePet\tools\zip-intake\Import-ResourceZip.ps1` | 解压 → 规范目录名 → 备份到 `resources\Characters\` → zip 归入 `resources\zips\` → 输出骨骼/atlas/缺号报告 |
-| 射击审计与导入 | `SpinePet\tools\battle-catalog-importer` | 指定清单的 Standing/Aim/Cover 审计与成对导入（见 1.2） |
-| 图标下载 | `SpinePet\tools\icons-downloader\Update-CharacterIcons.ps1` | 每次只接受**一个** ResourceId 和**一个**目标皮肤，不做全库扫描 |
-| 图标/缩略图规范化 | 同上的 Add 流程 | Add 导入 standing 后会自动为该皮肤补图标；图标导入本身不创建卡片 |
-| Atlas 清理与遮罩 | `SpinePet\tools\atlas-cleaner\Clean-Atlas.ps1` | 清理 atlas 中的背景/特效层与贴图遮罩（**按需**，默认不做） |
-| 旧布局迁移 | `SpinePet\tools\resource-layout\Migrate-CharacterResources.ps1` | 把旧布局迁到规范布局，支持 `-WhatIf` |
-| 骨骼附件检查 | `SpinePet\tools\skeleton-inspector` | 查看骨骼的附件/时间轴，用于排查点击区域与动画问题 |
+| In-app **Add** | configuration panel | Imports a standing `.skel` or UnityFS bundle (file name must start with `c<ID>_<skin ID>_<standing\|icons>_`); transactional, conflicts are never overwritten, failures roll back |
+| In-app **Scan / Folder** | configuration panel | Re-scans `res\` after manual changes; opens the current resource directory (created automatically if missing) |
+| One-step zip intake | `SpinePet\tools\zip-intake\Import-ResourceZip.ps1` | Unzip → normalise directory names → archive into `resources\Characters\` → file the zip into `resources\zips\` → print a skeleton/atlas/missing-ID report |
+| Battle audit and import | `SpinePet\tools\battle-catalog-importer` | Audits and pairwise-imports Standing/Aim/Cover for an explicit list (see 1.2) |
+| Icon download | `SpinePet\tools\icons-downloader\Update-CharacterIcons.ps1` | Accepts exactly **one** ResourceId and **one** target skin per run; never scans the whole library |
+| Atlas cleanup and masking | `SpinePet\tools\atlas-cleaner\Clean-Atlas.ps1` | Removes background/effect layers from atlases and applies texture masking (**opt-in**, off by default) |
+| Legacy layout migration | `SpinePet\tools\resource-layout\Migrate-CharacterResources.ps1` | Migrates the legacy layout; supports `-WhatIf` |
+| Skeleton attachment inspector | `SpinePet\tools\skeleton-inspector` | Inspects attachments/timelines, useful for click-region and animation problems |
 
-UnityFS 导入依赖 Python 包：
+UnityFS import needs the Python packages:
 
 ```powershell
 python -m pip install -r SpinePet\tools\requirements.txt
 ```
 
 
-### 3.1 工具命令参考
+### 3.1 Tool command reference
 
-命令在**仓库根目录**执行；发行包里把 `SpinePet\tools\` 换成 `tools\`。
-所有 `.ps1` 都兼容 Windows 自带的 PowerShell 5.1。
+Run these from the **repository root**; in a release package replace `SpinePet\tools\` with `tools\`.
+Every `.ps1` also runs on the PowerShell 5.1 that ships with Windows.
 
-**zip 一键入库**
+**One-step zip intake**
 
 ```powershell
-pwsh -NoProfile -File 'SpinePet\tools\zip-intake\Import-ResourceZip.ps1' -Zip '<zip 完整路径>'
-# 可选：-CharactersDir <归档目录> -ZipsDir <zip 归档目录>
+pwsh -NoProfile -File 'SpinePet\tools\zip-intake\Import-ResourceZip.ps1' -Zip '<full path to zip>'
+# optional: -CharactersDir <archive dir>  -ZipsDir <zip archive dir>
 ```
-输出 `=== 骨骼集分析 ===` 逐条列出 `c<角色ID>_<皮肤ID>*.skel` 的位置与 `atlas:OK`，
-末尾给出「已入库：…」与「zip 已移至：…」。
+It prints `=== skeleton set analysis ===` listing each `c<character ID>_<skin ID>*.skel` with
+`atlas:OK`, followed by "archived: …" and "zip moved to: …".
 
-**射击 aim/cover 审计与导入**
+**Battle aim/cover audit and import**
 
 ```powershell
-# ① 审计（不写任何文件）
+# (1) audit — writes nothing
 dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- `
-  --audit resources\Characters "<资源目录名>" "<另一个资源目录名>"
-# ② 导入
+  --audit resources\Characters "<resource dir name>" "<another resource dir name>"
+# (2) import
 dotnet run --project SpinePet\tools\battle-catalog-importer\BattleCatalogImporter.csproj -c Release -- `
-  resources\Characters SpinePet\res "<资源目录名>" "<另一个资源目录名>"
-# 发行包内（自包含，目标机无需 .NET）
+  resources\Characters SpinePet\res "<resource dir name>" "<another resource dir name>"
+# inside a release package (self-contained, no .NET needed)
 tools\import\BattleCatalogImporter.exe --audit resources\Characters "Anis Star"
 ```
-参数顺序：**源目录 → 目标 `res` → 资源目录名清单（必填）**。
-输出 JSON：审计有 `SourceDirectoryCount` / `CompleteSets`（含 `Identity`）/ `SkippedEntries`；
-导入另有 `CompleteSetCount` / `ImportedBattleCount` / `AddedCharacterCount` / `AlreadyPresentCount`。
+Argument order: **source directory → target `res` → list of resource directory names (required)**.
+JSON output: the audit reports `SourceDirectoryCount` / `CompleteSets` (with `Identity`) /
+`SkippedEntries`; the import adds `CompleteSetCount` / `ImportedBattleCount` /
+`AddedCharacterCount` / `AlreadyPresentCount`.
 
-**图标下载（精确指定，没有全库模式）**
+**Icon download (precise selection, no whole-library mode)**
 
 ```powershell
 pwsh -NoProfile -File 'SpinePet\tools\icons-downloader\Update-CharacterIcons.ps1' `
   -ResourceId 'c0170_00' -TargetSkinDirectory 'SpinePet\res\Anis Star\00'
-# 其他参数：-ListOnly（只列候选不下载） -Force（覆盖已有图标）
-#           -PythonCommand（默认 python） -ResourceDirectory
+# other parameters: -ListOnly (list candidates, no download)  -Force (overwrite an existing icon)
+#                   -PythonCommand (default python)  -ResourceDirectory
 ```
-需要 Python（内部调 `extract_icon.py`）+ 网络。`Add` 导入 standing 后应用会**自动**做同一件事。
+Requires Python (it calls `extract_icon.py` internally) and network access. After `Add` imports a
+standing resource the application does exactly the same thing **automatically**.
 
-**atlas 清理与遮罩（按需）**
+**Atlas cleanup and masking (opt-in)**
 
 ```powershell
-pwsh -NoProfile -File 'SpinePet\tools\atlas-cleaner\Clean-Atlas.ps1' -Folder '<皮肤\standing 目录>' -WhatIf
-# 去掉 -WhatIf 才真正写入；-CreateBackup 默认 $true
+pwsh -NoProfile -File 'SpinePet\tools\atlas-cleaner\Clean-Atlas.ps1' -Folder '<skin\standing dir>' -WhatIf
+# drop -WhatIf to actually write; -CreateBackup defaults to $true
 ```
 
-**旧布局迁移**
+**Legacy layout migration**
 
 ```powershell
 pwsh -NoProfile -File 'SpinePet\tools\resource-layout\Migrate-CharacterResources.ps1' -WhatIf
-# 可选：-ResourceDirectory <res 目录> -CharacterNamesPath <CharacterNames.json>
+# optional: -ResourceDirectory <res dir>  -CharacterNamesPath <CharacterNames.json>
 ```
 
-**骨骼附件检查**
+**Skeleton attachment inspector**
 
 ```powershell
 dotnet run --project SpinePet\tools\skeleton-inspector\SkeletonInspector.csproj -- `
-  '<骨架.skel>' '<同名.atlas>'
+  '<skeleton.skel>' '<same-named.atlas>'
 ```
-输出动画名与附件/时间轴清单，用于核对点击区域与动画是否存在。
+Prints animation names plus the attachment/timeline inventory, useful for checking click regions
+and whether an animation exists at all.
 
-## 4. 推荐流程（规范化：指定清单 → 入库 → 预检 → 导入 → 验证）
+## 4. Recommended flow (spec: explicit list → intake → pre-check → import → verify)
 
-1. **确定清单**：这次只处理哪几套资源，写下来。
-2. **入库**：zip 用 `Import-ResourceZip.ps1`；文件夹按
-   `YYYY-MM-DD__名称 [cNNN_NN]` → `resources\Characters\名称` **剪切**归档。
-3. **预检**：骨骼完整性（`.skel`+`.atlas`+全部贴图）、Spine 版本、身份与目标 ID、
-   图标来源——四件事都在写入 `res` **之前**做完。
-4. **导入**：待机/爆裂/珍藏品按 §1 写入 `res\`；射击走 1.2 的审计→导入两步。
-5. **验证**：见下一节；新卡片默认 `Visible = false`、缩放 100% / 1.0 倍。
+1. **Decide the list**: exactly which resources this run touches. Write it down.
+2. **Intake**: zips via `Import-ResourceZip.ps1`; folders are **moved** (not copied)
+   into `resources\Characters\名称` after renaming
+   `YYYY-MM-DD__名称 [cNNN_NN]` → `名称`.
+3. **Pre-check**: skeleton completeness (`.skel` + `.atlas` + all textures), Spine
+   version, identity and target ID, icon source — all four **before** writing to `res`.
+4. **Import**: standing / burst / favorite go into `res\` per section 1; battle
+   follows the audit-then-import pair in 1.2.
+5. **Verify**: see the next section; new cards default to `Visible = false`, scale
+   100% / 1.0×.
 
-**覆盖 `res` 里已有文件前先关闭 SpinePet**（Windows 文件锁会导致
-`Device or resource busy`）。
+**Close SpinePet before overwriting existing files in `res`** (Windows file locks
+cause `Device or resource busy`).
 
-### 4.1 导入完成后，应用应该写出什么
 
-发行版实测：导入 `Anis Star` 与 `Alice Variant 02` 后启动应用，它扫描 `res` 写出的 `config.json` 形如：
+### 4.1 What the application should write once the import is done
+
+From a real release test: after importing `Anis Star` and `Alice Variant 02`, the first launch
+scanned `res\` and wrote a `config.json` like this:
 
 ```json
 {
@@ -499,21 +548,22 @@ dotnet run --project SpinePet\tools\skeleton-inspector\SkeletonInspector.csproj 
 }
 ```
 
-自查要点：
+Check these points:
 
-- 每套资源一个条目，`Name` 是你写进名字表的显示名；
-- 路径指向 `res\`（**不是** `resources\`）；
-- **多页 atlas 的第二页会进 `ExtraTexturePaths`**（例：`c19102_02_2.png`）；
-- `Battle` 段是应用**自动生成**的，不需要手写；只有 aim/cover 成对存在时才会出现；
-- `Visible=false`、`ScaleBasePercent=100`、`ScaleMultiplier=1`、`Scale=0.2` 符合规范；
-- `Version` 等于应用当前的配置版本（当前 `1.9`）。
+- one entry per resource, with `Name` equal to the display name you put in the name map;
+- paths point into `res\` (**not** `resources\`);
+- **a second atlas page lands in `ExtraTexturePaths`** (e.g. `c19102_02_2.png`);
+- the `Battle` block is **generated by the application** — never hand-write it; it only appears
+  when aim and cover exist as a pair;
+- `Visible=false`, `ScaleBasePercent=100`, `ScaleMultiplier=1`, `Scale=0.2` match the spec;
+- `Version` equals the application's current configuration version (`1.9` at the time of writing).
 
-## 5. 验证与排查
+## 5. Verification and troubleshooting
 
-先跑一遍 atlas 页齐全性检查（规范 §5）：
+Run the atlas page completeness check first (spec section 5):
 
 ```powershell
-$dir = 'SpinePet\res\<资源全名>\<皮肤编号>\standing'
+$dir = 'SpinePet\res\<full resource name>\<skin code>\standing'
 Get-Content "$dir\<resource>.atlas" |
   Where-Object { $_.Trim() -match '\.(png|jpg|jpeg|webp)$' } |
   Select-Object -Unique | ForEach-Object {
@@ -521,109 +571,139 @@ Get-Content "$dir\<resource>.atlas" |
       Write-Error "Missing atlas page: $($_.Trim())" } }
 ```
 
-然后在应用里点 **Scan**，确认新卡出现、名字正确、头像正确、默认动画是 `idle`。
+Then press **Scan** in the app and confirm the new card appears, with the right
+name, the right icon and `idle` as its default animation.
 
-扫描不到的排查顺序：
+If it does not show up, check in this order:
 
-1. 是否放在 `SpinePet\res\`（而不是 `resources\` 或索引目录）；
-2. `.skel` 与 `.atlas` 是否**同名**；
-3. atlas 声明的纹理页是否齐全；
-4. 骨骼是否是 **Spine 4.1.x**；
-5. 文件名是否含 `c<角色ID>_<皮肤ID>` 前缀；
-6. 角色 ID 是否在 `CharacterNames.json`，改过是否**重新构建**；
-7. 是否位于 `<资源全名>\<皮肤编号>\standing`；
-8. 同一角色+皮肤前缀是否被两套骨骼占用（重名会被去重吞卡）。
+1. Is it inside `SpinePet\res\` (not `resources\` or an index directory)?
+2. Do `.skel` and `.atlas` share the **same name**?
+3. Are all texture pages declared by the atlas present?
+4. Is the skeleton **Spine 4.1.x**?
+5. Does the file name contain the `c<character ID>_<skin ID>` prefix?
+6. Is the character ID present in `CharacterNames.json`, and did you **rebuild**
+   after changing it?
+7. Is it under `<full resource name>\<skin code>\standing`?
+8. Is the same character+skin prefix occupied by two skeletons (duplicates get
+   de-duplicated and the card is swallowed)?
 
-**冲突与重复导入的语义**（应用内 Add 与导入 CLI 行为一致）：
 
-- 目标已存在 → **拒绝**：即使源与目标内容相同、或你再次选中目标目录里的同一文件，也不算导入成功；
-- 失败或取消 → 回滚本次创建的文件与空目录，并清理 `.SpinePet-Import-*` 临时目录；
-  导入前就存在的文件保持不变；
-- 同一套资源重复导入 → 报 `AlreadyPresent`，不会重复建卡；
-- 骨骼落在**退役的旧状态目录**里 → 会被拒绝，按 §6.2 的思路迁移到规范布局。
+**Conflict and repeat-import semantics** (in-app Add and the import CLI behave the same way):
 
-## 6. AI 辅助导入（推荐）
+- an existing target is **rejected** — even when the source and target are byte-identical, or when
+  you pick the same file from the target directory again, it is not a successful import;
+- failure or cancellation rolls back the files and empty directories created by that run and
+  always cleans up the `.SpinePet-Import-*` temporary directory; anything that existed before the
+  import is left untouched;
+- importing the same resource twice reports `AlreadyPresent` and does not create a duplicate card;
+- a skeleton sitting in a **retired state directory** is rejected — migrate it to the canonical
+  layout as described in section 6.2.
 
-导入的实质是"**读规范 → 改名改号 → 核对 → 跑命令 → 看报告**"的重复劳动，
-出错点又都在细节上（编号拼接、atlas 页名、图标来源、重名），非常适合交给 AI，
-你只负责确认判断项。
+**One more look at `config.json`**: the number of entries should equal the number of characters
+recognisable under `res\`; paths must point at `res\`, not `resources\`; and the `Battle` block
+appears only when aim and cover exist as a pair.
 
-**把下面这些要求交给 AI：**
+## 6. AI-assisted import (recommended)
 
-1. 先完整读
-   `Y_MultipleAgentWorkflow/Resources/Load/SpinePet_Resources_Load_Guide.md`；
-   珍藏品再读 `Favorite_Interactive_Import_Guide.md`。
-2. 严格按 **指定清单 → 入库 → 本体与头像预检 → 导入登记 → 验证** 推进，
-   **不得**扫描或导入整个资源库。
-3. 每一步都给出**实际执行的命令与输出**作为证据，不要"应该导入成功"式结论。
-4. 需要判断的地方（新角色 ID、显示名、图标来源）**先问你确认**，不允许凭名字猜 ID。
-5. 完成后按 §5 跑 atlas 检查，并逐条报告：新卡名称 / ID / ID 是否已在
-   `CharacterNames.json` / 默认动画 / 图标路径。
+Importing is really "**read the spec → rename and renumber → verify → run commands
+→ read reports**" repeated, and every mistake lives in the details (ID
+concatenation, atlas page names, icon source, duplicate names) — which makes it a
+good fit for an AI assistant, with you confirming the judgement calls.
 
-**不要让 AI 做的事：** 枚举未指定的同级目录；把 `res` 当试验场做清理
-（清理放在 `resources\` 的暂存副本上）；覆盖文件前不关应用；用 `9NNN`
-编号去 nikkedb 反查。
+**Hand these requirements to the AI:**
 
-## 7. 已知坑
+1. Read
+   `Y_MultipleAgentWorkflow/Resources/Load/SpinePet_Resources_Load_Guide.md` in
+   full first; for favorites also read `Favorite_Interactive_Import_Guide.md`.
+2. Follow **explicit list → intake → body-and-icon pre-check → import record →
+   verify** strictly, and **never** scan or import the whole library.
+3. Show **actual commands and their output** as evidence for every step — no
+   "it should have imported fine" conclusions.
+4. **Ask you to confirm** anything judgemental (new character ID, display name,
+   icon source); never guess an ID from a name.
+5. When done, run the atlas check from section 5 and report per new card: name /
+   ID / whether the ID is in `CharacterNames.json` / default animation / icon path.
 
-- **重名即失效**：两套骨骼共用同一 `c<ID>_<皮肤ID>` 前缀或同一显示名时，
-  被去重吞卡，模型打不开。
-- **皮肤号别乱改**：新 ID 只改角色数字段，皮肤号必须是源文件原值。
-- **Spine 版本**：必须是 4.1.x。已知个例：某套资源战斗骨骼为 `4.0.47`，
-  与当前 4.1 运行时不兼容，只能跳过。
-- **改 `CharacterNames.json` 后忘记重新构建**：名称不生效。
-- **文件锁**：应用运行中覆盖 `res` 文件会失败，先退出应用。
-- **珍藏品不进 Battle**：`Favorite` 资源只有单状态，不要为它建 aim/cover。
-- **清理是可选动作**：默认不清理；要做也只在暂存副本上做，
-  `.attachments.exclude` 优先于贴图遮罩，`*_eyebg`（眼白）永远不要删。
-- **图标别取错源**：卡片头像是超高竖图（高 > 宽 × 1.25，如 488×953）说明误用了游戏竖版立绘
-  （`resources\Characters\<资源名>\Icons\c*_NN.png`）。正确来源是索引方形图
-  `si_c<原角色ID>_<皮肤ID>_00_s.png`（约 128×128，查找顺序 `_00_s` → `_s` → `_00` → 无后缀）。
-- **上游头像镜像不在仓库里**：`resources\nikkedb\` 约 14 GB，未入库，只有开发机有。
-  普通使用者请走**应用内自动下载**或 `icons-downloader`（需要 Python + 网络）；
-  拿不到图标时应用会回退用立绘贴图当缩略图，功能不受影响。
-- **旧布局卡片的图标约定不同**：图标放在骨骼同目录，命名 `<骨骼主文件名>_icon.png`
-  （如 `Blanc_WhiteRabbit_icon.png`），不是 `icons\` 子目录。
-- **珍藏品点击动画链**：按 `action → click → touch → tap → reaction → interact → skillcut`
-  取第一个存在的；都没有才回退 `expression_merged`；点击结束恢复当前常驻动画。
-- **名字表改错会静默不生效**：`CharacterNames.json` 改后不重新构建，卡片的显示名不会变。
+**Do not let the AI:** enumerate unspecified sibling directories; use `res` as a
+cleanup playground (cleanup happens on staging copies under `resources\`);
+overwrite files while the application is running; or query nikkedb with a `9NNN` ID.
 
-## 8. 运行环境要求（裸机）
+## 7. Known pitfalls
 
-应用本体是**自包含发布**：目标机**不需要**安装 .NET，也**不需要** VC++ 运行库
-（包内自带 `hostfxr.dll`、`coreclr.dll`、`PresentationFramework.dll`、
-`vcruntime140_cor3.dll`、`D3DCompiler_47_cor3.dll`），系统要求 Windows 10 或更高。
+- **Duplicate names break models**: two skeletons sharing one
+  `c<ID>_<skin ID>` prefix or one display name get de-duplicated and the card is
+  swallowed.
+- **Do not touch the skin number**: a new ID changes only the character digit
+  field; the skin number must keep its source value.
+- **Spine version**: must be 4.1.x. Known case: one resource's battle skeleton was
+  `4.0.47`, incompatible with the 4.1 runtime, so it had to be skipped.
+- **Rebuild after editing `CharacterNames.json`**, or the name will not apply.
+- **File locks**: overwriting files in `res` while the app runs fails — exit it first.
+- **Favorites never enter Battle**: a `Favorite` resource is single-state; do not
+  build aim/cover for it.
+- **Cleanup is optional**: off by default; if you do it, work on a staging copy,
+  prefer `.attachments.exclude` over texture masking, and never delete `*_eyebg`
+  (eye whites).
 
-但并非所有能力都零依赖，按你要用的功能对号入座：
 
-| 能力 | 裸机可跑？ | 需要什么 |
+- **Pick icons from the right source**: a card thumbnail that is a very tall image
+  (height > width × 1.25, e.g. 488×953) means the game's portrait art was used by mistake
+  (`resources\Characters\<resource>\Icons\c*_NN.png`). The correct source is the square index
+  image `si_c<original character ID>_<skin ID>_00_s.png` (~128×128; lookup order
+  `_00_s` → `_s` → `_00` → no suffix).
+- **The upstream icon mirror is not in the repository**: `resources\nikkedb\` is roughly 14 GB
+  and only exists on development machines. Ordinary users should rely on the **automatic download
+  in the app** or on `icons-downloader` (both need Python + network). When no icon is available the
+  app falls back to the standing texture as the thumbnail — nothing breaks.
+- **Legacy-layout cards use a different icon convention**: the icon sits next to the skeleton,
+  named `<skeleton base name>_icon.png` (e.g. `Blanc_WhiteRabbit_icon.png`), not inside an
+  `icons\` subdirectory.
+- **Favorite click-animation chain**: `action → click → touch → tap → reaction → interact →
+  skillcut`, first one that exists; only when none exist does it fall back to
+  `expression_merged`; after the click finishes it returns to the current resident animation.
+- **A bad name-map edit fails silently**: if you change `CharacterNames.json` and do not rebuild,
+  the card keeps its old name.
+
+## 8. Runtime requirements (bare Windows)
+
+The application itself is a **self-contained publish**: the target machine needs
+**no .NET installation** and **no VC++ redistributable** (the package carries
+`hostfxr.dll`, `coreclr.dll`, `PresentationFramework.dll`, `vcruntime140_cor3.dll`
+and `D3DCompiler_47_cor3.dll`). Windows 10 or later is required.
+
+Not every capability is dependency-free, though. Match the feature you need:
+
+| Capability | Runs on bare Windows? | What it needs |
 | --- | --- | --- |
-| 启动桌宠、显示与交互、手动放文件 + `Scan` | ✅ | 无（Windows 10 及以上） |
-| `Add` 导入 `.skel`（骨架 + atlas + 贴图） | ✅ | 无，纯 C# 路径 |
-| `Add` 导入 **UnityFS bundle** | ❌ | Python 3 + `pip install -r tools\requirements.txt`（UnityPy、Pillow） |
-| 自动 / 手动**图标下载** | ❌ | 同上；脚本本身走 Windows 自带 `powershell.exe`，但解包用 Python |
-| **射击 aim/cover 导入** | ⚠️ | 需要 `BattleCatalogImporter`：装 .NET SDK 自行编译，或使用带 `-IncludeImportTools` 的发行包（内含自包含 exe，无需 .NET） |
-| zip 入库 / atlas 清理 / 旧布局迁移 | ✅ | 无；这些 `.ps1` 已兼容 **Windows 自带的 PowerShell 5.1**（含中文输出，UTF-8 BOM 已确保不乱码） |
-| 从源码构建 / 打包发布 | ❌ | .NET 9 SDK（打包脚本还需 `pwsh` 7，见 `tools\Publish.bat`） |
+| Starting the pet, rendering, interacting, placing files by hand + `Scan` | Yes | Nothing (Windows 10+) |
+| `Add` importing a `.skel` (skeleton + atlas + textures) | Yes | Nothing — pure C# path |
+| `Add` importing a **UnityFS bundle** | No | Python 3 + `pip install -r tools\requirements.txt` (UnityPy, Pillow) |
+| Automatic / manual **icon download** | No | Same as above; the script uses the built-in `powershell.exe`, but unpacking needs Python |
+| **Battle aim/cover import** | Partly | Needs `BattleCatalogImporter`: build it with the .NET SDK, or use a package built with `-IncludeImportTools` (self-contained exe, no .NET required) |
+| zip intake / atlas cleanup / legacy layout migration | Yes | Nothing; those `.ps1` files run on **the PowerShell 5.1 that ships with Windows** (Chinese output included — UTF-8 BOM guarantees no mojibake) |
+| Building from source / packaging a release | No | .NET 9 SDK (packaging additionally uses `pwsh` 7, see `tools\Publish.bat`) |
 
-上机先跑一次自检，它会逐项报告缺什么、以及缺了会损失哪个功能：
+Run the self-check first on any new machine — it reports item by item what is
+missing and which feature each gap costs you:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File Check-Environment.ps1
 ```
 
-脚本在发行包根目录，输出 `[OK] / [--] / [!!]` 三态并在末尾给结论；它自身只依赖
-Windows 自带的 PowerShell，不需要预先安装任何东西。
+The script sits in the release package root and prints `[OK] / [--] / [!!]` lines
+with a conclusion; it only needs the PowerShell that Windows already has.
 
-补依赖：
+Filling the gaps:
 
 ```powershell
-# ① UnityFS bundle 导入 / 图标下载
+# (1) UnityFS bundle import / icon download
 python -m pip install -r tools\requirements.txt
 
-# ② 射击 aim/cover 导入：在开发机上重新打包并附带自包含 CLI（目标机无需 .NET）
+# (2) Battle aim/cover import: on a development machine, repackage with the
+#     self-contained CLI included (the target machine then needs no .NET)
 pwsh -NoProfile -File tools\Package-Release.ps1 -IncludeImportTools
 ```
 
-**完全不装 Python 也可用**：把 `.skel` + 同名 `.atlas` + 全部贴图页按布局放进 `res\`，
-或用 `Add` 直接导入 `.skel`，再点 `Scan`——这两条路径不碰 Python。
+**You can skip Python entirely**: place `.skel` + the same-named `.atlas` + every
+texture page into `res\`, or import the `.skel` directly with `Add`, then press
+`Scan` — neither path touches Python.

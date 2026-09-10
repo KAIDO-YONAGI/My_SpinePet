@@ -1,8 +1,8 @@
-# 打包 SpinePet 便携版（时间戳目录 + app\ 子文件夹布局）：
+﻿# 打包 SpinePet 便携版（时间戳目录 + app\ 子文件夹布局）：
 #   release\<构建名>\app\      程序本体（publish 自包含多文件，仅 zh-Hans 语言资源）
 #   release\<构建名>\tools\    运行时工具（UnityFS 解包脚本、图标下载脚本、requirements.txt）
 #   release\<构建名>\LICENSE / NOTICE / THIRD_PARTY_NOTICES.md / ASSETS.md
-#   release\<构建名>\IMPORT.md / IMPORT.en.md   素材导入指南
+#   release\<构建名>\IMPORT.md / IMPORT.zh-CN.md   素材导入指南（英 / 中）
 #   release\<构建名>\licenses\  各第三方许可证原文（合规必需，勿删）
 #   release\<构建名>\res\       空目录 + 放置说明（素材由使用者自行准备）
 #   release\<构建名>\config.json / Launch.bat / UserTips.txt / UserTips.en.txt
@@ -38,11 +38,13 @@ $ComplianceFiles = @(
     'LICENSE',
     'NOTICE',
     'THIRD_PARTY_NOTICES.md',
-    'ASSETS.md'
+    'ASSETS.md',
+    'ASSETS.zh-CN.md',
+    'THIRD_PARTY_NOTICES.zh-CN.md'
 )
 $GuideFiles = @(
     'IMPORT.md',
-    'IMPORT.en.md'
+    'IMPORT.zh-CN.md'
 )
 $EnvironmentCheckFile = 'SpinePet\tools\Check-Environment.ps1'
 $stage = $null
@@ -194,11 +196,11 @@ SpinePet 角色资源目录
 
 请保留本目录本身（里面的说明文件可以删除）：应用按此目录解析资源位置。
 素材来源与授权边界见 ASSETS.md，完整使用说明见 UserTips.txt / UserTips.en.txt，
-素材导入规范见 IMPORT.md（English: IMPORT.en.md）。
+素材导入规范见 IMPORT.zh-CN.md（English: IMPORT.md）。
 
 Keep this directory itself (the note file inside may be deleted): the application
 resolves its resource location from it. For the English user guide see
-UserTips.en.txt; for asset licensing boundaries see ASSETS.md / ASSETS.en.md.
+UserTips.en.txt; for asset licensing boundaries see ASSETS.md. Chinese docs: ASSETS.zh-CN.md.
 '@
     Set-Content `
         -LiteralPath (Join-Path $WorkRelease 'res\README.txt') `
@@ -293,7 +295,7 @@ UserTips.en.txt; for asset licensing boundaries see ASSETS.md / ASSETS.en.md.
     Write-Host "release: $Release（根目录 $rootEntryCount 项，app 内 $appFileCount 个文件）"
     Write-Host "合规:    $($ComplianceFiles -join ', ') + licenses\（$licenseFileCount 份许可证原文）"
     Write-Host "素材:    未包含任何角色资源（res\ 内仅一份放置说明）"
-    Write-Host "说明:    UserTips.txt + UserTips.en.txt + IMPORT.md / IMPORT.en.md"
+    Write-Host "说明:    UserTips 中英 + IMPORT.md / IMPORT.zh-CN.md（英/中）"
     Write-Host "工具:    tools\（运行时工具，应用按上一级目录解析）"
     Write-Host "环境:    Check-Environment.ps1 (PowerShell 5.1 即可运行)"
     if ($IncludeImportTools) {

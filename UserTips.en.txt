@@ -45,7 +45,7 @@ SpinePet Desktop Pet — User Guide
   favorite (local ID always 9NNN, skin 00, never enters battle).
 - Raw game exports must be renamed (directory name and c<character ID>_<skin ID> file name)
   before they can be imported; the full specification, tooling and troubleshooting list for
-  all four kinds are in IMPORT.en.md inside this package.
+  all four kinds are in IMPORT.md inside this package (Chinese: IMPORT.zh-CN.md).
 - Add: imports a .skel file, or a UnityFS bundle that follows the naming rules.
 - Scan: re-scans res and reconciles resources you added, deleted or replaced by hand.
 - Folder: opens the res directory currently in use; it is created automatically when missing.
@@ -68,7 +68,7 @@ SpinePet Desktop Pet — User Guide
 - THIRD_PARTY_NOTICES.md: third-party components and licenses.
 - ASSETS.md: asset sourcing and licensing boundaries.
 - licenses\: verbatim third-party license texts — do not delete.
-- IMPORT.md / IMPORT.en.md: asset import guide (four kinds, format rework, tooling, AI assistance, troubleshooting).
+- IMPORT.md: asset import guide (four kinds, format rework, tooling, AI assistance, troubleshooting) — Chinese: IMPORT.zh-CN.md.
 - Check-Environment.ps1: environment self-check. Inside the package run
     powershell -NoProfile -ExecutionPolicy Bypass -File Check-Environment.ps1
   It lists what is missing and which feature each gap costs (for example, no Python means

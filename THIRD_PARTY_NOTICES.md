@@ -1,31 +1,34 @@
-# 第三方组件与授权清单 / Third-Party Notices
+# Third-Party Notices
 
-**中文** | [English](THIRD_PARTY_NOTICES.en.md)
+**English** | [中文](THIRD_PARTY_NOTICES.zh-CN.md)
 
-本文件列出 SpinePet 使用的全部第三方组件、各自的权利人、许可证，以及**是否随发行包分发**。
-所有许可证原文存放在 `licenses/` 目录（发行包的根目录下同样带一份）。
+This file lists every third-party component used by SpinePet, its rights holder,
+its license, and **whether it is distributed with release packages**. Verbatim
+license texts live in `licenses/` (release packages ship a copy of that folder too).
 
-> 说明：本项目自身代码按 GPL-3.0-or-later 授权（见 `LICENSE` / `NOTICE`）。
-> 下表组件**不在**该授权范围内，各自适用其原始许可证，本项目不对它们做再授权。
+> The application's own code is licensed GPL-3.0-or-later (see `LICENSE` and
+> `NOTICE`). The components below are **not** covered by that grant; each keeps its
+> own license, and this project does not relicense them.
 
-## 组件清单
+## Component inventory
 
-| 组件 | 版本 | 权利人 | 许可证 | 是否随发行包分发 |
+| Component | Version | Rights holder | License | Distributed with releases? |
 | --- | --- | --- | --- | --- |
-| Spine Runtimes（spine-csharp） | 4.1 | Esoteric Software LLC | Spine Runtimes License Agreement | **是**（编译进 `SpineRuntime41.dll`） |
-| Vortice.Windows（`Vortice.D3DCompiler` / `Vortice.Direct3D11` / `Vortice.DirectComposition` / `Vortice.DXGI`） | 3.8.3 | Amer Koleci and contributors | MIT | **是**（随 app 目录分发的 DLL） |
-| .NET 9 Runtime（`win-x64` 自包含发布） | 9.x | .NET Foundation and Contributors | MIT | **是**（自包含发布内含运行时） |
-| UnityPy | 1.24.1 | K0lb3 | MIT | 否（由使用者自行 `pip install`） |
-| Pillow | 12.0.0 | Secret Labs AB / Fredrik Lundh / Jeffrey A. Clark and contributors | MIT-CMU (HPND) | 否（由使用者自行 `pip install`） |
-| xunit | 2.9.3 | xUnit.net contributors | Apache-2.0 | 否（仅测试工程） |
-| xunit.runner.visualstudio | 3.1.5 | xUnit.net contributors | Apache-2.0 | 否（仅测试工程） |
-| Microsoft.NET.Test.Sdk | 17.14.1 | Microsoft Corporation | MIT | 否（仅测试工程） |
+| Spine Runtimes (spine-csharp) | 4.1 | Esoteric Software LLC | Spine Runtimes License Agreement | **Yes** (compiled into `SpineRuntime41.dll`) |
+| Vortice.Windows (`Vortice.D3DCompiler` / `Vortice.Direct3D11` / `Vortice.DirectComposition` / `Vortice.DXGI`) | 3.8.3 | Amer Koleci and contributors | MIT | **Yes** (DLLs inside `app\`) |
+| .NET 9 Runtime (`win-x64` self-contained publish) | 9.x | .NET Foundation and Contributors | MIT | **Yes** (self-contained publish embeds the runtime) |
+| UnityPy | 1.24.1 | K0lb3 | MIT | No (installed by the user with `pip`) |
+| Pillow | 12.0.0 | Secret Labs AB / Fredrik Lundh / Jeffrey A. Clark and contributors | MIT-CMU (HPND) | No (installed by the user with `pip`) |
+
+| xunit | 2.9.3 | xUnit.net contributors | Apache-2.0 | No (test project only) |
+| xunit.runner.visualstudio | 3.1.5 | xUnit.net contributors | Apache-2.0 | No (test project only) |
+| Microsoft.NET.Test.Sdk | 17.14.1 | Microsoft Corporation | MIT | No (test project only) |
 
 
-许可证原文位置：
+License texts:
 
 ```text
-licenses/GPL-3.0.txt                        本项目自身代码（GNU GPL v3）
+licenses/GPL-3.0.txt                         this project's own code (GNU GPL v3)
 licenses/spine-runtimes-license.txt          Spine Runtimes License Agreement
 licenses/vortice-windows-MIT.txt             MIT
 licenses/dotnet-runtime-MIT.txt              MIT
@@ -33,50 +36,68 @@ licenses/unitypy-MIT.txt                     MIT
 licenses/pillow-MIT-CMU.txt                  MIT-CMU (HPND)
 ```
 
-xunit / Microsoft.NET.Test.Sdk 仅用于 `tests/`，不进入任何发行产物，其许可证以各自的
-NuGet 包与上游仓库为准。
+For components that are never redistributed (xunit, Microsoft.NET.Test.Sdk,
+UnityPy, Pillow), the license shown is taken from the respective package metadata
+or upstream repository; obtain the authoritative text from those projects.
+UnityPy and Pillow are installed by the user with `pip` and are not bundled.
 
-## 需要特别注意的两个组件
+## Two components that need particular attention
 
-### 1. Spine Runtimes License（非开源许可证）
+### 1. Spine Runtimes License (not an open-source license)
 
-`SpinePet/third_party/spine-csharp-4.1/LICENSE` 原文的关键条款：
+The key clauses of `SpinePet/third_party/spine-csharp-4.1/LICENSE`:
 
-- 允许把 Spine Runtimes 集成进软件、或基于它创建衍生作品；
-- **任何形式的再分发都必须附带该许可证与版权声明**（本项目已在 `licenses/` 与发行包内附上）；
-- **每一个使用者都必须自行取得自己的 Spine Editor 授权**；
-- 软件按 “AS IS” 提供，Esoteric Software LLC 不承担任何责任。
+- integrating the Spine Runtimes into software, or creating derivative works of
+  them, is permitted;
+- **redistribution of the products in any form must include this license and the
+  copyright notice** (this project ships both in `licenses/` and inside release
+  packages);
+- **each user of the products must obtain their own Spine Editor license**;
+- the software is provided "AS IS", without warranty, and Esoteric Software LLC
+  accepts no liability.
 
-也就是说：**本项目开源，并不等于你可以免费使用 Spine 运行时去构建并发布你自己的应用。**
-是否需要在 Esoteric Software 购买 Spine Editor 授权，请自行向其确认。
+In other words: **this project being open source does not mean you may freely use
+the Spine runtime to build and release your own application.** Whether you need to
+buy a Spine Editor license from Esoteric Software is a question for them.
 
-本项目对该组件的处理方式：把它当作**独立的第三方组件**——源码单独放在
-`SpinePet/third_party/spine-csharp-4.1/`，编译为独立程序集 `SpineRuntime41.dll`
-（`SpinePet/src/SpineRuntime41/SpineRuntime41.csproj` 只是把该目录的源码收集进独立程序集）。
-本项目的 GPL-3.0-or-later 授权**不覆盖**该目录及其编译产物。
+How this project handles it: the runtime is treated as a **separate third-party
+component** — its sources stay in `SpinePet/third_party/spine-csharp-4.1/` and are
+compiled into the separate assembly `SpineRuntime41.dll`
+(`SpinePet/src/SpineRuntime41/SpineRuntime41.csproj` merely collects those sources
+into an isolated assembly). This project's GPL-3.0-or-later grant does **not** cover
+that directory or its build output.
 
-### 2. 开发期外部工具（不属于本仓库）
+### 2. Development-time external tool (not in this repository)
 
-本仓库早前版本内置过
+Earlier revisions of this repository bundled
 [SpineSkeletonDataConverter](https://github.com/wang606/SpineSkeletonDataConverter)
-（C++ CLI 工具，**PolyForm Noncommercial License 1.0.0**），以及它 `data/` 目录下整套
-Spine 官方示例工程。这些内容已从本仓库及其历史中移除。
+(a C++ CLI tool, **PolyForm Noncommercial License 1.0.0**) together with Spine's
+official sample projects under its `data/` directory. That content has been removed
+from the repository and from its history.
 
-它只是开发期的辅助工具：不属于应用本体、不参与解决方案构建、不进入任何发行包。
-你若自行获取并使用它，需遵守它的非商业条款；把它交给别人时，必须一并传递该许可证
-条款或它的 URL。由于它已不属于本仓库，`licenses/` 中也不再附带它的许可证原文。
+It was a development-time aid only: it is not part of the application, is not built
+by the solution, and is not included in any release package. If you obtain and use
+it yourself, its noncommercial terms apply to you, and the license text must be
+passed on to anyone who receives it from you. Because it is no longer part of this
+repository, its license text is no longer shipped in `licenses/`.
 
-## 如果你要再分发本项目的构建产物
+## If you redistribute a build of this project
 
-1. 保留发行包根目录下的 `LICENSE`、`NOTICE`、`THIRD_PARTY_NOTICES.md`、
-   `ASSETS.md` 与整个 `licenses/` 目录，不要删除或改写其中的第三方许可证原文。
-2. 不要把第三方组件（尤其 Spine 运行时）单独抽出当成独立产品分发，也不要给它换许可证。
-3. 不要往包里添加任何游戏角色素材；素材不属于本项目，本项目无权为你授权（见 `ASSETS.md`）。
-4. 若你修改并分发本项目的二进制，GPL-3.0 要求你提供对应的完整源码：
-   Gitee（主仓库）https://gitee.com/KAIDOYONAGI/my_-spine-pet
-   GitHub（镜像）https://github.com/KAIDO-YONAGI/My_SpinePet
+1. Keep `LICENSE`, `NOTICE`, `THIRD_PARTY_NOTICES.md`, `ASSETS.md` and the entire
+   `licenses/` directory at the root of the package, and do not remove or rewrite
+   the verbatim third-party licenses inside it.
+2. Do not extract a third-party component (especially the Spine runtime) and
+   distribute it as a standalone product, and do not relicense it.
+3. Do not add any game character assets to the package; such assets are not owned
+   by this project and this project cannot license them to you (see
+   [ASSETS.md](ASSETS.md)).
+4. If you modify and redistribute the binaries, GPL-3.0 requires you to provide the
+   complete corresponding source:
+   Gitee (primary) https://gitee.com/KAIDOYONAGI/my_-spine-pet ·
+   GitHub (mirror) https://github.com/KAIDO-YONAGI/My_SpinePet
 
 ---
 
-本文件是授权事实的汇总，**不是法律意见**。涉及具体分发、商用或授权判断时，
-请咨询你自己的法律顾问，并与各上游权利人确认。
+This file summarises licensing facts and is **not legal advice**. For decisions
+about redistribution, commercial use or licensing, consult your own legal advisor
+and confirm with the upstream rights holders.
