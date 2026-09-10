@@ -13,6 +13,7 @@
 | --- | --- | --- |
 | 使用说明 | **README.md** | [README.en.md](README.en.md) |
 | 素材政策 | [ASSETS.md](ASSETS.md) | [ASSETS.en.md](ASSETS.en.md) |
+| **素材导入指南**（四类资源、格式改造、工具、AI 辅助、排查） | [IMPORT.md](IMPORT.md) | [IMPORT.en.md](IMPORT.en.md) |
 | 第三方组件与许可证 | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) | [THIRD_PARTY_NOTICES.en.md](THIRD_PARTY_NOTICES.en.md) |
 | 项目许可证 / 版权声明 | [LICENSE](LICENSE)、[NOTICE](NOTICE) | 同文件（英文） |
 | 开发者文档（目录结构、构建细节、内部工具） | [SpinePet/README.md](SpinePet/README.md) | 同文件（英文） |
@@ -51,42 +52,31 @@
 
 ## 第一次使用：准备并导入素材
 
-### 方式 A：用 Add 导入（推荐）
+**完整规范见 [`IMPORT.md`](IMPORT.md)**：四类资源各自的导入方式、原始格式要改什么、
+工具清单与用法、AI 辅助导入做法、验证与排查顺序。这里只给要点。
 
-- `Add` 接受单个 `.skel` 文件，或文件名以 `c<角色ID>_<皮肤ID>_<standing|icons>_` 开头的
-  UnityFS bundle。
-- `standing` bundle：自动解出完整骨架、图集与所需贴图，写入对应皮肤目录下的
-  `standing\`，随后尝试下载该皮肤的官方图标。
-- 单独导入图标 bundle 只会写入图标，不会生成角色卡。
-- UnityFS 导入依赖 Python 包：`python -m pip install -r SpinePet\tools\requirements.txt`。
+支持四类资源：
 
-### 方式 B：手动放入文件
+| 类型 | 目录特征 | 导入方式 |
+| --- | --- | --- |
+| 待机 standing | `<皮肤>\standing\` | 应用内 **Add**（`.skel` / UnityFS bundle），或手工放入 |
+| 射击 aim / cover | `<皮肤>\aim\` + `<皮肤>\cover\` | `SpinePet\tools\battle-catalog-importer`，**指定清单、先审计后导入** |
+| 爆裂 skillcut | 目录名以 ` Burst` 结尾 | 同待机；Battle 与 Lobby 的 skillcut 相同则取 Lobby |
+| 珍藏品 Favorite | 目录名以 ` Favorite` 结尾 | 同待机；本地编号固定 `9NNN`、皮肤固定 `00`，**不进 Battle** |
 
-把资源按下面的结构放进 `res\`，然后点 `Scan`：
+要点：
 
-```text
-res\
-  <角色名>\
-    <皮肤编号>\            编号缺省时可使用 00
-      standing\
-        <资源名>.skel
-        <资源名>.atlas
-        <资源名>.png
-      icons\               可选
-        <资源名>_icon.png
-```
-
-资源名使用 `c<角色编号>_<皮肤编号>` 形式，角色显示名从
-`SpinePet\src\SpinePet\Data\CharacterNames.json` 解析，面板上每个角色显示为一张卡片。
-
-- `Scan` 会把卡片与已保存配置和磁盘上"完整"的资源重新对齐，手动删除或替换资源后点它即可。
-- 右键卡片（或选中后按 `Shift+F10`）可直接切换该角色可用的皮肤。
-- `Delete Current Skin` 需要确认，确认后把该皮肤目录移入 Windows 回收站。
-- 图标是可选资源；下载失败不会撤销 `standing` 导入，面板会提示并回退用立绘贴图当缩略图。
-- `res\` 里的说明文件可以删除，但请保留 `res\` 目录本身：应用按它解析资源位置，
-  目录整个消失时会回退到 `app\res`。
-- `SpinePet\tools\battle-catalog-importer` 可批量审计/导入完整的 Aim/Cover 组合，
-  但必须显式给出资源目录；不完整或非 4.1 的组合会被跳过。
+- 只认一种布局：`res\<资源全名>\<皮肤编号>\<状态>\`，骨骼文件名必须带
+  `c<角色ID>_<皮肤ID>` 前缀。**游戏导出的原始资源要改名、改号之后才能用**，
+  而且每次导入都要分配新的角色 ID（见 IMPORT.md 第 2 节）。
+- 一套资源必须同时有同名 `.atlas` 和 atlas 引用的**全部**贴图页，且由
+  **Spine 4.1.x** 导出；缺一样就停在外面，不要放进 `res\`。
+- 改过 `CharacterNames.json` 后**必须重新构建**才生效；覆盖 `res` 里已有文件前
+  先关闭 SpinePet（Windows 文件锁）。`res\` 目录本身请保留，应用按它解析资源位置。
+- `Add` 只接受 standing 的 `.skel` 或符合命名规则的 UnityFS bundle（`icons` bundle
+  只写图标、不建卡片）；UnityFS 导入依赖
+  `python -m pip install -r SpinePet\tools\requirements.txt`。
+- 新增卡片默认隐藏、缩放 100% / 1.0 倍；确认无误后在面板点 `Scan`。
 
 ## 桌面交互
 
@@ -147,6 +137,7 @@ res\
   Logs\                      运行日志，排查问题用
   UserTips.txt               使用说明（中文，含本次构建信息）
   UserTips.en.txt            User guide (English)
+  IMPORT.md / IMPORT.en.md   素材导入指南（四类资源、格式改造、工具、AI 辅助、排查）
   LICENSE / NOTICE           本项目许可证（GPL-3.0-or-later）与版权声明
   THIRD_PARTY_NOTICES.md     第三方组件与授权清单
   ASSETS.md                  素材来源与授权边界

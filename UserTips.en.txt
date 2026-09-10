@@ -40,6 +40,12 @@ SpinePet Desktop Pet — User Guide
 - Delete Current Skin: after confirmation, sends the current skin directory to the Windows Recycle Bin.
 
 [Adding and managing resources]
+- Four resource kinds are supported: standing, battle aim/cover (imported as a pair with
+  battle-catalog-importer), burst skillcut (directory name ends with " Burst"), and
+  favorite (local ID always 9NNN, skin 00, never enters battle).
+- Raw game exports must be renamed (directory name and c<character ID>_<skin ID> file name)
+  before they can be imported; the full specification, tooling and troubleshooting list for
+  all four kinds are in IMPORT.en.md inside this package.
 - Add: imports a .skel file, or a UnityFS bundle that follows the naming rules.
 - Scan: re-scans res and reconciles resources you added, deleted or replaced by hand.
 - Folder: opens the res directory currently in use; it is created automatically when missing.
@@ -61,6 +67,7 @@ SpinePet Desktop Pet — User Guide
 - THIRD_PARTY_NOTICES.md: third-party components and licenses.
 - ASSETS.md: asset sourcing and licensing boundaries.
 - licenses\: verbatim third-party license texts — do not delete.
+- IMPORT.md / IMPORT.en.md: asset import guide (four kinds, format rework, tooling, AI assistance, troubleshooting).
 
 [Assets and licensing]
 - This package contains no game character assets (.skel / .atlas / .png); you must supply your own.

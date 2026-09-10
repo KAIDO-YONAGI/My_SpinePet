@@ -15,6 +15,7 @@ forever: no ads, no donations, no paywall.
 | --- | --- | --- |
 | Usage (this file) | [README.md](README.md) | **README.en.md** |
 | Asset policy | [ASSETS.md](ASSETS.md) | [ASSETS.en.md](ASSETS.en.md) |
+| **Asset import guide** (four resource kinds, format rework, tooling, AI assistance, troubleshooting) | [IMPORT.md](IMPORT.md) | [IMPORT.en.md](IMPORT.en.md) |
 | Third-party components and licenses | [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) | [THIRD_PARTY_NOTICES.en.md](THIRD_PARTY_NOTICES.en.md) |
 | Project license / copyright | [LICENSE](LICENSE), [NOTICE](NOTICE) | same files (English) |
 | Developer documentation | [SpinePet/README.md](SpinePet/README.md) | same file (English) |
@@ -61,50 +62,32 @@ forever: no ads, no donations, no paywall.
 
 ## First run: prepare and import assets
 
-### Option A: import with `Add` (recommended)
+**The full specification is in [`IMPORT.en.md`](IMPORT.en.md)** (how each of the four
+kinds is imported, what has to be changed in raw exports, the tooling list, how to
+use AI assistance, and the verification/troubleshooting order). Key points only here.
 
-- `Add` accepts a single `.skel` file, or a UnityFS bundle whose file name starts
-  with `c<character-id>_<skin-id>_<standing|icons>_`.
-- A `standing` bundle is fully unpacked — skeleton, atlas and every referenced
-  texture — into that skin's `standing\` directory, and the application then
-  tries to download that skin's official icon.
-- Importing an icon bundle on its own only writes the icon; it does not create a
-  character card.
-- UnityFS import needs the Python packages:
-  `python -m pip install -r SpinePet\tools\requirements.txt`.
+Four resource kinds are supported:
 
-### Option B: drop files in manually
+| Kind | Directory signature | How to import |
+| --- | --- | --- |
+| Standing | `<skin>\standing\` | In-app **Add** (`.skel` / UnityFS bundle), or place files by hand |
+| Battle aim / cover | `<skin>\aim\` + `<skin>\cover\` | `SpinePet\tools\battle-catalog-importer`, **explicit list, audit before import** |
+| Burst skillcut | directory name ends with ` Burst` | same as standing; prefer Lobby when Battle and Lobby skillcut match |
+| Favorite | directory name ends with ` Favorite` | same as standing; local ID is always `9NNN`, skin `00`, and it **never enters Battle** |
 
-Place resources in `res\` using the layout below, then press `Scan`:
+Key points:
 
-```text
-res\
-  <character name>\
-    <skin code>\           00 may be used when a skin code is absent
-      standing\
-        <resource name>.skel
-        <resource name>.atlas
-        <resource name>.png
-      icons\               optional
-        <resource name>_icon.png
-```
-
-Resource names use the form `c<character code>_<skin code>`; display names are
-resolved from `SpinePet\src\SpinePet\Data\CharacterNames.json`, and every
-character shows up as one card in the panel.
-
-- `Scan` reconciles cards and saved configuration with the complete resources
-  currently on disk — use it after adding, removing or replacing resources by hand.
-- Right-click a card (or select it and press `Shift+F10`) to switch between the
-  skins available for that character.
-- `Delete Current Skin` asks for confirmation and then sends that skin directory
-  to the Windows Recycle Bin.
-- Icons are optional; a failed icon download does not undo a `standing` import —
-  the panel reports the problem and falls back to the standing texture as the
-  thumbnail.
-- `SpinePet\tools\battle-catalog-importer` audits and imports complete Aim/Cover
-  sets in bulk, but it requires an explicit resource directory list; incomplete
-  or non-4.1 pairs are skipped.
+- One layout only: `res\<full resource name>\<skin code>\<state>\`, with skeleton
+  file names carrying the `c<character ID>_<skin ID>` prefix. **Raw game exports
+  must be renamed and renumbered before use**, and every import allocates a fresh
+  character ID (see section 2 of IMPORT.en.md).
+- A resource needs a same-named `.atlas` plus **every** texture page it references,
+  exported by **Spine 4.1.x**; if anything is missing, keep it out of `res\`.
+- After editing `CharacterNames.json` you **must rebuild** for it to take effect,
+  and you must close SpinePet before overwriting existing files in `res`
+  (Windows file locks).
+- New cards start hidden at scale 100% / 1.0×; press `Scan` once you have checked them.
+- UnityFS import needs: `python -m pip install -r SpinePet\tools\requirements.txt`.
 
 
 ## Desktop interaction
@@ -174,6 +157,7 @@ Toolbar: `Add` (import), `Scan` (re-scan `res\`), `Folder` (open the current
   Logs\                      runtime logs, useful for troubleshooting
   UserTips.txt               user guide (Chinese, includes this build's info)
   UserTips.en.txt            user guide (English, includes this build's info)
+  IMPORT.md / IMPORT.en.md   asset import guide (four kinds, format rework, tooling, AI assistance, troubleshooting)
   LICENSE / NOTICE           project license (GPL-3.0-or-later) and copyright notice
   THIRD_PARTY_NOTICES.md     third-party components and licenses
   ASSETS.md                  asset sourcing and licensing boundaries

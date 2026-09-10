@@ -1,6 +1,7 @@
 # 打包 SpinePet 便携版（时间戳目录 + app\ 子文件夹布局）：
 #   release\<构建名>\app\      程序本体（publish 自包含多文件，仅 zh-Hans 语言资源）
 #   release\<构建名>\LICENSE / NOTICE / THIRD_PARTY_NOTICES.md / ASSETS.md
+#   release\<构建名>\IMPORT.md / IMPORT.en.md   素材导入指南
 #   release\<构建名>\licenses\  各第三方许可证原文（合规必需，勿删）
 #   release\<构建名>\res\       空目录 + 放置说明（素材由使用者自行准备）
 #   release\<构建名>\config.json / Launch.bat / UserTips.txt / UserTips.en.txt
@@ -37,6 +38,10 @@ $ComplianceFiles = @(
     'THIRD_PARTY_NOTICES.md',
     'ASSETS.md'
 )
+$GuideFiles = @(
+    'IMPORT.md',
+    'IMPORT.en.md'
+)
 $stage = $null
 $tempZipPath = $null
 
@@ -61,6 +66,14 @@ foreach ($name in $ComplianceFiles) {
         throw "合规文件不存在：$path"
     }
 }
+# 导入指南同样随包分发，缺件时直接失败。
+foreach ($name in $GuideFiles) {
+    $path = Join-Path $Root $name
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "导入指南不存在：$path"
+    }
+}
+
 if (-not (Test-Path -LiteralPath $LicenseDirectory -PathType Container)) {
     throw "第三方许可证目录不存在：$LicenseDirectory"
 }
@@ -121,6 +134,11 @@ try {
     }
     Copy-Item -LiteralPath $LicenseDirectory -Destination $WorkRelease -Recurse -Force
 
+    # 4c) 素材导入指南（四类资源、格式改造、工具、AI 辅助、排查）
+    foreach ($name in $GuideFiles) {
+        Copy-Item -LiteralPath (Join-Path $Root $name) -Destination $WorkRelease -Force
+    }
+
     # 5) 空的 res\ 目录 + 放置说明：让应用把资源目录解析为 <发布包>\res
     #    （该目录不存在时 AppPaths 会回退到 <发布包>\app\res）。
     #    素材本身仍由使用者自行准备，本脚本不复制任何角色资源。
@@ -139,7 +157,8 @@ SpinePet 角色资源目录
 皮肤编号缺省时可使用 00。也可以直接用面板上的 Add 导入 .skel 或 UnityFS bundle。
 
 请保留本目录本身（里面的说明文件可以删除）：应用按此目录解析资源位置。
-素材来源与授权边界见 ASSETS.md，完整使用说明见 UserTips.txt / UserTips.en.txt。
+素材来源与授权边界见 ASSETS.md，完整使用说明见 UserTips.txt / UserTips.en.txt，
+素材导入规范见 IMPORT.md（English: IMPORT.en.md）。
 
 Keep this directory itself (the note file inside may be deleted): the application
 resolves its resource location from it. For the English user guide see
@@ -238,7 +257,7 @@ UserTips.en.txt; for asset licensing boundaries see ASSETS.md / ASSETS.en.md.
     Write-Host "release: $Release（根目录 $rootEntryCount 项，app 内 $appFileCount 个文件）"
     Write-Host "合规:    $($ComplianceFiles -join ', ') + licenses\（$licenseFileCount 份许可证原文）"
     Write-Host "素材:    未包含任何角色资源（res\ 内仅一份放置说明）"
-    Write-Host "说明:    UserTips.txt + UserTips.en.txt"
+    Write-Host "说明:    UserTips.txt + UserTips.en.txt + IMPORT.md / IMPORT.en.md"
     Write-Host "zip:     $zipPath（$zipSizeMb MB）"
 }
 finally {

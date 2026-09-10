@@ -40,6 +40,10 @@ SpinePet 桌宠使用说明
 - Delete Current Skin：确认后把当前 Skin 目录移入 Windows 回收站。
 
 【添加与管理资源】
+- 支持四类资源：待机 standing、射击 aim/cover（成对，用 battle-catalog-importer 导入）、
+  爆裂 skillcut（目录名以 " Burst" 结尾）、珍藏品 Favorite（编号固定 9NNN、皮肤 00，不进 Battle）。
+- 游戏导出的原始资源需要先改目录名与 c<角色ID>_<皮肤ID> 文件名才能导入；
+  四类资源的完整规范、工具用法与排查清单见包内 IMPORT.md。
 - Add：导入 .skel 或符合命名规则的 UnityFS bundle。
 - Scan：重新扫描 res，同步手动添加、删除或替换的资源。
 - Folder：打开当前使用的 res 目录；目录不存在时会自动创建。
@@ -61,6 +65,7 @@ SpinePet 桌宠使用说明
 - THIRD_PARTY_NOTICES.md：第三方组件与授权清单。
 - ASSETS.md：素材来源与授权边界说明。
 - licenses\：各第三方许可证原文，请勿删除。
+- IMPORT.md / IMPORT.en.md：素材导入指南（四类资源、格式改造、工具、AI 辅助、排查）。
 
 【素材与授权】
 - 本发布包不含任何游戏角色素材（.skel / .atlas / .png），需要你自行准备。
