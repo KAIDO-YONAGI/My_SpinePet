@@ -180,6 +180,7 @@ SpinePet 角色资源目录
 - 角色素材：无。发行包不含任何游戏素材，res\ 内只有一份放置说明，请自行准备后导入。
 - 授权：本项目代码 GPL-3.0-or-later（见 LICENSE）；第三方组件见 THIRD_PARTY_NOTICES.md。
 - 对应源码：https://gitee.com/KAIDOYONAGI/my_-spine-pet
+            https://github.com/KAIDO-YONAGI/My_SpinePet
 "@
     Set-Content `
         -LiteralPath (Join-Path $WorkRelease 'UserTips.txt') `

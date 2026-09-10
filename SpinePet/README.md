@@ -174,4 +174,5 @@ Character assets belong to their respective rights holders and are not covered
 by this project's license. See `ASSETS.md`.
 
 The project is free forever: no ads, no donations, no paywall. Source:
-https://gitee.com/KAIDOYONAGI/my_-spine-pet
+Gitee (primary) https://gitee.com/KAIDOYONAGI/my_-spine-pet ·
+GitHub (mirror) https://github.com/KAIDO-YONAGI/My_SpinePet

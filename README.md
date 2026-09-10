@@ -206,6 +206,11 @@ dotnet run --project SpinePet\src\SpinePet\SpinePet.csproj
   也不随任何产物分发；你若自行获取并使用它们，需遵守其各自的条款。
   详见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
 
+## 源码
+
+- Gitee（主仓库）：https://gitee.com/KAIDOYONAGI/my_-spine-pet
+- GitHub（镜像）：https://github.com/KAIDO-YONAGI/My_SpinePet
+
 ## English summary
 
 SpinePet is a Windows desktop pet that renders Spine assets through the native

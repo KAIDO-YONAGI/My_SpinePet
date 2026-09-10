@@ -248,4 +248,5 @@ bulk Aim/Cover import. See [SpinePet/README.md](SpinePet/README.md) for details.
 
 ---
 
-Source: https://gitee.com/KAIDOYONAGI/my_-spine-pet
+Source: Gitee (primary) https://gitee.com/KAIDOYONAGI/my_-spine-pet ·
+GitHub (mirror) https://github.com/KAIDO-YONAGI/My_SpinePet

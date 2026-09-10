@@ -73,7 +73,8 @@ Spine 官方示例工程。这些内容已从本仓库及其历史中移除。
 2. 不要把第三方组件（尤其 Spine 运行时）单独抽出当成独立产品分发，也不要给它换许可证。
 3. 不要往包里添加任何游戏角色素材；素材不属于本项目，本项目无权为你授权（见 `ASSETS.md`）。
 4. 若你修改并分发本项目的二进制，GPL-3.0 要求你提供对应的完整源码：
-   源码地址 https://gitee.com/KAIDOYONAGI/my_-spine-pet
+   Gitee（主仓库）https://gitee.com/KAIDOYONAGI/my_-spine-pet
+   GitHub（镜像）https://github.com/KAIDO-YONAGI/My_SpinePet
 
 ---
 

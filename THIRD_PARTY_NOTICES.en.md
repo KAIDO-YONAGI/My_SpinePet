@@ -92,7 +92,9 @@ repository, its license text is no longer shipped in `licenses/`.
    by this project and this project cannot license them to you (see
    [ASSETS.en.md](ASSETS.en.md)).
 4. If you modify and redistribute the binaries, GPL-3.0 requires you to provide the
-   complete corresponding source: https://gitee.com/KAIDOYONAGI/my_-spine-pet
+   complete corresponding source:
+   Gitee (primary) https://gitee.com/KAIDOYONAGI/my_-spine-pet ·
+   GitHub (mirror) https://github.com/KAIDO-YONAGI/My_SpinePet
 
 ---
 
