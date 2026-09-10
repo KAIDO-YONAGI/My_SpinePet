@@ -156,3 +156,20 @@ replace them there if the avatar ever changes.
 
 Spine runtime usage is subject to the license in
 `third_party/spine-csharp-4.1/LICENSE`.
+
+## Licensing and asset policy
+
+The application's own code is licensed **GPL-3.0-or-later**; see `LICENSE` and
+`NOTICE` at the repository root. Third-party components keep their own licenses:
+the Spine 4.1 runtime in `third_party/spine-csharp-4.1` is a separate component
+whose license requires every user to hold their own Spine Editor license, and
+`tools/SpineSkeletonDataConverter` is licensed under PolyForm Noncommercial
+1.0.0. See `THIRD_PARTY_NOTICES.md` and `licenses/`.
+
+This project ships **no game assets**: `res/` is git-ignored, and the release
+packaging no longer copies character resources into the distributed archive.
+Character assets belong to their respective rights holders and are not covered
+by this project's license. See `ASSETS.md`.
+
+The project is free forever: no ads, no donations, no paywall. Source:
+https://gitee.com/KAIDOYONAGI/my_-spine-pet

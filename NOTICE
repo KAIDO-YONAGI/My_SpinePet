@@ -1,0 +1,27 @@
+SpinePet
+Copyright (C) 2026 YONAGI
+
+SPDX-License-Identifier: GPL-3.0-or-later
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later
+version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with
+this program. If not, see <https://www.gnu.org/licenses/>.
+
+--------------------------------------------------------------------------
+中文摘要
+
+- 本项目自身代码按 GNU GPL v3（或更新版本）授权，完整原文见 LICENSE。
+- 本项目不分发任何游戏角色素材，素材版权不属于本项目，也不在 GPL 授权范围内；
+  见 ASSETS.md。
+- 第三方组件各自适用其原始许可证，本项目不对它们做再授权；见
+  THIRD_PARTY_NOTICES.md 与 licenses/ 目录。
+- 对应源码获取途径（GPL-3.0 第 6 条）：
+  https://gitee.com/KAIDOYONAGI/my_-spine-pet
